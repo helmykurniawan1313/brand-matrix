@@ -21,17 +21,25 @@ class AccountController extends Controller
 {
     public function index(Request $request): Response
     {
+        $search = $request->string('search')->trim()->toString() ?: null;
+
         return Inertia::render('Accounts/Index', [
-            'accounts' => Account::orderBy('name')
+            'accounts' => Account::withCount('cycles')
+                ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
+                ->orderBy('name')
                 ->paginate(15)
                 ->withQueryString()
                 ->through(fn (Account $account) => [
                     'id' => $account->id,
                     'name' => $account->name,
+                    'cycles_count' => $account->cycles_count,
                     'ig_business_id' => $account->ig_business_id,
                     'ig_username' => $account->ig_username,
                     'ig_connected_at' => $account->ig_connected_at?->toIso8601String(),
                 ]),
+            'filters' => [
+                'search' => $search,
+            ],
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
     }

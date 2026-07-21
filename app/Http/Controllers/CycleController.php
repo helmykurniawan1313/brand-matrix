@@ -89,6 +89,7 @@ class CycleController extends Controller
                 'month_to' => $monthTo,
             ],
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
+            'scoreBuckets' => $scoreBuckets->groupBy('metric'),
         ]);
     }
 

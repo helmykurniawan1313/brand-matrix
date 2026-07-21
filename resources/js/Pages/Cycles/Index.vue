@@ -43,6 +43,10 @@ const props = defineProps({
         type: String,
         default: 'groq',
     },
+    scoreBuckets: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const monthOptions = [
@@ -913,6 +917,7 @@ const inputStyle =
             v-if="viewingCycle"
             :cycle="viewingCycle"
             :default-ai-provider="defaultAiProvider"
+            :score-buckets="scoreBuckets"
             @close="closeDetail"
         />
 

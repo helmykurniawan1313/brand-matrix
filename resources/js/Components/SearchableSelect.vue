@@ -14,6 +14,14 @@ const props = defineProps({
         type: String,
         default: 'Select…',
     },
+    clearable: {
+        type: Boolean,
+        default: false,
+    },
+    clearLabel: {
+        type: String,
+        default: 'All',
+    },
 });
 
 const emit = defineEmits(['update:modelValue', 'change']);
@@ -46,6 +54,12 @@ const select = (option) => {
     open.value = false;
 };
 
+const clear = () => {
+    emit('update:modelValue', '');
+    emit('change', '');
+    open.value = false;
+};
+
 const onClickOutside = (event) => {
     if (containerRef.value && !containerRef.value.contains(event.target)) {
         open.value = false;
@@ -69,7 +83,7 @@ watch(() => props.modelValue, () => {
             @click="toggleOpen"
         >
             <span :style="selectedOption ? '' : 'color: var(--ink-faint)'">
-                {{ selectedOption ? selectedOption.name : placeholder }}
+                {{ selectedOption ? selectedOption.name : clearable ? clearLabel : placeholder }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0" style="color: var(--ink-faint)">
                 <path d="m6 9 6 6 6-6" />
@@ -93,6 +107,14 @@ watch(() => props.modelValue, () => {
                 />
             </div>
             <ul class="max-h-52 overflow-y-auto py-1">
+                <li
+                    v-if="clearable"
+                    class="cursor-pointer px-3 py-2 text-sm transition-colors hover:opacity-80"
+                    :style="modelValue === '' ? 'background-color: var(--accent-soft); color: var(--accent)' : 'color: var(--ink-faint)'"
+                    @click="clear"
+                >
+                    {{ clearLabel }}
+                </li>
                 <li
                     v-for="option in filteredOptions"
                     :key="option.id"
