@@ -30,7 +30,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -47,8 +47,8 @@ class CycleController extends Controller
             'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
         ]);
 
-        if ($healthLabel) {
-            $matching = $matching->filter(fn ($cycle) => $cycle['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
         }
 
         $page = $request->integer('page', 1);
@@ -84,11 +84,14 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
-                'health_label' => $healthLabel,
+                'health_label' => $healthLabels,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
+            'scoreBuckets' => $scoreBuckets->groupBy('metric')->map(
+                fn ($buckets) => $buckets->sortByDesc('min_rate')->values()
+            ),
         ]);
     }
 
@@ -98,7 +101,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -125,16 +128,16 @@ class CycleController extends Controller
                 ];
             });
 
-        if ($healthLabel) {
-            $cycles = $cycles->filter(fn ($cycle) => $cycle['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $cycles = $cycles->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
         }
 
         $filterParts = [];
         if ($search = $request->string('search')->trim()->toString()) {
             $filterParts[] = "search: \"{$search}\"";
         }
-        if ($healthLabel) {
-            $filterParts[] = "health: {$healthLabel}";
+        if ($healthLabels) {
+            $filterParts[] = 'health: '.implode(', ', $healthLabels);
         }
         if ($monthFrom) {
             $filterParts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -218,72 +221,14 @@ class CycleController extends Controller
         $response = [];
 
         if ($startDate = $data['start_date'] ?? null) {
-            $response['start_follower'] = $this->resolveInstagramFollowerNear($account, $startDate)
-                ?? $this->resolveStartFollower($account, $startDate);
+            $response['start_follower'] = $this->resolveStartFollower($account, $startDate);
         }
 
         if ($endDate = $data['end_date'] ?? null) {
-            $response['end_follower'] = $this->resolveInstagramFollowerNear($account, $endDate)
-                ?? $this->resolveEndFollower($account, $endDate);
-        }
-
-        if ($startDate && $endDate) {
-            $totals = $this->resolveInstagramTotals($account, $startDate, $endDate);
-
-            if ($totals) {
-                $response['reach'] = $totals['reach'];
-                $response['views'] = $totals['views'];
-                $response['engagement'] = $totals['engagement'];
-            }
+            $response['end_follower'] = $this->resolveEndFollower($account, $endDate);
         }
 
         return response()->json($response);
-    }
-
-    /**
-     * Uses the closest captured daily snapshot on or before the given date as a
-     * point-in-time follower count — falls back to null so the caller can use
-     * the manual-entry neighboring-cycle logic instead.
-     */
-    private function resolveInstagramFollowerNear(Account $account, string $date): ?int
-    {
-        if (! $account->ig_business_id) {
-            return null;
-        }
-
-        $snapshot = $account->instagramDailySnapshots()
-            ->whereNotNull('followers_count')
-            ->where('captured_date', '<=', $date)
-            ->orderByDesc('captured_date')
-            ->first();
-
-        return $snapshot?->followers_count;
-    }
-
-    /**
-     * Sums captured daily snapshots within [start, end] for the period-total fields.
-     * Returns null (not zeros) when no snapshots exist in range, so the frontend
-     * can distinguish "no Instagram data" from "genuinely zero activity."
-     */
-    private function resolveInstagramTotals(Account $account, string $startDate, string $endDate): ?array
-    {
-        if (! $account->ig_business_id) {
-            return null;
-        }
-
-        $snapshots = $account->instagramDailySnapshots()
-            ->whereBetween('captured_date', [$startDate, $endDate])
-            ->get();
-
-        if ($snapshots->isEmpty()) {
-            return null;
-        }
-
-        return [
-            'reach' => (int) $snapshots->sum('reach'),
-            'views' => (int) $snapshots->sum('views'),
-            'engagement' => (int) $snapshots->sum('total_interactions'),
-        ];
     }
 
     private function resolveStartFollower(Account $account, string $startDate): ?int
@@ -375,7 +320,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -392,16 +337,33 @@ class CycleController extends Controller
                 'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
             ]);
 
-        if ($healthLabel) {
-            $cycles = $cycles->filter(fn ($entry) => $entry['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $cycles = $cycles->filter(fn ($entry) => in_array($entry['scores']['health_label'], $healthLabels, true))->values();
         }
 
         return $cycles;
     }
 
+    /**
+     * health_label may arrive as an array (health_label[]=SIP&health_label[]=BAGUS)
+     * or a comma-separated string (health_label=SIP,BAGUS); normalize to an array.
+     */
+    private function parseHealthLabels(Request $request): array
+    {
+        $raw = $request->input('health_label');
+
+        if (is_array($raw)) {
+            return array_values(array_filter($raw, fn ($label) => $label !== null && $label !== ''));
+        }
+
+        $trimmed = trim((string) $raw);
+
+        return $trimmed === '' ? [] : array_values(array_filter(explode(',', $trimmed)));
+    }
+
     private function filterDescription(Request $request): array
     {
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $search = $request->string('search')->trim()->toString() ?: null;
@@ -415,8 +377,8 @@ class CycleController extends Controller
         if ($search) {
             $parts[] = "search: \"{$search}\"";
         }
-        if ($healthLabel) {
-            $parts[] = "health: {$healthLabel}";
+        if ($healthLabels) {
+            $parts[] = 'health: '.implode(', ', $healthLabels);
         }
         if ($monthFrom) {
             $parts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -426,7 +388,7 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $search,
                 'account_id' => $accountId,
-                'health_label' => $healthLabel,
+                'health_label' => $healthLabels,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -441,7 +403,8 @@ class CycleController extends Controller
             'provider' => ['nullable', 'string', 'in:'.implode(',', SummaryProviderResolver::PROVIDERS)],
             'search' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
-            'health_label' => ['nullable', 'string'],
+            'health_label' => ['nullable'],
+            'health_label.*' => ['string'],
             'month_from' => ['nullable', 'string'],
             'month_to' => ['nullable', 'string'],
         ]);

@@ -8,7 +8,7 @@ trait BuildsFilterSummaryPrompt
 {
     protected function filterSystemPrompt(): string
     {
-        return 'You are a marketing analyst reviewing a set of social media performance cycles (could be one client over several periods, or several clients).
+        return 'You are a marketing analyst reviewing a set of social media performance cycles (could be one account over several periods, or several accounts).
 
 For every summary, cover three things in plain prose (no markdown, no headers, no bullet points):
 1. What changed - the overall trend across the cycles, which cycles stood out (best/worst), and which score categories are weak (KURANG/PARAH) or strong (SIP/BAGUS).

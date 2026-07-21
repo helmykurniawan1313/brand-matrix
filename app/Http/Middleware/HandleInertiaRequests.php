@@ -40,10 +40,6 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user()?->only('id', 'name', 'email'),
             ],
-            'flash' => [
-                'ig_success' => $request->session()->get('ig_success'),
-                'ig_error' => $request->session()->get('ig_error'),
-            ],
         ];
     }
 }

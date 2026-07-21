@@ -49,11 +49,4 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
     ],
 
-    'instagram' => [
-        'access_token' => env('IG_ACCESS_TOKEN'),
-        'app_id' => env('IG_APP_ID'),
-        'app_secret' => env('IG_APP_SECRET'),
-        'redirect_uri' => env('IG_REDIRECT_URI'),
-    ],
-
 ];

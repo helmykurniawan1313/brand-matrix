@@ -12,16 +12,10 @@ class LabelBucket extends Model
 
     public const METRIC_HEALTH = 'health';
 
-    public const METRIC_VIEWS = 'views';
-
-    public const METRIC_FOLLOWERS = 'followers';
-
     public const METRICS = [
         self::METRIC_VISIBILITY,
         self::METRIC_ENGAGEMENT,
         self::METRIC_HEALTH,
-        self::METRIC_VIEWS,
-        self::METRIC_FOLLOWERS,
     ];
 
     protected $fillable = [

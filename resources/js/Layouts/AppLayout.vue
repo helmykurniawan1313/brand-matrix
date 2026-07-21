@@ -6,10 +6,7 @@ import ToastContainer from '../Components/ToastContainer.vue';
 
 const navItems = [
     { label: 'Cycles', href: '/cycles' },
-    { label: 'Performance', href: '/performances' },
     { label: 'Accounts', href: '/accounts' },
-    { label: 'Employees', href: '/employees' },
-    { label: 'Departments', href: '/departments' },
     { label: 'Scoring Buckets', href: '/score-buckets' },
 ];
 

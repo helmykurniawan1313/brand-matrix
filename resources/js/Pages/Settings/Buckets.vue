@@ -1,11 +1,7 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
-import ConfirmDialog from '../../Components/ConfirmDialog.vue';
-import { useToast } from '../../composables/useToast';
-
-const toast = useToast();
 
 const props = defineProps({
     scoreBuckets: {
@@ -43,8 +39,6 @@ const metricTitles = {
     visibility: 'Visibility',
     engagement: 'Engagement',
     health: 'Health',
-    views: 'Views (H+7) Status',
-    followers: 'Follower Category',
 };
 
 const metricHints = {
@@ -56,8 +50,6 @@ const metricHints = {
     visibility: 'weighted average of reach score + view score',
     engagement: 'weighted average of ER-reach score + ER-follower score',
     health: 'weighted average of growth + visibility + engagement',
-    views: 'raw Views H+7 count, from Performance records',
-    followers: 'raw follower count, from Performance records',
 };
 
 const componentLabels = {
@@ -106,15 +98,12 @@ const initScoreForm = (bucket) => {
 props.scoreBuckets.forEach(initScoreForm);
 
 const saveScoreBucket = (bucket) => {
-    scoreForms[bucket.id].put(`/score-buckets/${bucket.id}`, {
-        preserveScroll: true,
-        onSuccess: () => toast.success('Tier saved.'),
-        onError: () => toast.error('Failed to save tier.'),
-    });
+    scoreForms[bucket.id].put(`/score-buckets/${bucket.id}`, { preserveScroll: true });
 };
 
 const deleteScoreBucket = (bucket) => {
-    deletingBucket.value = { kind: 'score', bucket };
+    if (!confirm('Delete this tier?')) return;
+    router.delete(`/score-buckets/${bucket.id}`, { preserveScroll: true });
 };
 
 const newScoreForms = reactive({});
@@ -127,9 +116,7 @@ const addScoreBucket = (metric) => {
         preserveScroll: true,
         onSuccess: () => {
             newScoreForms[metric].reset();
-            toast.success('Tier added.');
         },
-        onError: () => toast.error('Failed to add tier.'),
     });
 };
 
@@ -145,43 +132,12 @@ const initLabelForm = (bucket) => {
 props.labelBuckets.forEach(initLabelForm);
 
 const saveLabelBucket = (bucket) => {
-    labelForms[bucket.id].put(`/label-buckets/${bucket.id}`, {
-        preserveScroll: true,
-        onSuccess: () => toast.success('Tier saved.'),
-        onError: () => toast.error('Failed to save tier.'),
-    });
+    labelForms[bucket.id].put(`/label-buckets/${bucket.id}`, { preserveScroll: true });
 };
 
 const deleteLabelBucket = (bucket) => {
-    deletingBucket.value = { kind: 'label', bucket };
-};
-
-// Shared delete confirmation for both score and label bucket tiers
-
-const deletingBucket = ref(null);
-const deletingBucketProcessing = ref(false);
-
-const cancelDeleteBucket = () => {
-    deletingBucket.value = null;
-};
-
-const confirmDeleteBucket = () => {
-    if (!deletingBucket.value) return;
-    const { kind, bucket } = deletingBucket.value;
-    const url = kind === 'score' ? `/score-buckets/${bucket.id}` : `/label-buckets/${bucket.id}`;
-    deletingBucketProcessing.value = true;
-
-    router.delete(url, {
-        preserveScroll: true,
-        onSuccess: () => {
-            toast.success('Tier deleted.');
-            deletingBucket.value = null;
-        },
-        onError: () => toast.error('Failed to delete tier.'),
-        onFinish: () => {
-            deletingBucketProcessing.value = false;
-        },
-    });
+    if (!confirm('Delete this tier?')) return;
+    router.delete(`/label-buckets/${bucket.id}`, { preserveScroll: true });
 };
 
 const newLabelForms = reactive({});
@@ -194,9 +150,7 @@ const addLabelBucket = (metric) => {
         preserveScroll: true,
         onSuccess: () => {
             newLabelForms[metric].reset();
-            toast.success('Tier added.');
         },
-        onError: () => toast.error('Failed to add tier.'),
     });
 };
 
@@ -227,11 +181,7 @@ const normalizedPercent = (aggregate, component) => {
 };
 
 const saveWeights = (aggregate) => {
-    weightForms[aggregate].put(`/formula-weights/${aggregate}`, {
-        preserveScroll: true,
-        onSuccess: () => toast.success('Weights saved.'),
-        onError: () => toast.error('Failed to save weights.'),
-    });
+    weightForms[aggregate].put(`/formula-weights/${aggregate}`, { preserveScroll: true });
 };
 </script>
 
@@ -476,14 +426,5 @@ const saveWeights = (aggregate) => {
                 </div>
             </section>
         </div>
-
-        <ConfirmDialog
-            :open="!!deletingBucket"
-            title="Delete this tier?"
-            message="This will permanently remove this scoring tier. This cannot be undone."
-            :processing="deletingBucketProcessing"
-            @confirm="confirmDeleteBucket"
-            @cancel="cancelDeleteBucket"
-        />
     </AppLayout>
 </template>
