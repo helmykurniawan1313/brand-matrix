@@ -1,5 +1,6 @@
 <script setup>
 import { nextTick, onMounted } from 'vue';
+import StatusBadge from './StatusBadge.vue';
 
 const props = defineProps({
     performance: {
@@ -92,7 +93,7 @@ onMounted(processEmbeds);
                 </button>
             </div>
 
-            <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
                     <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Preview Date</p>
                     <p class="mt-0.5 text-sm font-semibold" style="color: var(--ink)">{{ formatDate(performance.preview_date) }}</p>
@@ -106,8 +107,16 @@ onMounted(processEmbeds);
                     <p class="mt-0.5 text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ performance.followers ?? '—' }}</p>
                 </div>
                 <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
+                    <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Account Category</p>
+                    <p class="mt-1"><StatusBadge :status="performance.follower_category" /></p>
+                </div>
+                <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
                     <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Views H+7</p>
                     <p class="mt-0.5 text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ performance.total_views_h7 ?? '—' }}</p>
+                </div>
+                <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
+                    <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Status</p>
+                    <p class="mt-1"><StatusBadge :status="performance.views_status" /></p>
                 </div>
             </div>
 

@@ -142,7 +142,7 @@ class PerformanceController extends Controller
             'editor_id' => ['nullable', 'exists:employees,id'],
             'followers' => ['nullable', 'integer', 'min:0'],
             'total_views_h7' => ['nullable', 'integer', 'min:0'],
-            'proof' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:200'],
+            'proof' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:700'],
             'video_links' => ['nullable', 'array'],
             'video_links.*' => ['nullable', 'url', 'max:2048'],
         ]);

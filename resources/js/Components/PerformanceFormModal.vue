@@ -48,8 +48,8 @@ const onFileChange = (event) => {
     const file = event.target.files[0] ?? null;
     fileSizeError.value = '';
 
-    if (file && file.size > 200 * 1024) {
-        fileSizeError.value = 'File exceeds 200KB — please choose a smaller image.';
+    if (file && file.size > 700 * 1024) {
+        fileSizeError.value = 'File exceeds 700KB — please choose a smaller image.';
         event.target.value = '';
         form.proof = null;
         return;
@@ -247,7 +247,7 @@ const inputColors = 'border-color: var(--border); background-color: var(--surfac
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Upload Proof (max 200KB)</label>
+                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Upload Proof (max 700KB)</label>
                     <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
