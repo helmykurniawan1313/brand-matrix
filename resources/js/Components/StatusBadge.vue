@@ -15,13 +15,8 @@ const tone = computed(
             BAGUS: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
             CUKUP: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
             KURANG: { bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
-            'KURANG RINGAN': { bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
             PARAH: { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-            MEGA: { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
-            MACRO: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
-            MICRO: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
-            NANO: { bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
-        })[props.status?.toUpperCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' },
+        })[props.status] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' },
 );
 </script>
 

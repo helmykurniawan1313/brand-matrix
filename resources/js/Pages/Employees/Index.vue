@@ -4,11 +4,6 @@ import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import EditEmployeeModal from '../../Components/EditEmployeeModal.vue';
-import ActionsMenu from '../../Components/ActionsMenu.vue';
-import ConfirmDialog from '../../Components/ConfirmDialog.vue';
-import { useToast } from '../../composables/useToast';
-
-const toast = useToast();
 
 const props = defineProps({
     employees: {
@@ -31,11 +26,7 @@ const createForm = useForm({ name: '', email: '', position: '', department_id: '
 const submitCreate = () => {
     createForm.post('/employees', {
         preserveScroll: true,
-        onSuccess: () => {
-            createForm.reset();
-            toast.success('Employee added.');
-        },
-        onError: () => toast.error('Failed to add employee.'),
+        onSuccess: () => createForm.reset(),
     });
 };
 
@@ -49,39 +40,12 @@ const cancelEdit = () => {
     editingEmployee.value = null;
 };
 
-const onEditSaved = () => {
-    editingEmployee.value = null;
-    toast.success('Employee updated.');
-};
+const destroy = (employee) => {
+    if (!confirm(`Delete employee "${employee.name}"?`)) {
+        return;
+    }
 
-// Delete confirmation
-
-const deletingEmployee = ref(null);
-const deleting = ref(false);
-
-const confirmDestroy = (employee) => {
-    deletingEmployee.value = employee;
-};
-
-const cancelDestroy = () => {
-    deletingEmployee.value = null;
-};
-
-const destroy = () => {
-    if (!deletingEmployee.value) return;
-    deleting.value = true;
-
-    router.delete(`/employees/${deletingEmployee.value.id}`, {
-        preserveScroll: true,
-        onSuccess: () => {
-            toast.success('Employee deleted.');
-            deletingEmployee.value = null;
-        },
-        onError: () => toast.error('Failed to delete employee.'),
-        onFinish: () => {
-            deleting.value = false;
-        },
-    });
+    router.delete(`/employees/${employee.id}`, { preserveScroll: true });
 };
 </script>
 
@@ -176,12 +140,20 @@ const destroy = () => {
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ employee.position || '—' }}</td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ employee.department?.name || '—' }}</td>
                         <td class="px-4 py-3.5 text-right text-sm">
-                            <ActionsMenu
-                                :items="[
-                                    { label: 'Edit', onClick: () => startEdit(employee) },
-                                    { label: 'Delete', danger: true, onClick: () => confirmDestroy(employee) },
-                                ]"
-                            />
+                            <button
+                                class="mr-3 font-medium transition-colors hover:opacity-70"
+                                style="color: var(--ink-muted)"
+                                @click="startEdit(employee)"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                class="font-medium transition-colors hover:opacity-70"
+                                style="color: var(--status-parah-ink)"
+                                @click="destroy(employee)"
+                            >
+                                Delete
+                            </button>
                         </td>
                     </tr>
                     <tr v-if="employees.data.length === 0">
@@ -226,16 +198,7 @@ const destroy = () => {
             :employee="editingEmployee"
             :departments="departments"
             @close="cancelEdit"
-            @saved="onEditSaved"
-        />
-
-        <ConfirmDialog
-            :open="!!deletingEmployee"
-            title="Delete this employee?"
-            :message="deletingEmployee ? `This will permanently remove “${deletingEmployee.name}”. This cannot be undone.` : ''"
-            :processing="deleting"
-            @confirm="destroy"
-            @cancel="cancelDestroy"
+            @saved="cancelEdit"
         />
     </AppLayout>
 </template>

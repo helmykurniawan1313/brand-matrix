@@ -12,9 +12,21 @@ const props = defineProps({
         type: String,
         default: 'groq',
     },
+    scoreBuckets: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const emit = defineEmits(['close']);
+
+const bucketsFor = (metric) => props.scoreBuckets[metric] ?? [];
+
+// reach/view rates are displayed as a decimal ratio (rate / 100); their bucket
+// thresholds are stored on the same raw percentage scale, so divide to match.
+const bucketDivisorFor = (metric) => (metric === 'reach' || metric === 'view' ? 100 : 1);
+
+const bucketSuffixFor = (metric) => (metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' ? '%' : '');
 
 const providers = [
     { value: 'groq', label: 'Groq' },
@@ -84,6 +96,12 @@ const formatDate = (value) => {
     return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+const scoreBadgeStyle = (score) => {
+    if (score <= 25) return 'background-color: var(--status-parah-bg); color: var(--status-parah-ink)';
+    if (score <= 50) return 'background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)';
+    return 'background-color: var(--status-sip-bg); color: var(--status-sip-ink)';
+};
+
 const s = computed(() => props.cycle.scores);
 
 const inputs = computed(() => [
@@ -95,17 +113,23 @@ const inputs = computed(() => [
 ]);
 
 const rateRows = computed(() => [
-    { label: 'Growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
-    { label: 'Growth Rate', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
-    { label: 'Reach Rate', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score },
-    { label: 'View Rate', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
-    { label: 'ER (of Reach)', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score },
-    { label: 'ER (of Followers)', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score },
+    { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
+    { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
+    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score },
+    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
+    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score },
+    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score },
 ]);
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
 
 const aggregateRows = computed(() => [
+    {
+        label: 'Growth Rate',
+        formula: 'score based on growth rate',
+        rate: round(s.value.growth_score),
+        badge: null,
+    },
     {
         label: 'Visibility',
         formula: 'weighted average of Reach Score + View Score',
@@ -133,7 +157,7 @@ const aggregateRows = computed(() => [
         data-modal-backdrop
     >
         <div
-            class="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border p-6 shadow-2xl"
+            class="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-lg border p-6 shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
             <div class="flex items-start justify-between gap-4">
@@ -178,7 +202,7 @@ const aggregateRows = computed(() => [
                     class="rounded-md border px-3 py-2"
                     style="border-color: var(--border); background-color: var(--bg)"
                 >
-                    <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">
+                    <p class="whitespace-nowrap text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">
                         {{ item.label }}
                     </p>
                     <p class="mt-0.5 font-display text-base font-bold tabular-nums" style="color: var(--ink)">
@@ -192,13 +216,17 @@ const aggregateRows = computed(() => [
                 <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                     Rate Metrics
                 </h3>
-                <div class="mt-2 overflow-hidden rounded-md border" style="border-color: var(--border)">
+                <div class="mt-2 rounded-md border" style="border-color: var(--border)">
                     <table class="min-w-full">
                         <tbody>
                             <tr
                                 v-for="(row, index) in rateRows"
                                 :key="row.label"
-                                :style="index > 0 ? 'border-top: 1px solid var(--border)' : ''"
+                                :style="
+                                    (index > 0 ? 'border-top: 1px solid var(--border);' : '') +
+                                    (index === 0 ? 'border-top-left-radius: 0.375rem; border-top-right-radius: 0.375rem;' : '') +
+                                    (index === rateRows.length - 1 ? 'border-bottom-left-radius: 0.375rem; border-bottom-right-radius: 0.375rem;' : '')
+                                "
                             >
                                 <td class="px-3 py-2.5">
                                     <p class="text-sm font-medium" style="color: var(--ink)">{{ row.label }}</p>
@@ -207,13 +235,40 @@ const aggregateRows = computed(() => [
                                 <td class="px-3 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                     {{ row.rate }}
                                 </td>
-                                <td class="px-3 py-2.5 text-right">
+                                <td class="group relative px-3 py-2.5 text-right">
                                     <span
-                                        class="inline-flex min-w-[3rem] justify-center rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
-                                        style="background-color: var(--accent-soft); color: var(--accent)"
+                                        class="inline-flex min-w-[3rem] cursor-default justify-center rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
+                                        :style="scoreBadgeStyle(row.score)"
                                     >
                                         {{ row.score }}
                                     </span>
+
+                                    <div
+                                        class="pointer-events-none absolute bottom-full left-0 z-30 mb-1 w-56 rounded-md border p-3 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+                                        style="background-color: var(--surface-raised); border-color: var(--border)"
+                                    >
+                                        <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                            Scoring Buckets
+                                        </p>
+                                        <ul class="mt-1.5 space-y-1">
+                                            <li
+                                                v-for="bucket in bucketsFor(row.metric)"
+                                                :key="bucket.id"
+                                                class="flex items-center justify-between text-xs"
+                                            >
+                                                <span style="color: var(--ink-muted)">≥ {{ round(Number(bucket.min_rate) / bucketDivisorFor(row.metric)) }}{{ bucketSuffixFor(row.metric) }}</span>
+                                                <span
+                                                    class="inline-flex min-w-[2.25rem] justify-center rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                                                    :style="scoreBadgeStyle(Number(bucket.score))"
+                                                >
+                                                    {{ round(Number(bucket.score)) }}
+                                                </span>
+                                            </li>
+                                            <li v-if="bucketsFor(row.metric).length === 0" class="text-xs" style="color: var(--ink-faint)">
+                                                No buckets configured.
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -226,21 +281,21 @@ const aggregateRows = computed(() => [
                 <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                     Aggregate Scores
                 </h3>
-                <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <div
                         v-for="row in aggregateRows"
                         :key="row.label"
-                        class="rounded-md border p-3"
+                        class="flex flex-col rounded-md border p-3"
                         style="border-color: var(--border); background-color: var(--bg)"
                     >
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between gap-2">
                             <p class="text-sm font-semibold" style="color: var(--ink)">{{ row.label }}</p>
-                            <StatusBadge v-if="row.badge" :status="row.badge" />
+                            <p class="font-display text-lg font-bold tabular-nums" style="color: var(--ink)">
+                                {{ row.rate }}
+                            </p>
                         </div>
-                        <p class="mt-1 font-display text-xl font-bold tabular-nums" style="color: var(--ink)">
-                            {{ row.rate }}
-                        </p>
-                        <p class="mt-0.5 font-mono text-[11px]" style="color: var(--ink-faint)">{{ row.formula }}</p>
+                        <StatusBadge v-if="row.badge" :status="row.badge" class="mt-1.5" />
+                        <p class="mt-auto pt-2 text-[10px] leading-snug" style="color: var(--ink-faint)">{{ row.formula }}</p>
                     </div>
                 </div>
             </div>

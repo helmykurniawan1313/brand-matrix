@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('performances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('client_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('client_id')->constrained('accounts')->cascadeOnDelete();
             $table->date('post_date');
             $table->date('preview_date')->nullable();
             $table->boolean('ads')->default(false);

@@ -5,7 +5,6 @@ use App\Http\Controllers\CycleController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\FormulaWeightController;
-use App\Http\Controllers\InstagramController;
 use App\Http\Controllers\LabelBucketController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\ScoreBucketController;
@@ -19,12 +18,6 @@ Route::middleware('auth')->group(function () {
     Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');
     Route::post('accounts/{account}/pdf', [AccountController::class, 'pdf'])->name('accounts.pdf');
     Route::post('accounts/{account}/summarize', [AccountController::class, 'summarize'])->name('accounts.summarize');
-
-    Route::post('accounts/{account}/instagram/connect', [InstagramController::class, 'connect'])->name('accounts.instagram.connect');
-    Route::delete('accounts/{account}/instagram/disconnect', [InstagramController::class, 'disconnect'])->name('accounts.instagram.disconnect');
-    Route::get('accounts/{account}/instagram', [InstagramController::class, 'show'])->name('accounts.instagram.show');
-    Route::get('accounts/{account}/instagram/oauth/redirect', [InstagramController::class, 'redirect'])->name('accounts.instagram.oauth.redirect');
-    Route::get('accounts/{account}/instagram/media-insights', [InstagramController::class, 'mediaInsights'])->name('accounts.instagram.media-insights');
 
     Route::resource('cycles', CycleController::class)
         ->only(['index', 'store', 'update', 'destroy']);
@@ -53,5 +46,3 @@ Route::middleware('auth')->group(function () {
     Route::resource('performances', PerformanceController::class)
         ->only(['index', 'store', 'update', 'destroy']);
 });
-
-Route::get('instagram/oauth/callback', [InstagramController::class, 'callback'])->name('instagram.oauth.callback');

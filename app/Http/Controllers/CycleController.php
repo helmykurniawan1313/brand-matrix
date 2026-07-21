@@ -218,72 +218,14 @@ class CycleController extends Controller
         $response = [];
 
         if ($startDate = $data['start_date'] ?? null) {
-            $response['start_follower'] = $this->resolveInstagramFollowerNear($account, $startDate)
-                ?? $this->resolveStartFollower($account, $startDate);
+            $response['start_follower'] = $this->resolveStartFollower($account, $startDate);
         }
 
         if ($endDate = $data['end_date'] ?? null) {
-            $response['end_follower'] = $this->resolveInstagramFollowerNear($account, $endDate)
-                ?? $this->resolveEndFollower($account, $endDate);
-        }
-
-        if ($startDate && $endDate) {
-            $totals = $this->resolveInstagramTotals($account, $startDate, $endDate);
-
-            if ($totals) {
-                $response['reach'] = $totals['reach'];
-                $response['views'] = $totals['views'];
-                $response['engagement'] = $totals['engagement'];
-            }
+            $response['end_follower'] = $this->resolveEndFollower($account, $endDate);
         }
 
         return response()->json($response);
-    }
-
-    /**
-     * Uses the closest captured daily snapshot on or before the given date as a
-     * point-in-time follower count — falls back to null so the caller can use
-     * the manual-entry neighboring-cycle logic instead.
-     */
-    private function resolveInstagramFollowerNear(Account $account, string $date): ?int
-    {
-        if (! $account->ig_business_id) {
-            return null;
-        }
-
-        $snapshot = $account->instagramDailySnapshots()
-            ->whereNotNull('followers_count')
-            ->where('captured_date', '<=', $date)
-            ->orderByDesc('captured_date')
-            ->first();
-
-        return $snapshot?->followers_count;
-    }
-
-    /**
-     * Sums captured daily snapshots within [start, end] for the period-total fields.
-     * Returns null (not zeros) when no snapshots exist in range, so the frontend
-     * can distinguish "no Instagram data" from "genuinely zero activity."
-     */
-    private function resolveInstagramTotals(Account $account, string $startDate, string $endDate): ?array
-    {
-        if (! $account->ig_business_id) {
-            return null;
-        }
-
-        $snapshots = $account->instagramDailySnapshots()
-            ->whereBetween('captured_date', [$startDate, $endDate])
-            ->get();
-
-        if ($snapshots->isEmpty()) {
-            return null;
-        }
-
-        return [
-            'reach' => (int) $snapshots->sum('reach'),
-            'views' => (int) $snapshots->sum('views'),
-            'engagement' => (int) $snapshots->sum('total_interactions'),
-        ];
     }
 
     private function resolveStartFollower(Account $account, string $startDate): ?int

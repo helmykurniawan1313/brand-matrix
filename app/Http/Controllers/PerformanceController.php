@@ -30,11 +30,11 @@ class PerformanceController extends Controller
 
         $search = $request->string('search')->trim()->toString() ?: null;
 
-        $matching = Performance::with(['account', 'projectManager', 'conceptor', 'editor', 'videoLinks'])
+        $matching = Performance::with(['client', 'projectManager', 'conceptor', 'editor', 'videoLinks'])
             ->when($search, function ($query, $search) {
-                $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
+                $query->whereHas('client', fn ($clientQuery) => $clientQuery->where('name', 'like', "%{$search}%"));
             })
-            ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
+            ->when($request->integer('client_id'), fn ($query, $clientId) => $query->where('client_id', $clientId))
             ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
             ->when($request->integer('conceptor_id'), fn ($query, $id) => $query->where('conceptor_id', $id))
             ->when($request->integer('editor_id'), fn ($query, $id) => $query->where('editor_id', $id))
@@ -72,7 +72,7 @@ class PerformanceController extends Controller
 
         return Inertia::render('Performance/Index', [
             'performances' => $paginator,
-            'accounts' => Account::orderBy('name')->get(['id', 'name']),
+            'clients' => Account::orderBy('name')->get(['id', 'name']),
             'employees' => Employee::orderBy('name')->get(['id', 'name']),
             'accountDepartmentEmployees' => Employee::whereHas(
                 'department',
@@ -83,7 +83,7 @@ class PerformanceController extends Controller
                 ->pluck('label'),
             'filters' => [
                 'search' => $search,
-                'account_id' => $request->integer('account_id') ?: null,
+                'client_id' => $request->integer('client_id') ?: null,
                 'project_manager_id' => $request->integer('project_manager_id') ?: null,
                 'conceptor_id' => $request->integer('conceptor_id') ?: null,
                 'editor_id' => $request->integer('editor_id') ?: null,
@@ -133,7 +133,7 @@ class PerformanceController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'account_id' => ['required', 'exists:accounts,id'],
+            'client_id' => ['required', 'exists:accounts,id'],
             'post_date' => ['required', 'date'],
             'preview_date' => ['nullable', 'date'],
             'ads' => ['required', 'boolean'],
@@ -142,7 +142,7 @@ class PerformanceController extends Controller
             'editor_id' => ['nullable', 'exists:employees,id'],
             'followers' => ['nullable', 'integer', 'min:0'],
             'total_views_h7' => ['nullable', 'integer', 'min:0'],
-            'proof' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:200'],
+            'proof' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:700'],
             'video_links' => ['nullable', 'array'],
             'video_links.*' => ['nullable', 'url', 'max:2048'],
         ]);

@@ -6,18 +6,13 @@ import PerformanceFormModal from '../../Components/PerformanceFormModal.vue';
 import PerformanceDetailModal from '../../Components/PerformanceDetailModal.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
-import ActionsMenu from '../../Components/ActionsMenu.vue';
-import ConfirmDialog from '../../Components/ConfirmDialog.vue';
-import { useToast } from '../../composables/useToast';
-
-const toast = useToast();
 
 const props = defineProps({
     performances: {
         type: Object,
         required: true,
     },
-    accounts: {
+    clients: {
         type: Array,
         required: true,
     },
@@ -42,7 +37,7 @@ const props = defineProps({
 // --- Filters ---
 
 const search = ref(props.filters.search ?? '');
-const accountFilter = ref(props.filters.account_id ?? '');
+const clientFilter = ref(props.filters.client_id ?? '');
 const pmFilter = ref(props.filters.project_manager_id ?? '');
 const conceptorFilter = ref(props.filters.conceptor_id ?? '');
 const editorFilter = ref(props.filters.editor_id ?? '');
@@ -54,7 +49,7 @@ let searchTimeout = null;
 
 const filterQuery = () => ({
     search: search.value || undefined,
-    account_id: accountFilter.value || undefined,
+    client_id: clientFilter.value || undefined,
     project_manager_id: pmFilter.value || undefined,
     conceptor_id: conceptorFilter.value || undefined,
     editor_id: editorFilter.value || undefined,
@@ -86,7 +81,7 @@ const hasActiveFilters = computed(() => !!search.value || activeFilterCount.valu
 
 const clearAllFilters = () => {
     search.value = '';
-    accountFilter.value = '';
+    clientFilter.value = '';
     pmFilter.value = '';
     conceptorFilter.value = '';
     editorFilter.value = '';
@@ -100,7 +95,7 @@ const clearAllFilters = () => {
 // --- Filter modal (draft state, only applied on "Apply") ---
 
 const showFilterModal = ref(false);
-const draftAccountFilter = ref('');
+const draftClientFilter = ref('');
 const draftPmFilter = ref('');
 const draftConceptorFilter = ref('');
 const draftEditorFilter = ref('');
@@ -110,7 +105,7 @@ const draftPostDateFromFilter = ref('');
 const draftPostDateToFilter = ref('');
 
 const openFilterModal = () => {
-    draftAccountFilter.value = accountFilter.value;
+    draftClientFilter.value = clientFilter.value;
     draftPmFilter.value = pmFilter.value;
     draftConceptorFilter.value = conceptorFilter.value;
     draftEditorFilter.value = editorFilter.value;
@@ -126,7 +121,7 @@ const closeFilterModal = () => {
 };
 
 const applyFilterModal = () => {
-    accountFilter.value = draftAccountFilter.value;
+    clientFilter.value = draftClientFilter.value;
     pmFilter.value = draftPmFilter.value;
     conceptorFilter.value = draftConceptorFilter.value;
     editorFilter.value = draftEditorFilter.value;
@@ -139,7 +134,7 @@ const applyFilterModal = () => {
 };
 
 const clearFilterModal = () => {
-    draftAccountFilter.value = '';
+    draftClientFilter.value = '';
     draftPmFilter.value = '';
     draftConceptorFilter.value = '';
     draftEditorFilter.value = '';
@@ -185,34 +180,12 @@ const cancelEdit = () => {
     editingPerformance.value = null;
 };
 
-// Delete confirmation
+const destroy = (performance) => {
+    if (!confirm('Delete this performance record?')) {
+        return;
+    }
 
-const deletingPerformance = ref(null);
-const deleting = ref(false);
-
-const confirmDestroy = (performance) => {
-    deletingPerformance.value = performance;
-};
-
-const cancelDestroy = () => {
-    deletingPerformance.value = null;
-};
-
-const destroy = () => {
-    if (!deletingPerformance.value) return;
-    deleting.value = true;
-
-    router.delete(`/performances/${deletingPerformance.value.id}`, {
-        preserveScroll: true,
-        onSuccess: () => {
-            toast.success('Performance record deleted.');
-            deletingPerformance.value = null;
-        },
-        onError: () => toast.error('Failed to delete performance record.'),
-        onFinish: () => {
-            deleting.value = false;
-        },
-    });
+    router.delete(`/performances/${performance.id}`, { preserveScroll: true });
 };
 
 const formatDate = (value) => {
@@ -314,7 +287,7 @@ const formatDate = (value) => {
                 <table class="w-full min-w-[900px]">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border)">
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Brand</th>
+                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Client</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Account Category</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Post Date</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Ads</th>
@@ -335,7 +308,7 @@ const formatDate = (value) => {
                             @click="openDetail(performance)"
                         >
                             <td class="px-3 py-3.5 text-sm font-medium" style="color: var(--ink)">
-                                {{ performance.account?.name ?? '—' }}
+                                {{ performance.client?.name ?? '—' }}
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-sm">
                                 <StatusBadge :status="performance.follower_category" />
@@ -362,12 +335,20 @@ const formatDate = (value) => {
                                 <StatusBadge :status="performance.views_status" />
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-right text-sm" @click.stop>
-                                <ActionsMenu
-                                    :items="[
-                                        { label: 'Edit', onClick: () => startEdit(performance) },
-                                        { label: 'Delete', danger: true, onClick: () => confirmDestroy(performance) },
-                                    ]"
-                                />
+                                <button
+                                    class="mr-3 font-medium transition-colors hover:opacity-70"
+                                    style="color: var(--ink-muted)"
+                                    @click="startEdit(performance)"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    class="font-medium transition-colors hover:opacity-70"
+                                    style="color: var(--status-parah-ink)"
+                                    @click="destroy(performance)"
+                                >
+                                    Delete
+                                </button>
                             </td>
                         </tr>
                         <tr v-if="performances.data.length === 0">
@@ -417,7 +398,7 @@ const formatDate = (value) => {
         <PerformanceFormModal
             v-if="showCreateModal"
             :performance="null"
-            :accounts="accounts"
+            :clients="clients"
             :employees="employees"
             :account-department-employees="accountDepartmentEmployees"
             @close="closeCreate"
@@ -427,20 +408,11 @@ const formatDate = (value) => {
         <PerformanceFormModal
             v-if="editingPerformance"
             :performance="editingPerformance"
-            :accounts="accounts"
+            :clients="clients"
             :employees="employees"
             :account-department-employees="accountDepartmentEmployees"
             @close="cancelEdit"
             @saved="cancelEdit"
-        />
-
-        <ConfirmDialog
-            :open="!!deletingPerformance"
-            title="Delete this performance record?"
-            message="This will permanently remove this performance record. This cannot be undone."
-            :processing="deleting"
-            @confirm="destroy"
-            @cancel="cancelDestroy"
         />
 
         <!-- Filter modal -->
@@ -487,8 +459,8 @@ const formatDate = (value) => {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Brand (Account)</label>
-                        <SearchableSelect v-model="draftAccountFilter" :options="accounts" placeholder="All brands" class="mt-1" />
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Brand (Client)</label>
+                        <SearchableSelect v-model="draftClientFilter" :options="clients" placeholder="All brands" class="mt-1" />
                     </div>
 
                     <div>

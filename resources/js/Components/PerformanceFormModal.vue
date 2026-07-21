@@ -8,7 +8,7 @@ const props = defineProps({
         type: Object,
         default: null,
     },
-    accounts: {
+    clients: {
         type: Array,
         required: true,
     },
@@ -27,7 +27,7 @@ const emit = defineEmits(['close', 'saved']);
 const isEdit = !!props.performance;
 
 const form = useForm({
-    account_id: props.performance?.account_id ?? '',
+    client_id: props.performance?.client_id ?? '',
     post_date: props.performance?.post_date?.slice(0, 10) ?? '',
     preview_date: props.performance?.preview_date?.slice(0, 10) ?? '',
     video_links: props.performance?.video_links?.length
@@ -48,8 +48,8 @@ const onFileChange = (event) => {
     const file = event.target.files[0] ?? null;
     fileSizeError.value = '';
 
-    if (file && file.size > 200 * 1024) {
-        fileSizeError.value = 'File exceeds 200KB — please choose a smaller image.';
+    if (file && file.size > 700 * 1024) {
+        fileSizeError.value = 'File exceeds 700KB — please choose a smaller image.';
         event.target.value = '';
         form.proof = null;
         return;
@@ -110,15 +110,15 @@ const inputColors = 'border-color: var(--border); background-color: var(--surfac
 
             <form class="mt-5 space-y-4" @submit.prevent="submit">
                 <div>
-                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Account</label>
+                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Client</label>
                     <SearchableSelect
-                        v-model="form.account_id"
-                        :options="accounts"
-                        placeholder="Select an account"
+                        v-model="form.client_id"
+                        :options="clients"
+                        placeholder="Select a client"
                         class="mt-1"
                     />
-                    <p v-if="form.errors.account_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
-                        {{ form.errors.account_id }}
+                    <p v-if="form.errors.client_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                        {{ form.errors.client_id }}
                     </p>
                 </div>
 
@@ -247,7 +247,7 @@ const inputColors = 'border-color: var(--border); background-color: var(--surfac
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Upload Proof (max 200KB)</label>
+                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Upload Proof (max 700KB)</label>
                     <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp"

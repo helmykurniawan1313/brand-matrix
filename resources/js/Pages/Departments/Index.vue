@@ -3,11 +3,6 @@ import { ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import EditNameModal from '../../Components/EditNameModal.vue';
-import ActionsMenu from '../../Components/ActionsMenu.vue';
-import ConfirmDialog from '../../Components/ConfirmDialog.vue';
-import { useToast } from '../../composables/useToast';
-
-const toast = useToast();
 
 const props = defineProps({
     departments: {
@@ -26,11 +21,7 @@ const createForm = useForm({ name: '' });
 const submitCreate = () => {
     createForm.post('/departments', {
         preserveScroll: true,
-        onSuccess: () => {
-            createForm.reset();
-            toast.success('Department added.');
-        },
-        onError: () => toast.error('Failed to add department.'),
+        onSuccess: () => createForm.reset(),
     });
 };
 
@@ -44,39 +35,12 @@ const cancelEdit = () => {
     editingDepartment.value = null;
 };
 
-const onEditSaved = () => {
-    editingDepartment.value = null;
-    toast.success('Department updated.');
-};
+const destroy = (department) => {
+    if (!confirm(`Delete department "${department.name}"? Employees in this department will be unassigned.`)) {
+        return;
+    }
 
-// Delete confirmation
-
-const deletingDepartment = ref(null);
-const deleting = ref(false);
-
-const confirmDestroy = (department) => {
-    deletingDepartment.value = department;
-};
-
-const cancelDestroy = () => {
-    deletingDepartment.value = null;
-};
-
-const destroy = () => {
-    if (!deletingDepartment.value) return;
-    deleting.value = true;
-
-    router.delete(`/departments/${deletingDepartment.value.id}`, {
-        preserveScroll: true,
-        onSuccess: () => {
-            toast.success('Department deleted.');
-            deletingDepartment.value = null;
-        },
-        onError: () => toast.error('Failed to delete department.'),
-        onFinish: () => {
-            deleting.value = false;
-        },
-    });
+    router.delete(`/departments/${department.id}`, { preserveScroll: true });
 };
 </script>
 
@@ -135,12 +99,20 @@ const destroy = () => {
                             {{ department.name }}
                         </td>
                         <td class="px-4 py-3.5 text-right text-sm">
-                            <ActionsMenu
-                                :items="[
-                                    { label: 'Edit', onClick: () => startEdit(department) },
-                                    { label: 'Delete', danger: true, onClick: () => confirmDestroy(department) },
-                                ]"
-                            />
+                            <button
+                                class="mr-3 font-medium transition-colors hover:opacity-70"
+                                style="color: var(--ink-muted)"
+                                @click="startEdit(department)"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                class="font-medium transition-colors hover:opacity-70"
+                                style="color: var(--status-parah-ink)"
+                                @click="destroy(department)"
+                            >
+                                Delete
+                            </button>
                         </td>
                     </tr>
                     <tr v-if="departments.data.length === 0">
@@ -187,16 +159,7 @@ const destroy = () => {
             title="Edit Department"
             label="Department name"
             @close="cancelEdit"
-            @saved="onEditSaved"
-        />
-
-        <ConfirmDialog
-            :open="!!deletingDepartment"
-            title="Delete this department?"
-            :message="deletingDepartment ? `This will unassign any employees in “${deletingDepartment.name}”. This cannot be undone.` : ''"
-            :processing="deleting"
-            @confirm="destroy"
-            @cancel="cancelDestroy"
+            @saved="cancelEdit"
         />
     </AppLayout>
 </template>

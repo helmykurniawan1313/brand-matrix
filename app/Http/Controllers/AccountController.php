@@ -24,14 +24,7 @@ class AccountController extends Controller
         return Inertia::render('Accounts/Index', [
             'accounts' => Account::orderBy('name')
                 ->paginate(15)
-                ->withQueryString()
-                ->through(fn (Account $account) => [
-                    'id' => $account->id,
-                    'name' => $account->name,
-                    'ig_business_id' => $account->ig_business_id,
-                    'ig_username' => $account->ig_username,
-                    'ig_connected_at' => $account->ig_connected_at?->toIso8601String(),
-                ]),
+                ->withQueryString(),
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
     }

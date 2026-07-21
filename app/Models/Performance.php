@@ -12,7 +12,7 @@ class Performance extends Model
     use HasFactory;
 
     protected $fillable = [
-        'account_id',
+        'client_id',
         'post_date',
         'preview_date',
         'ads',
@@ -30,9 +30,9 @@ class Performance extends Model
         'ads' => 'boolean',
     ];
 
-    public function account(): BelongsTo
+    public function client(): BelongsTo
     {
-        return $this->belongsTo(Account::class);
+        return $this->belongsTo(Account::class, 'client_id');
     }
 
     public function projectManager(): BelongsTo
