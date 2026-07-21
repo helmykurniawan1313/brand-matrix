@@ -8,6 +8,7 @@ import CycleDetailModal from '../../Components/CycleDetailModal.vue';
 import FilterSummaryModal from '../../Components/FilterSummaryModal.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import MonthRangePicker from '../../Components/MonthRangePicker.vue';
+import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
@@ -129,7 +130,7 @@ const [initialYearTo, initialMonthNumTo] = (props.filters.month_to ?? '').split(
 
 const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
-const healthFilter = ref(props.filters.health_label ?? '');
+const healthFilter = ref(Array.isArray(props.filters.health_label) ? props.filters.health_label : []);
 const monthNumFromFilter = ref(initialMonthNumFrom ?? '');
 const yearFromFilter = ref(initialYearFrom ?? '');
 const monthNumToFilter = ref(initialMonthNumTo ?? '');
@@ -149,7 +150,7 @@ const combinedMonthTo = computed(() => {
 const filterQuery = computed(() => ({
     search: search.value || undefined,
     account_id: accountFilter.value || undefined,
-    health_label: healthFilter.value || undefined,
+    health_label: healthFilter.value.length ? healthFilter.value.join(',') : undefined,
     month_from: combinedMonthFrom.value,
     month_to: combinedMonthFrom.value ? (combinedMonthTo.value ?? combinedMonthFrom.value) : undefined,
 }));
@@ -171,7 +172,7 @@ const clearSearch = () => {
 const activeFilterCount = computed(() => {
     let count = 0;
     if (accountFilter.value) count += 1;
-    if (healthFilter.value) count += 1;
+    if (healthFilter.value.length) count += 1;
     if (combinedMonthFrom.value) count += 1;
     return count;
 });
@@ -181,7 +182,7 @@ const hasActiveFilters = computed(() => !!search.value || activeFilterCount.valu
 const clearAllFilters = () => {
     search.value = '';
     accountFilter.value = '';
-    healthFilter.value = '';
+    healthFilter.value = [];
     monthNumFromFilter.value = '';
     yearFromFilter.value = '';
     monthNumToFilter.value = '';
@@ -193,19 +194,15 @@ const clearAllFilters = () => {
 
 const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
-const draftHealthFilter = ref('');
-const draftMonthNumFromFilter = ref('');
-const draftYearFromFilter = ref('');
-const draftMonthNumToFilter = ref('');
-const draftYearToFilter = ref('');
+const draftHealthFilter = ref([]);
+const draftMonthFrom = ref(''); // 'YYYY-MM'
+const draftMonthTo = ref(''); // 'YYYY-MM'
 
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
-    draftHealthFilter.value = healthFilter.value;
-    draftMonthNumFromFilter.value = monthNumFromFilter.value;
-    draftYearFromFilter.value = yearFromFilter.value;
-    draftMonthNumToFilter.value = monthNumToFilter.value;
-    draftYearToFilter.value = yearToFilter.value;
+    draftHealthFilter.value = [...healthFilter.value];
+    draftMonthFrom.value = combinedMonthFrom.value ?? '';
+    draftMonthTo.value = combinedMonthTo.value ?? '';
     showFilterModal.value = true;
 };
 
@@ -215,54 +212,26 @@ const closeFilterModal = () => {
 
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
-    healthFilter.value = draftHealthFilter.value;
-    // "From" month/year must be picked together; if only one was chosen, drop both (and the "to" range with it).
-    if (Boolean(draftMonthNumFromFilter.value) === Boolean(draftYearFromFilter.value)) {
-        monthNumFromFilter.value = draftMonthNumFromFilter.value;
-        yearFromFilter.value = draftYearFromFilter.value;
-    } else {
-        monthNumFromFilter.value = '';
-        yearFromFilter.value = '';
-    }
-    // "To" only applies when "from" is set, and must also be picked as a full month/year pair.
-    if (monthNumFromFilter.value && Boolean(draftMonthNumToFilter.value) === Boolean(draftYearToFilter.value)) {
-        monthNumToFilter.value = draftMonthNumToFilter.value;
-        yearToFilter.value = draftYearToFilter.value;
-    } else {
-        monthNumToFilter.value = '';
-        yearToFilter.value = '';
-    }
+    healthFilter.value = [...draftHealthFilter.value];
+
+    const [fromYear, fromMonth] = draftMonthFrom.value.split('-');
+    monthNumFromFilter.value = fromMonth ?? '';
+    yearFromFilter.value = fromYear ?? '';
+
+    const [toYear, toMonth] = draftMonthTo.value.split('-');
+    monthNumToFilter.value = toMonth ?? '';
+    yearToFilter.value = toYear ?? '';
+
     showFilterModal.value = false;
     applyFilters();
 };
 
 const clearFilterModal = () => {
     draftAccountFilter.value = '';
-    draftHealthFilter.value = '';
-    draftMonthNumFromFilter.value = '';
-    draftYearFromFilter.value = '';
-    draftMonthNumToFilter.value = '';
-    draftYearToFilter.value = '';
+    draftHealthFilter.value = [];
+    draftMonthFrom.value = '';
+    draftMonthTo.value = '';
 };
-
-// Computed 'YYYY-MM' wrappers around the draft month/year pairs, for MonthRangePicker.
-const draftMonthFrom = computed({
-    get: () => (draftMonthNumFromFilter.value && draftYearFromFilter.value ? `${draftYearFromFilter.value}-${draftMonthNumFromFilter.value}` : ''),
-    set: (value) => {
-        const [year, month] = (value ?? '').split('-');
-        draftYearFromFilter.value = year ?? '';
-        draftMonthNumFromFilter.value = month ?? '';
-    },
-});
-
-const draftMonthTo = computed({
-    get: () => (draftMonthNumToFilter.value && draftYearToFilter.value ? `${draftYearToFilter.value}-${draftMonthNumToFilter.value}` : ''),
-    set: (value) => {
-        const [year, month] = (value ?? '').split('-');
-        draftYearToFilter.value = year ?? '';
-        draftMonthNumToFilter.value = month ?? '';
-    },
-});
 
 const pdfDownloadUrl = computed(() => {
     const params = new URLSearchParams(
@@ -287,7 +256,7 @@ const filterLabelParts = computed(() => {
         if (account) parts.push(`account: ${account.name}`);
     }
     if (search.value) parts.push(`search: "${search.value}"`);
-    if (healthFilter.value) parts.push(`health: ${healthFilter.value}`);
+    if (healthFilter.value.length) parts.push(`health: ${healthFilter.value.join(', ')}`);
     if (combinedMonthFrom.value) {
         const fromLabel = monthOptions.find((m) => m.value === monthNumFromFilter.value)?.label ?? monthNumFromFilter.value;
         if (combinedMonthTo.value && combinedMonthTo.value !== combinedMonthFrom.value) {
@@ -942,13 +911,13 @@ const inputStyle =
         <!-- Filter modal -->
         <div
             v-if="showFilterModal"
-            class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+            class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
         >
             <div
-                class="w-full max-w-sm rounded-lg border p-6 shadow-2xl"
+                class="flex max-h-full w-full max-w-sm flex-col rounded-lg border shadow-2xl"
                 style="background-color: var(--surface-raised); border-color: var(--border)"
             >
-                <div class="flex items-start justify-between gap-4">
+                <div class="flex shrink-0 items-start justify-between gap-4 p-6 pb-0">
                     <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Filter</h2>
                     <button
                         type="button"
@@ -963,23 +932,26 @@ const inputStyle =
                     </button>
                 </div>
 
-                <div class="mt-5 space-y-4">
+                <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Account</label>
-                        <select v-model="draftAccountFilter" :class="inputStyle" style="border-color: var(--border); background-color: var(--surface); color: var(--ink)">
-                            <option value="">All accounts</option>
-                            <option v-for="account in accounts" :key="account.id" :value="account.id">
-                                {{ account.name }}
-                            </option>
-                        </select>
+                        <SearchableSelect
+                            v-model="draftAccountFilter"
+                            :options="accounts"
+                            clearable
+                            clear-label="All accounts"
+                            class="mt-1"
+                        />
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Health Status</label>
-                        <select v-model="draftHealthFilter" :class="inputStyle" style="border-color: var(--border); background-color: var(--surface); color: var(--ink)">
-                            <option value="">All health statuses</option>
-                            <option v-for="label in healthLabels" :key="label" :value="label">{{ label }}</option>
-                        </select>
+                        <MultiSelectDropdown
+                            v-model="draftHealthFilter"
+                            :options="healthLabels"
+                            placeholder="All health statuses"
+                            class="mt-1"
+                        />
                     </div>
 
                     <div>
@@ -998,7 +970,7 @@ const inputStyle =
                     </div>
                 </div>
 
-                <div class="mt-6 flex items-center justify-between">
+                <div class="flex shrink-0 items-center justify-between border-t p-6 pt-4" style="border-color: var(--border)">
                     <button
                         type="button"
                         class="text-sm font-medium transition-colors hover:opacity-70"

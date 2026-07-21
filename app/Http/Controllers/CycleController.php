@@ -30,7 +30,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -47,8 +47,8 @@ class CycleController extends Controller
             'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
         ]);
 
-        if ($healthLabel) {
-            $matching = $matching->filter(fn ($cycle) => $cycle['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
         }
 
         $page = $request->integer('page', 1);
@@ -84,7 +84,7 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
-                'health_label' => $healthLabel,
+                'health_label' => $healthLabels,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -99,7 +99,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -126,16 +126,16 @@ class CycleController extends Controller
                 ];
             });
 
-        if ($healthLabel) {
-            $cycles = $cycles->filter(fn ($cycle) => $cycle['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $cycles = $cycles->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
         }
 
         $filterParts = [];
         if ($search = $request->string('search')->trim()->toString()) {
             $filterParts[] = "search: \"{$search}\"";
         }
-        if ($healthLabel) {
-            $filterParts[] = "health: {$healthLabel}";
+        if ($healthLabels) {
+            $filterParts[] = 'health: '.implode(', ', $healthLabels);
         }
         if ($monthFrom) {
             $filterParts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -376,7 +376,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -393,16 +393,31 @@ class CycleController extends Controller
                 'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
             ]);
 
-        if ($healthLabel) {
-            $cycles = $cycles->filter(fn ($entry) => $entry['scores']['health_label'] === $healthLabel)->values();
+        if ($healthLabels) {
+            $cycles = $cycles->filter(fn ($entry) => in_array($entry['scores']['health_label'], $healthLabels, true))->values();
         }
 
         return $cycles;
     }
 
+    /**
+     * health_label arrives as a comma-separated list (multi-select filter) — split
+     * and trim into an array, or null when absent, so callers use a single check.
+     */
+    private function parseHealthLabels(Request $request): ?array
+    {
+        $raw = $request->string('health_label')->trim()->toString();
+
+        if (! $raw) {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
+    }
+
     private function filterDescription(Request $request): array
     {
-        $healthLabel = $request->string('health_label')->trim()->toString() ?: null;
+        $healthLabels = $this->parseHealthLabels($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $search = $request->string('search')->trim()->toString() ?: null;
@@ -416,8 +431,8 @@ class CycleController extends Controller
         if ($search) {
             $parts[] = "search: \"{$search}\"";
         }
-        if ($healthLabel) {
-            $parts[] = "health: {$healthLabel}";
+        if ($healthLabels) {
+            $parts[] = 'health: '.implode(', ', $healthLabels);
         }
         if ($monthFrom) {
             $parts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -427,7 +442,7 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $search,
                 'account_id' => $accountId,
-                'health_label' => $healthLabel,
+                'health_label' => $healthLabels,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
