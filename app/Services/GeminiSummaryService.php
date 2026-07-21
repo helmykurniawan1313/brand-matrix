@@ -1,0 +1,72 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Cycle;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+
+class GeminiSummaryService implements SummaryProvider
+{
+    use BuildsSummaryPrompt;
+    use BuildsFilterSummaryPrompt;
+
+    public function summarize(Cycle $cycle, array $scores, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildPrompt($cycle, $scores, $customPrompt);
+
+        return $this->request($this->systemPrompt(), $prompt);
+    }
+
+    public function summarizeFiltered(Collection $cycles, array $filterDescription, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildFilterPrompt($cycles, $filterDescription, $customPrompt);
+
+        return $this->request($this->filterSystemPrompt(), $prompt);
+    }
+
+    private function request(string $systemPrompt, string $prompt): string
+    {
+        $apiKey = config('services.gemini.key');
+
+        if (! $apiKey) {
+            throw new RuntimeException('Gemini API key is not configured. Set GEMINI_API_KEY in your .env file.');
+        }
+
+        $model = config('services.gemini.model', 'gemini-2.0-flash');
+
+        $response = Http::timeout(30)
+            ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}", [
+                'systemInstruction' => [
+                    'parts' => [['text' => $systemPrompt]],
+                ],
+                'contents' => [
+                    ['role' => 'user', 'parts' => [['text' => $prompt]]],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.4,
+                    'maxOutputTokens' => 2048,
+                ],
+            ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException(
+                'Gemini API request failed: '.($response->json('error.message') ?? $response->status())
+            );
+        }
+
+        $summary = trim((string) $response->json('candidates.0.content.parts.0.text'));
+        $finishReason = $response->json('candidates.0.finishReason');
+
+        if ($summary === '' && $finishReason === 'MAX_TOKENS') {
+            throw new RuntimeException('Gemini API ran out of tokens before producing a summary. Try again or shorten your custom instructions.');
+        }
+
+        if ($summary === '') {
+            throw new RuntimeException('Gemini API returned an empty summary.');
+        }
+
+        return $summary;
+    }
+}

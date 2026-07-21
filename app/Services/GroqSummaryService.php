@@ -1,0 +1,68 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Cycle;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+
+class GroqSummaryService implements SummaryProvider
+{
+    use BuildsSummaryPrompt;
+    use BuildsFilterSummaryPrompt;
+
+    public function summarize(Cycle $cycle, array $scores, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildPrompt($cycle, $scores, $customPrompt);
+
+        return $this->request($this->systemPrompt(), $prompt);
+    }
+
+    public function summarizeFiltered(Collection $cycles, array $filterDescription, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildFilterPrompt($cycles, $filterDescription, $customPrompt);
+
+        return $this->request($this->filterSystemPrompt(), $prompt);
+    }
+
+    private function request(string $systemPrompt, string $prompt): string
+    {
+        $apiKey = config('services.groq.key');
+
+        if (! $apiKey) {
+            throw new RuntimeException('Groq API key is not configured. Set GROQ_API_KEY in your .env file.');
+        }
+
+        $response = Http::withToken($apiKey)
+            ->timeout(30)
+            ->post('https://api.groq.com/openai/v1/chat/completions', [
+                'model' => config('services.groq.model', 'llama-3.3-70b-versatile'),
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => 0.4,
+                'max_tokens' => 1400,
+            ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException(
+                'Groq API request failed: '.($response->json('error.message') ?? $response->status())
+            );
+        }
+
+        $summary = trim((string) $response->json('choices.0.message.content'));
+        $finishReason = $response->json('choices.0.finish_reason');
+
+        if ($summary === '' && $finishReason === 'length') {
+            throw new RuntimeException('Groq API ran out of tokens before producing a summary. Try again or shorten your custom instructions.');
+        }
+
+        if ($summary === '') {
+            throw new RuntimeException('Groq API returned an empty summary.');
+        }
+
+        return $summary;
+    }
+}

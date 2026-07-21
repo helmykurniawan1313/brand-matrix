@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.vue';
+
+@theme {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Archivo', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+    --bg: #f5f7f6;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --ink: #12181a;
+    --ink-muted: #566469;
+    --ink-faint: #8b979b;
+    --border: #e0e6e4;
+    --border-strong: #c7d0cd;
+    --accent: #0f6e63;
+    --accent-ink: #ffffff;
+    --accent-soft: #e3f1ee;
+
+    --status-sip-bg: #e2f3ec;
+    --status-sip-ink: #146c48;
+    --status-bagus-bg: #eaf3d9;
+    --status-bagus-ink: #4d6b17;
+    --status-cukup-bg: #fdf1d7;
+    --status-cukup-ink: #92650a;
+    --status-kurang-bg: #fbe6d8;
+    --status-kurang-ink: #9a4816;
+    --status-parah-bg: #fbe2e2;
+    --status-parah-ink: #a1282a;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #10151a;
+        --surface: #171d23;
+        --surface-raised: #1e252b;
+        --ink: #e9edee;
+        --ink-muted: #96a3a7;
+        --ink-faint: #647175;
+        --border: #262e34;
+        --border-strong: #333d43;
+        --accent: #3fb3a2;
+        --accent-ink: #08211d;
+        --accent-soft: #16332e;
+
+        --status-sip-bg: #123528;
+        --status-sip-ink: #7fe0b3;
+        --status-bagus-bg: #2a350f;
+        --status-bagus-ink: #c3e079;
+        --status-cukup-bg: #3a2c0c;
+        --status-cukup-ink: #f0c869;
+        --status-kurang-bg: #3a220f;
+        --status-kurang-ink: #f3a877;
+        --status-parah-bg: #3a1517;
+        --status-parah-ink: #f29b9d;
+    }
+}
+
+:root[data-theme='dark'] {
+    --bg: #10151a;
+    --surface: #171d23;
+    --surface-raised: #1e252b;
+    --ink: #e9edee;
+    --ink-muted: #96a3a7;
+    --ink-faint: #647175;
+    --border: #262e34;
+    --border-strong: #333d43;
+    --accent: #3fb3a2;
+    --accent-ink: #08211d;
+    --accent-soft: #16332e;
+
+    --status-sip-bg: #123528;
+    --status-sip-ink: #7fe0b3;
+    --status-bagus-bg: #2a350f;
+    --status-bagus-ink: #c3e079;
+    --status-cukup-bg: #3a2c0c;
+    --status-cukup-ink: #f0c869;
+    --status-kurang-bg: #3a220f;
+    --status-kurang-ink: #f3a877;
+    --status-parah-bg: #3a1517;
+    --status-parah-ink: #f29b9d;
+}
+
+:root[data-theme='light'] {
+    --bg: #f5f7f6;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --ink: #12181a;
+    --ink-muted: #566469;
+    --ink-faint: #8b979b;
+    --border: #e0e6e4;
+    --border-strong: #c7d0cd;
+    --accent: #0f6e63;
+    --accent-ink: #ffffff;
+    --accent-soft: #e3f1ee;
+
+    --status-sip-bg: #e2f3ec;
+    --status-sip-ink: #146c48;
+    --status-bagus-bg: #eaf3d9;
+    --status-bagus-ink: #4d6b17;
+    --status-cukup-bg: #fdf1d7;
+    --status-cukup-ink: #92650a;
+    --status-kurang-bg: #fbe6d8;
+    --status-kurang-ink: #9a4816;
+    --status-parah-bg: #fbe2e2;
+    --status-parah-ink: #a1282a;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--ink);
+}
+
+.font-display {
+    font-family: var(--font-display);
+}
+
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+}
