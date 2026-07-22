@@ -17,7 +17,7 @@
         .rates .num { text-align: right; }
         .rates .score { text-align: right; font-weight: bold; color: #0f6e63; }
         .aggregates { width: 100%; }
-        .aggregates td { width: 33.33%; padding: 8px; border: 1px solid #d8dedc; vertical-align: top; }
+        .aggregates td { width: 25%; padding: 8px; border: 1px solid #d8dedc; vertical-align: top; }
         .aggregates .name { font-weight: bold; font-size: 12px; }
         .aggregates .badge { font-size: 9px; font-weight: bold; color: #0f6e63; }
         .aggregates .big { font-size: 18px; font-weight: bold; margin-top: 4px; }
@@ -81,6 +81,11 @@
     <p class="section-title">Aggregate Scores</p>
     <table class="aggregates">
         <tr>
+            <td>
+                <div class="name">Growth Rate <span class="badge">{{ $scores['growth_label'] }}</span></div>
+                <div class="big">{{ round($scores['growth_score'], 2) }}</div>
+                <div class="formula">score based on growth rate</div>
+            </td>
             <td>
                 <div class="name">Visibility <span class="badge">{{ $scores['visibility_label'] }}</span></div>
                 <div class="big">{{ round($scores['visibility_rate'], 2) }}</div>
