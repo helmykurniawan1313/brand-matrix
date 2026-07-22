@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, ref } from 'vue';
 
 defineProps({
     items: {
@@ -10,10 +10,26 @@ defineProps({
 });
 
 const open = ref(false);
-const containerRef = ref(null);
+const buttonRef = ref(null);
+const menuStyle = ref({});
 
-const toggleOpen = () => {
-    open.value = !open.value;
+const closeOnScrollOrResize = () => {
+    open.value = false;
+};
+
+const toggleOpen = async () => {
+    if (open.value) {
+        open.value = false;
+        return;
+    }
+
+    await nextTick();
+    const rect = buttonRef.value.getBoundingClientRect();
+    menuStyle.value = {
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.right - 160}px`,
+    };
+    open.value = true;
 };
 
 const runItem = (item) => {
@@ -22,18 +38,26 @@ const runItem = (item) => {
 };
 
 const onClickOutside = (event) => {
-    if (containerRef.value && !containerRef.value.contains(event.target)) {
+    if (buttonRef.value && !buttonRef.value.contains(event.target) && !event.target.closest('[data-actions-menu-panel]')) {
         open.value = false;
     }
 };
 
-onMounted(() => document.addEventListener('click', onClickOutside));
-onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
+document.addEventListener('click', onClickOutside);
+window.addEventListener('scroll', closeOnScrollOrResize, true);
+window.addEventListener('resize', closeOnScrollOrResize);
+
+onBeforeUnmount(() => {
+    document.removeEventListener('click', onClickOutside);
+    window.removeEventListener('scroll', closeOnScrollOrResize, true);
+    window.removeEventListener('resize', closeOnScrollOrResize);
+});
 </script>
 
 <template>
-    <div ref="containerRef" class="relative inline-block" @click.stop>
+    <div class="relative inline-block" @click.stop>
         <button
+            ref="buttonRef"
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"
             style="color: var(--ink-muted)"
@@ -47,21 +71,25 @@ onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
             </svg>
         </button>
 
-        <div
-            v-if="open"
-            class="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-md border py-1 shadow-lg"
-            style="border-color: var(--border); background-color: var(--surface-raised)"
-        >
-            <button
-                v-for="item in items"
-                :key="item.label"
-                type="button"
-                class="block w-full px-3.5 py-2 text-left text-sm font-medium transition-colors hover:opacity-70"
-                :style="item.danger ? 'color: var(--status-parah-ink)' : 'color: var(--ink)'"
-                @click="runItem(item)"
+        <Teleport to="body">
+            <div
+                v-if="open"
+                data-actions-menu-panel
+                class="fixed z-50 w-40 overflow-hidden rounded-md border py-1 shadow-lg"
+                :style="{ ...menuStyle, borderColor: 'var(--border)', backgroundColor: 'var(--surface-raised)' }"
+                @click.stop
             >
-                {{ item.label }}
-            </button>
-        </div>
+                <button
+                    v-for="item in items"
+                    :key="item.label"
+                    type="button"
+                    class="block w-full px-3.5 py-2 text-left text-sm font-medium transition-colors hover:opacity-70"
+                    :style="item.danger ? 'color: var(--status-parah-ink)' : 'color: var(--ink)'"
+                    @click="runItem(item)"
+                >
+                    {{ item.label }}
+                </button>
+            </div>
+        </Teleport>
     </div>
 </template>
