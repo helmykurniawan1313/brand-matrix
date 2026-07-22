@@ -16,6 +16,14 @@ class LabelBucketSeeder extends Seeder
             return;
         }
 
+        $this->seedMetric(LabelBucket::METRIC_GROWTH, [
+            [10.0, 'SIP'],
+            [7.0, 'BAGUS'],
+            [3.0, 'CUKUP'],
+            [1.0, 'KURANG'],
+            [null, 'PARAH'],
+        ]);
+
         $this->seedMetric(LabelBucket::METRIC_VISIBILITY, [
             [100.0, 'SIP'],
             [75.0, 'BAGUS'],
