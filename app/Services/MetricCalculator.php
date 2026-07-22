@@ -53,6 +53,7 @@ class MetricCalculator
             'er_follower_score' => $erFollowerScore,
         ]);
 
+        $growthLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_GROWTH, $growthRate);
         $visibilityLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_VISIBILITY, $visibilityRate);
         $engagementLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_ENGAGEMENT, $engagementScore);
 
@@ -71,6 +72,7 @@ class MetricCalculator
             'er_reach_rate' => $erReachRate,
             'er_follower_rate' => $erFollowerRate,
             'growth_score' => $growthScore,
+            'growth_label' => $growthLabel,
             'reach_score' => $reachScore,
             'view_score' => $viewScore,
             'er_reach_score' => $erReachScore,

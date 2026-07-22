@@ -12,6 +12,16 @@ class LabelBucketSeeder extends Seeder
      */
     public function run(): void
     {
+        if (! LabelBucket::query()->where('metric', LabelBucket::METRIC_GROWTH)->exists()) {
+            $this->seedMetric(LabelBucket::METRIC_GROWTH, [
+                [10.0, 'SIP'],
+                [7.0, 'BAGUS'],
+                [3.0, 'CUKUP'],
+                [1.0, 'KURANG'],
+                [null, 'PARAH'],
+            ]);
+        }
+
         if (! LabelBucket::query()->where('metric', LabelBucket::METRIC_VISIBILITY)->exists()) {
             $this->seedMetric(LabelBucket::METRIC_VISIBILITY, [
                 [100.0, 'SIP'],
