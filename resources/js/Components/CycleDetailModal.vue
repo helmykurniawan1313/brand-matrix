@@ -128,7 +128,7 @@ const aggregateRows = computed(() => [
         label: 'Growth Rate',
         formula: 'score based on growth rate',
         rate: round(s.value.growth_score),
-        badge: null,
+        badge: s.value.growth_label,
     },
     {
         label: 'Visibility',
