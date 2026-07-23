@@ -68,6 +68,21 @@ class CycleController extends Controller
             ->sortDesc()
             ->values();
 
+        $scoreTrend = $matching
+            ->groupBy(fn ($cycle) => Carbon::parse($cycle['cycle_start_date'])->format('Y-m'))
+            ->sortKeys()
+            ->map(function ($periodCycles, $period) {
+                return [
+                    'period' => $period,
+                    'label' => Carbon::createFromFormat('Y-m', $period)->format('M Y'),
+                    'growth_score' => round($periodCycles->avg('scores.growth_score'), 2),
+                    'visibility_rate' => round($periodCycles->avg('scores.visibility_rate'), 2),
+                    'engagement_score' => round($periodCycles->avg('scores.engagement_score'), 2),
+                    'health_rate' => round($periodCycles->avg('scores.health_rate'), 2),
+                ];
+            })
+            ->values();
+
         return Inertia::render('Cycles/Index', [
             'cycles' => $paginator,
             'accounts' => Account::orderBy('name')->get(),
@@ -75,6 +90,7 @@ class CycleController extends Controller
                 ->orderByDesc('min_score')
                 ->pluck('label'),
             'availableYears' => $availableYears,
+            'scoreTrend' => $scoreTrend,
             'summary' => [
                 'total' => $matching->count(),
                 'avg_health_rate' => $matching->isEmpty() ? null : round($matching->avg('scores.health_rate'), 2),

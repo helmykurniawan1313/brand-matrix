@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
+import Chart from 'chart.js/auto';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
@@ -47,6 +48,10 @@ const props = defineProps({
     scoreBuckets: {
         type: Object,
         default: () => ({}),
+    },
+    scoreTrend: {
+        type: Array,
+        default: () => [],
     },
 });
 
@@ -310,6 +315,91 @@ const form = useForm({
     engagement_ads_spend: 0,
 });
 
+// Score trend chart (Growth Rate / Visibility / Engagement / Health, averaged
+// per period across whatever cycles match the current filters)
+
+const scoreTrendCanvas = ref(null);
+let scoreTrendChart = null;
+
+const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const renderScoreTrendChart = () => {
+    if (!scoreTrendCanvas.value) return;
+
+    scoreTrendChart?.destroy();
+
+    const inkFaint = getCssVar('--ink-faint') || '#8b979b';
+    const border = getCssVar('--border') || '#d8dedc';
+    const colors = [
+        getCssVar('--accent') || '#0f766e',
+        '#c2410c',
+        '#7c3aed',
+        '#2563eb',
+    ];
+
+    const series = [
+        { key: 'growth_score', label: 'Growth Rate' },
+        { key: 'visibility_rate', label: 'Visibility' },
+        { key: 'engagement_score', label: 'Engagement' },
+        { key: 'health_rate', label: 'Health' },
+    ];
+
+    scoreTrendChart = new Chart(scoreTrendCanvas.value, {
+        type: 'line',
+        data: {
+            labels: props.scoreTrend.map((p) => p.label),
+            datasets: series.map((s, i) => ({
+                label: s.label,
+                data: props.scoreTrend.map((p) => p[s.key]),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length],
+                pointBackgroundColor: colors[i % colors.length],
+                pointRadius: 3,
+                tension: 0.3,
+                fill: false,
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: inkFaint } },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`,
+                    },
+                },
+            },
+            scales: {
+                x: { ticks: { color: inkFaint }, grid: { color: border } },
+                y: {
+                    min: 0,
+                    max: 100,
+                    ticks: { color: inkFaint },
+                    grid: { color: border },
+                },
+            },
+        },
+    });
+};
+
+watch(
+    () => props.scoreTrend,
+    async () => {
+        await nextTick();
+        renderScoreTrendChart();
+    },
+);
+
+onMounted(async () => {
+    await nextTick();
+    renderScoreTrendChart();
+});
+
+onBeforeUnmount(() => {
+    scoreTrendChart?.destroy();
+});
+
 const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
 
 // Live thousand-separator display for the ads spend inputs, while keeping
@@ -525,6 +615,18 @@ const inputStyle =
             />
             <StatCard label="Healthy (SIP)" :value="String(summary.healthy_count)" hint="cycles at top tier" />
             <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
+        </div>
+
+        <div v-if="scoreTrend.length > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+            <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                Score Trend
+            </h3>
+            <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+                Growth Rate, Visibility, Engagement &amp; Health — averaged per period across matching cycles.
+            </p>
+            <div class="mt-3" style="height: 260px">
+                <canvas ref="scoreTrendCanvas"></canvas>
+            </div>
         </div>
 
         <div class="mt-8 flex flex-wrap items-center gap-3">
