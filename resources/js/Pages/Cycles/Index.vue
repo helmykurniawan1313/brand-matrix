@@ -312,6 +312,30 @@ const form = useForm({
 
 const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
 
+// Live thousand-separator display for the ads spend inputs, while keeping
+// form[...] itself a plain number for submission/validation.
+const adsSpendDisplay = (metric) => computed({
+    get: () => {
+        const value = form[`${metric}_ads_spend`];
+        if (value === '' || value === null || value === undefined) return '';
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+    },
+    set: (raw) => {
+        const digitsOnly = raw.replace(/[^0-9.]/g, '');
+        form[`${metric}_ads_spend`] = digitsOnly === '' ? '' : Number(digitsOnly);
+    },
+});
+
+const reachAdsSpendDisplay = adsSpendDisplay('reach');
+const viewsAdsSpendDisplay = adsSpendDisplay('views');
+const engagementAdsSpendDisplay = adsSpendDisplay('engagement');
+
+const adsSpendDisplayFor = (metric) => {
+    if (metric === 'reach') return reachAdsSpendDisplay;
+    if (metric === 'views') return viewsAdsSpendDisplay;
+    return engagementAdsSpendDisplay;
+};
+
 const openCreate = () => {
     editingCycle.value = null;
     form.reset();
@@ -920,10 +944,9 @@ const inputStyle =
                             </label>
                             <input
                                 v-if="form[`${metric}_ads_used`]"
-                                v-model.number="form[`${metric}_ads_spend`]"
-                                type="number"
-                                min="0"
-                                step="0.01"
+                                v-model="adsSpendDisplayFor(metric).value"
+                                type="text"
+                                inputmode="decimal"
                                 placeholder="Amount spent"
                                 class="mt-1.5"
                                 :class="inputStyle"
