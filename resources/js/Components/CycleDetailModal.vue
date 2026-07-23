@@ -245,8 +245,8 @@ const aggregateRows = computed(() => [
                             >
                                 <td class="px-3 py-2.5">
                                     <p class="text-sm font-medium" style="color: var(--ink)">{{ row.label }}</p>
+                                    <p v-if="row.ads" class="text-[11px] font-semibold" style="color: var(--accent)">{{ row.ads }}</p>
                                     <p class="font-mono text-[11px]" style="color: var(--ink-faint)">{{ row.formula }}</p>
-                                    <p v-if="row.ads" class="mt-0.5 text-[11px]" style="color: var(--ink-faint)">{{ row.ads }}</p>
                                 </td>
                                 <td class="px-3 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                     {{ row.rate }}
