@@ -28,6 +28,22 @@ const bucketDivisorFor = (metric) => (metric === 'reach' || metric === 'view' ? 
 
 const bucketSuffixFor = (metric) => (metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' ? '%' : '');
 
+const tooltipMetric = ref(null);
+const tooltipStyle = ref({});
+
+const openTooltip = (metric, event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    tooltipStyle.value = {
+        bottom: `${window.innerHeight - rect.top + 4}px`,
+        left: `${Math.max(8, rect.right - 160)}px`,
+    };
+    tooltipMetric.value = metric;
+};
+
+const closeTooltip = () => {
+    tooltipMetric.value = null;
+};
+
 const providers = [
     { value: 'groq', label: 'Groq' },
     { value: 'gemini', label: 'Gemini' },
@@ -260,47 +276,54 @@ const aggregateRows = computed(() => [
                                 <td class="px-3 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                     {{ row.rate }}
                                 </td>
-                                <td class="group relative px-3 py-2.5 text-right">
+                                <td class="relative px-3 py-2.5 text-right">
                                     <span
                                         class="inline-flex min-w-[3rem] cursor-default justify-center rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
                                         :style="scoreBadgeStyle(row.score)"
+                                        @mouseenter="row.metric && openTooltip(row.metric, $event)"
+                                        @mouseleave="closeTooltip"
                                     >
                                         {{ row.score === null ? '-' : row.score }}
                                     </span>
-
-                                    <div
-                                        v-if="row.metric"
-                                        class="pointer-events-none absolute bottom-full left-0 z-30 mb-1 w-56 rounded-md border p-3 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
-                                        style="background-color: var(--surface-raised); border-color: var(--border)"
-                                    >
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                                            Scoring Buckets
-                                        </p>
-                                        <ul class="mt-1.5 space-y-1">
-                                            <li
-                                                v-for="bucket in bucketsFor(row.metric)"
-                                                :key="bucket.id"
-                                                class="flex items-center justify-between text-xs"
-                                            >
-                                                <span style="color: var(--ink-muted)">≥ {{ round(Number(bucket.min_rate) / bucketDivisorFor(row.metric)) }}{{ bucketSuffixFor(row.metric) }}</span>
-                                                <span
-                                                    class="inline-flex min-w-[2.25rem] justify-center rounded px-1.5 py-0.5 font-semibold tabular-nums"
-                                                    :style="scoreBadgeStyle(Number(bucket.score))"
-                                                >
-                                                    {{ round(Number(bucket.score)) }}
-                                                </span>
-                                            </li>
-                                            <li v-if="bucketsFor(row.metric).length === 0" class="text-xs" style="color: var(--ink-faint)">
-                                                No buckets configured.
-                                            </li>
-                                        </ul>
-                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            <Teleport to="body">
+                <div
+                    v-if="tooltipMetric"
+                    class="pointer-events-none fixed z-50 w-40 rounded-md border p-2.5 text-left shadow-lg"
+                    :style="{ ...tooltipStyle, backgroundColor: 'var(--surface-raised)', borderColor: 'var(--border)' }"
+                >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                        Scoring Buckets
+                    </p>
+                    <ul class="mt-1.5 space-y-1.5">
+                        <li
+                            v-for="bucket in bucketsFor(tooltipMetric)"
+                            :key="bucket.id"
+                            class="flex items-center gap-1.5 text-xs"
+                        >
+                            <span style="color: var(--ink-muted)">
+                                ≥ {{ round(Number(bucket.min_rate) / bucketDivisorFor(tooltipMetric)) }}{{ bucketSuffixFor(tooltipMetric) }}
+                            </span>
+                            <span style="color: var(--ink-faint)">=</span>
+                            <span
+                                class="ml-auto inline-flex min-w-[2.25rem] justify-center rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                                :style="scoreBadgeStyle(Number(bucket.score))"
+                            >
+                                {{ round(Number(bucket.score)) }}
+                            </span>
+                        </li>
+                        <li v-if="bucketsFor(tooltipMetric).length === 0" class="text-xs" style="color: var(--ink-faint)">
+                            No buckets configured.
+                        </li>
+                    </ul>
+                </div>
+            </Teleport>
 
             <!-- Aggregate scores -->
             <div class="mt-6">
