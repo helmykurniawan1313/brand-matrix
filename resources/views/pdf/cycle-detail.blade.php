@@ -10,6 +10,12 @@
 
         return 'Ads: Yes — '.$symbol.' '.number_format($spend ?? 0, 2);
     };
+
+    $totalAdsSpend = ($cycle->reach_ads_used ? (float) $cycle->reach_ads_spend : 0)
+        + ($cycle->views_ads_used ? (float) $cycle->views_ads_spend : 0)
+        + ($cycle->engagement_ads_used ? (float) $cycle->engagement_ads_spend : 0);
+
+    $totalAdsSpendFormatted = ($currencySymbols[$cycle->ads_currency] ?? ($cycle->ads_currency ?? 'IDR')).' '.number_format($totalAdsSpend, 2);
 @endphp
 <!DOCTYPE html>
 <html>
@@ -93,6 +99,11 @@
         <tr>
             <td>Story Performance<br><span class="formula">manual input</span></td>
             <td class="num">{{ number_format($cycle->story_performance ?? 0) }}</td>
+            <td class="score">-</td>
+        </tr>
+        <tr>
+            <td>Total Ads Spend<br><span class="formula">reach + views + engagement ads spend</span></td>
+            <td class="num">{{ $totalAdsSpendFormatted }}</td>
             <td class="score">-</td>
         </tr>
     </table>

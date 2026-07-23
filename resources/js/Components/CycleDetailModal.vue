@@ -116,6 +116,14 @@ const adsLine = (used, spend) => {
     return `Ads: Yes — ${formatAdsSpend(spend ?? 0, props.cycle.ads_currency)}`;
 };
 
+const totalAdsSpend = computed(() => {
+    return [
+        [props.cycle.reach_ads_used, props.cycle.reach_ads_spend],
+        [props.cycle.views_ads_used, props.cycle.views_ads_spend],
+        [props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend],
+    ].reduce((sum, [used, spend]) => sum + (used ? Number(spend ?? 0) : 0), 0);
+});
+
 const s = computed(() => props.cycle.scores);
 
 const inputs = computed(() => [
@@ -134,6 +142,7 @@ const rateRows = computed(() => [
     { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
     { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
     { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
+    { label: 'Total Ads Spend', metric: null, formula: 'reach + views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
 ]);
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
