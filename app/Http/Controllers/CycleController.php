@@ -68,20 +68,7 @@ class CycleController extends Controller
             ->sortDesc()
             ->values();
 
-        $scoreTrend = $matching
-            ->groupBy(fn ($cycle) => Carbon::parse($cycle['cycle_start_date'])->format('Y-m'))
-            ->sortKeys()
-            ->map(function ($periodCycles, $period) {
-                return [
-                    'period' => $period,
-                    'label' => Carbon::createFromFormat('Y-m', $period)->format('M Y'),
-                    'growth_score' => round($periodCycles->avg('scores.growth_score'), 2),
-                    'visibility_rate' => round($periodCycles->avg('scores.visibility_rate'), 2),
-                    'engagement_score' => round($periodCycles->avg('scores.engagement_score'), 2),
-                    'health_rate' => round($periodCycles->avg('scores.health_rate'), 2),
-                ];
-            })
-            ->values();
+        $scoreDistribution = $this->buildScoreDistribution($matching);
 
         return Inertia::render('Cycles/Index', [
             'cycles' => $paginator,
@@ -90,7 +77,7 @@ class CycleController extends Controller
                 ->orderByDesc('min_score')
                 ->pluck('label'),
             'availableYears' => $availableYears,
-            'scoreTrend' => $scoreTrend,
+            'scoreDistribution' => $scoreDistribution,
             'summary' => [
                 'total' => $matching->count(),
                 'avg_health_rate' => $matching->isEmpty() ? null : round($matching->avg('scores.health_rate'), 2),
@@ -355,6 +342,46 @@ class CycleController extends Controller
         $cycle->delete();
 
         return back();
+    }
+
+    /**
+     * Counts how many matching cycles fall into each score tier (0/25/50/75/100)
+     * for growth/visibility/engagement/health — scores are rounded to the nearest
+     * tier since visibility/engagement/health are weighted averages that rarely
+     * land exactly on 0/25/50/75/100 (e.g. 62.5, 45.8) the way growth's direct
+     * bucket lookup does.
+     */
+    private function buildScoreDistribution(Collection $matching): array
+    {
+        $tiers = [0, 25, 50, 75, 100];
+        $metrics = [
+            'growth_score' => 'Growth Rate',
+            'visibility_rate' => 'Visibility',
+            'engagement_score' => 'Engagement',
+            'health_rate' => 'Health',
+        ];
+
+        $nearestTier = function (float $value) use ($tiers) {
+            $clamped = max(0, min(100, $value));
+
+            return collect($tiers)->sort(fn ($a, $b) => abs($clamped - $a) <=> abs($clamped - $b))->first();
+        };
+
+        $counts = collect($metrics)->mapWithKeys(function ($label, $key) use ($matching, $tiers, $nearestTier) {
+            $tierCounts = array_fill_keys($tiers, 0);
+
+            foreach ($matching as $cycle) {
+                $tier = $nearestTier((float) $cycle['scores'][$key]);
+                $tierCounts[$tier]++;
+            }
+
+            return [$key => ['label' => $label, 'counts' => $tierCounts]];
+        });
+
+        return [
+            'tiers' => $tiers,
+            'series' => $counts->values(),
+        ];
     }
 
     private function applyMonthRangeFilter($query, string $monthFrom, ?string $monthTo)

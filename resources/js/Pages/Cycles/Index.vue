@@ -49,9 +49,9 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
-    scoreTrend: {
-        type: Array,
-        default: () => [],
+    scoreDistribution: {
+        type: Object,
+        default: () => ({ tiers: [], series: [] }),
     },
 });
 
@@ -315,18 +315,18 @@ const form = useForm({
     engagement_ads_spend: 0,
 });
 
-// Score trend chart (Growth Rate / Visibility / Engagement / Health, averaged
-// per period across whatever cycles match the current filters)
+// Score distribution chart — how many matching cycles fall into each score
+// tier (0/25/50/75/100), one grouped bar per tier, one color per metric.
 
-const scoreTrendCanvas = ref(null);
-let scoreTrendChart = null;
+const scoreDistributionCanvas = ref(null);
+let scoreDistributionChart = null;
 
 const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const renderScoreTrendChart = () => {
-    if (!scoreTrendCanvas.value) return;
+const renderScoreDistributionChart = () => {
+    if (!scoreDistributionCanvas.value) return;
 
-    scoreTrendChart?.destroy();
+    scoreDistributionChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
     const border = getCssVar('--border') || '#d8dedc';
@@ -337,26 +337,18 @@ const renderScoreTrendChart = () => {
         '#2563eb',
     ];
 
-    const series = [
-        { key: 'growth_score', label: 'Growth Rate' },
-        { key: 'visibility_rate', label: 'Visibility' },
-        { key: 'engagement_score', label: 'Engagement' },
-        { key: 'health_rate', label: 'Health' },
-    ];
+    const tiers = props.scoreDistribution.tiers ?? [];
+    const series = props.scoreDistribution.series ?? [];
 
-    scoreTrendChart = new Chart(scoreTrendCanvas.value, {
-        type: 'line',
+    scoreDistributionChart = new Chart(scoreDistributionCanvas.value, {
+        type: 'bar',
         data: {
-            labels: props.scoreTrend.map((p) => p.label),
+            labels: tiers.map((tier) => String(tier)),
             datasets: series.map((s, i) => ({
                 label: s.label,
-                data: props.scoreTrend.map((p) => p[s.key]),
-                borderColor: colors[i % colors.length],
+                data: tiers.map((tier) => s.counts[tier] ?? 0),
                 backgroundColor: colors[i % colors.length],
-                pointBackgroundColor: colors[i % colors.length],
-                pointRadius: 3,
-                tension: 0.3,
-                fill: false,
+                borderRadius: 3,
             })),
         },
         options: {
@@ -366,16 +358,20 @@ const renderScoreTrendChart = () => {
                 legend: { labels: { color: inkFaint } },
                 tooltip: {
                     callbacks: {
-                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`,
+                        label: (context) => `${context.dataset.label}: ${context.parsed.y} cycle${context.parsed.y === 1 ? '' : 's'}`,
                     },
                 },
             },
             scales: {
-                x: { ticks: { color: inkFaint }, grid: { color: border } },
-                y: {
-                    min: 0,
-                    max: 100,
+                x: {
+                    title: { display: true, text: 'Score', color: inkFaint },
                     ticks: { color: inkFaint },
+                    grid: { color: border },
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Cycle Count', color: inkFaint },
+                    ticks: { color: inkFaint, precision: 0 },
                     grid: { color: border },
                 },
             },
@@ -384,20 +380,20 @@ const renderScoreTrendChart = () => {
 };
 
 watch(
-    () => props.scoreTrend,
+    () => props.scoreDistribution,
     async () => {
         await nextTick();
-        renderScoreTrendChart();
+        renderScoreDistributionChart();
     },
 );
 
 onMounted(async () => {
     await nextTick();
-    renderScoreTrendChart();
+    renderScoreDistributionChart();
 });
 
 onBeforeUnmount(() => {
-    scoreTrendChart?.destroy();
+    scoreDistributionChart?.destroy();
 });
 
 const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
@@ -617,15 +613,15 @@ const inputStyle =
             <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
         </div>
 
-        <div v-if="scoreTrend.length > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+        <div v-if="summary.total > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
             <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                Score Trend
+                Score Distribution
             </h3>
             <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
-                Growth Rate, Visibility, Engagement &amp; Health — averaged per period across matching cycles.
+                How many matching cycles scored at each tier — Growth Rate, Visibility, Engagement &amp; Health.
             </p>
             <div class="mt-3" style="height: 260px">
-                <canvas ref="scoreTrendCanvas"></canvas>
+                <canvas ref="scoreDistributionCanvas"></canvas>
             </div>
         </div>
 
