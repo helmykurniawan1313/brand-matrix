@@ -28,6 +28,22 @@ const bucketDivisorFor = (metric) => (metric === 'reach' || metric === 'view' ? 
 
 const bucketSuffixFor = (metric) => (metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' ? '%' : '');
 
+const tooltipMetric = ref(null);
+const tooltipStyle = ref({});
+
+const openTooltip = (metric, event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    tooltipStyle.value = {
+        bottom: `${window.innerHeight - rect.top + 4}px`,
+        left: `${Math.max(8, rect.right - 160)}px`,
+    };
+    tooltipMetric.value = metric;
+};
+
+const closeTooltip = () => {
+    tooltipMetric.value = null;
+};
+
 const providers = [
     { value: 'groq', label: 'Groq' },
     { value: 'gemini', label: 'Gemini' },
@@ -97,10 +113,32 @@ const formatDate = (value) => {
 };
 
 const scoreBadgeStyle = (score) => {
+    if (score === null || score === undefined) return 'background-color: var(--border); color: var(--ink-faint)';
     if (score <= 25) return 'background-color: var(--status-parah-bg); color: var(--status-parah-ink)';
     if (score <= 50) return 'background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)';
     return 'background-color: var(--status-sip-bg); color: var(--status-sip-ink)';
 };
+
+const formatAdsSpend = (amount, currency) => {
+    try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'IDR' }).format(amount);
+    } catch {
+        return `${amount} ${currency}`;
+    }
+};
+
+const adsLine = (used, spend) => {
+    if (!used) return 'Ads: No';
+    return `Ads: Yes — ${formatAdsSpend(spend ?? 0, props.cycle.ads_currency)}`;
+};
+
+const totalAdsSpend = computed(() => {
+    return [
+        [props.cycle.reach_ads_used, props.cycle.reach_ads_spend],
+        [props.cycle.views_ads_used, props.cycle.views_ads_spend],
+        [props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend],
+    ].reduce((sum, [used, spend]) => sum + (used ? Number(spend ?? 0) : 0), 0);
+});
 
 const s = computed(() => props.cycle.scores);
 
@@ -115,10 +153,12 @@ const inputs = computed(() => [
 const rateRows = computed(() => [
     { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
     { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
-    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score },
-    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
-    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score },
-    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score },
+    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_ads_used, props.cycle.reach_ads_spend) },
+    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.views_ads_used, props.cycle.views_ads_spend) },
+    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+    { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
+    { label: 'Total Ads Spend', metric: null, formula: 'reach + views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
 ]);
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
@@ -230,51 +270,60 @@ const aggregateRows = computed(() => [
                             >
                                 <td class="px-3 py-2.5">
                                     <p class="text-sm font-medium" style="color: var(--ink)">{{ row.label }}</p>
+                                    <p v-if="row.ads" class="text-[11px] font-semibold" style="color: var(--accent)">{{ row.ads }}</p>
                                     <p class="font-mono text-[11px]" style="color: var(--ink-faint)">{{ row.formula }}</p>
                                 </td>
                                 <td class="px-3 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                     {{ row.rate }}
                                 </td>
-                                <td class="group relative px-3 py-2.5 text-right">
+                                <td class="relative px-3 py-2.5 text-right">
                                     <span
                                         class="inline-flex min-w-[3rem] cursor-default justify-center rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
                                         :style="scoreBadgeStyle(row.score)"
+                                        @mouseenter="row.metric && openTooltip(row.metric, $event)"
+                                        @mouseleave="closeTooltip"
                                     >
-                                        {{ row.score }}
+                                        {{ row.score === null ? '-' : row.score }}
                                     </span>
-
-                                    <div
-                                        class="pointer-events-none absolute bottom-full left-0 z-30 mb-1 w-56 rounded-md border p-3 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
-                                        style="background-color: var(--surface-raised); border-color: var(--border)"
-                                    >
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                                            Scoring Buckets
-                                        </p>
-                                        <ul class="mt-1.5 space-y-1">
-                                            <li
-                                                v-for="bucket in bucketsFor(row.metric)"
-                                                :key="bucket.id"
-                                                class="flex items-center justify-between text-xs"
-                                            >
-                                                <span style="color: var(--ink-muted)">≥ {{ round(Number(bucket.min_rate) / bucketDivisorFor(row.metric)) }}{{ bucketSuffixFor(row.metric) }}</span>
-                                                <span
-                                                    class="inline-flex min-w-[2.25rem] justify-center rounded px-1.5 py-0.5 font-semibold tabular-nums"
-                                                    :style="scoreBadgeStyle(Number(bucket.score))"
-                                                >
-                                                    {{ round(Number(bucket.score)) }}
-                                                </span>
-                                            </li>
-                                            <li v-if="bucketsFor(row.metric).length === 0" class="text-xs" style="color: var(--ink-faint)">
-                                                No buckets configured.
-                                            </li>
-                                        </ul>
-                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            <Teleport to="body">
+                <div
+                    v-if="tooltipMetric"
+                    class="pointer-events-none fixed z-50 w-40 rounded-md border p-2.5 text-left shadow-lg"
+                    :style="{ ...tooltipStyle, backgroundColor: 'var(--surface-raised)', borderColor: 'var(--border)' }"
+                >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                        Scoring Buckets
+                    </p>
+                    <ul class="mt-1.5 space-y-1.5">
+                        <li
+                            v-for="bucket in bucketsFor(tooltipMetric)"
+                            :key="bucket.id"
+                            class="flex items-center gap-1.5 text-xs"
+                        >
+                            <span style="color: var(--ink-muted)">
+                                ≥ {{ round(Number(bucket.min_rate) / bucketDivisorFor(tooltipMetric)) }}{{ bucketSuffixFor(tooltipMetric) }}
+                            </span>
+                            <span style="color: var(--ink-faint)">=</span>
+                            <span
+                                class="ml-auto inline-flex min-w-[2.25rem] justify-center rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                                :style="scoreBadgeStyle(Number(bucket.score))"
+                            >
+                                {{ round(Number(bucket.score)) }}
+                            </span>
+                        </li>
+                        <li v-if="bucketsFor(tooltipMetric).length === 0" class="text-xs" style="color: var(--ink-faint)">
+                            No buckets configured.
+                        </li>
+                    </ul>
+                </div>
+            </Teleport>
 
             <!-- Aggregate scores -->
             <div class="mt-6">
