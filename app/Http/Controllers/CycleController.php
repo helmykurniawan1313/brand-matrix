@@ -30,7 +30,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -47,9 +47,7 @@ class CycleController extends Controller
             'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
         ]);
 
-        if ($healthLabels) {
-            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
-        }
+        $matching = $this->applyLabelFilters($matching, $labelFilters);
 
         $page = $request->integer('page', 1);
         $perPage = 15;
@@ -68,13 +66,25 @@ class CycleController extends Controller
             ->sortDesc()
             ->values();
 
+        $scoreDistribution = $this->buildScoreDistribution($matching);
+
         return Inertia::render('Cycles/Index', [
             'cycles' => $paginator,
             'accounts' => Account::orderBy('name')->get(),
+            'growthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_GROWTH)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'visibilityLabels' => LabelBucket::where('metric', LabelBucket::METRIC_VISIBILITY)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'engagementLabels' => LabelBucket::where('metric', LabelBucket::METRIC_ENGAGEMENT)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
             'healthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_HEALTH)
                 ->orderByDesc('min_score')
                 ->pluck('label'),
             'availableYears' => $availableYears,
+            'scoreDistribution' => $scoreDistribution,
             'summary' => [
                 'total' => $matching->count(),
                 'avg_health_rate' => $matching->isEmpty() ? null : round($matching->avg('scores.health_rate'), 2),
@@ -84,7 +94,10 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
-                'health_label' => $healthLabels,
+                'growth_label' => $labelFilters['growth_label'],
+                'visibility_label' => $labelFilters['visibility_label'],
+                'engagement_label' => $labelFilters['engagement_label'],
+                'health_label' => $labelFilters['health_label'],
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -101,7 +114,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -128,16 +141,16 @@ class CycleController extends Controller
                 ];
             });
 
-        if ($healthLabels) {
-            $cycles = $cycles->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
-        }
+        $cycles = $this->applyLabelFilters($cycles, $labelFilters);
 
         $filterParts = [];
         if ($search = $request->string('search')->trim()->toString()) {
             $filterParts[] = "search: \"{$search}\"";
         }
-        if ($healthLabels) {
-            $filterParts[] = 'health: '.implode(', ', $healthLabels);
+        foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
+            if ($labelFilters[$field]) {
+                $filterParts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
+            }
         }
         if ($monthFrom) {
             $filterParts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -285,6 +298,42 @@ class CycleController extends Controller
         return back();
     }
 
+    /**
+     * Counts how many matching cycles resolved to each label (PARAH..SIP) per
+     * metric — using each metric's own real label thresholds (already resolved
+     * by MetricCalculator into growth_label/visibility_label/etc.), not a
+     * shared numeric tier.
+     */
+    private function buildScoreDistribution(Collection $matching): array
+    {
+        $labelOrder = ['PARAH', 'KURANG', 'CUKUP', 'BAGUS', 'SIP'];
+        $metrics = [
+            'growth_label' => 'Growth Rate',
+            'visibility_label' => 'Visibility',
+            'engagement_label' => 'Engagement',
+            'health_label' => 'Health',
+        ];
+
+        $counts = collect($metrics)->mapWithKeys(function ($label, $key) use ($matching, $labelOrder) {
+            $labelCounts = array_fill_keys($labelOrder, 0);
+
+            foreach ($matching as $cycle) {
+                $resolved = $cycle['scores'][$key] ?? null;
+
+                if ($resolved !== null && array_key_exists($resolved, $labelCounts)) {
+                    $labelCounts[$resolved]++;
+                }
+            }
+
+            return [$key => ['label' => $label, 'counts' => $labelCounts]];
+        });
+
+        return [
+            'tiers' => $labelOrder,
+            'series' => $counts->values(),
+        ];
+    }
+
     private function applyMonthRangeFilter($query, string $monthFrom, ?string $monthTo)
     {
         $start = Carbon::createFromFormat('Y-m', $monthFrom)->startOfMonth();
@@ -320,7 +369,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -337,33 +386,67 @@ class CycleController extends Controller
                 'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
             ]);
 
-        if ($healthLabels) {
-            $cycles = $cycles->filter(fn ($entry) => in_array($entry['scores']['health_label'], $healthLabels, true))->values();
-        }
-
-        return $cycles;
+        return $this->applyLabelFilters($cycles, $labelFilters);
     }
 
     /**
-     * health_label may arrive as an array (health_label[]=SIP&health_label[]=BAGUS)
-     * or a comma-separated string (health_label=SIP,BAGUS); normalize to an array.
+     * Each *_label filter may arrive as an array (growth_label[]=SIP&growth_label[]=BAGUS)
+     * or a comma-separated string (growth_label=SIP,BAGUS); normalize to an array or null.
      */
-    private function parseHealthLabels(Request $request): array
+    private function parseLabelFilter(Request $request, string $param): ?array
     {
-        $raw = $request->input('health_label');
+        $raw = $request->input($param);
 
         if (is_array($raw)) {
-            return array_values(array_filter($raw, fn ($label) => $label !== null && $label !== ''));
+            $values = array_values(array_filter($raw, fn ($label) => $label !== null && $label !== ''));
+
+            return $values ?: null;
         }
 
         $trimmed = trim((string) $raw);
 
-        return $trimmed === '' ? [] : array_values(array_filter(explode(',', $trimmed)));
+        if ($trimmed === '') {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $trimmed))));
+    }
+
+    /**
+     * Resolves all four *_label filters (growth/visibility/engagement/health)
+     * from the request in one call, keyed by their scores[] field name.
+     */
+    private function parseLabelFilters(Request $request): array
+    {
+        return [
+            'growth_label' => $this->parseLabelFilter($request, 'growth_label'),
+            'visibility_label' => $this->parseLabelFilter($request, 'visibility_label'),
+            'engagement_label' => $this->parseLabelFilter($request, 'engagement_label'),
+            'health_label' => $this->parseLabelFilter($request, 'health_label'),
+        ];
+    }
+
+    /**
+     * Filters a mapped cycle collection down to those matching every active
+     * *_label filter (AND across metrics, OR within each metric's selected
+     * labels) — shared by index(), pdf(), and filteredCycles().
+     */
+    private function applyLabelFilters(Collection $matching, array $labelFilters): Collection
+    {
+        foreach ($labelFilters as $field => $labels) {
+            if (! $labels) {
+                continue;
+            }
+
+            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores'][$field], $labels, true))->values();
+        }
+
+        return $matching;
     }
 
     private function filterDescription(Request $request): array
     {
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $search = $request->string('search')->trim()->toString() ?: null;
@@ -377,8 +460,10 @@ class CycleController extends Controller
         if ($search) {
             $parts[] = "search: \"{$search}\"";
         }
-        if ($healthLabels) {
-            $parts[] = 'health: '.implode(', ', $healthLabels);
+        foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
+            if ($labelFilters[$field]) {
+                $parts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
+            }
         }
         if ($monthFrom) {
             $parts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -388,7 +473,10 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $search,
                 'account_id' => $accountId,
-                'health_label' => $healthLabels,
+                'growth_label' => $labelFilters['growth_label'],
+                'visibility_label' => $labelFilters['visibility_label'],
+                'engagement_label' => $labelFilters['engagement_label'],
+                'health_label' => $labelFilters['health_label'],
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -403,6 +491,12 @@ class CycleController extends Controller
             'provider' => ['nullable', 'string', 'in:'.implode(',', SummaryProviderResolver::PROVIDERS)],
             'search' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
+            'growth_label' => ['nullable'],
+            'growth_label.*' => ['string'],
+            'visibility_label' => ['nullable'],
+            'visibility_label.*' => ['string'],
+            'engagement_label' => ['nullable'],
+            'engagement_label.*' => ['string'],
             'health_label' => ['nullable'],
             'health_label.*' => ['string'],
             'month_from' => ['nullable', 'string'],
@@ -453,6 +547,14 @@ class CycleController extends Controller
             'reach' => ['required', 'integer', 'min:0'],
             'views' => ['required', 'integer', 'min:0'],
             'engagement' => ['required', 'integer', 'min:0'],
+            'story_performance' => ['nullable', 'integer', 'min:0'],
+            'ads_currency' => ['nullable', 'string', 'in:IDR,USD,EUR'],
+            'reach_ads_used' => ['boolean'],
+            'reach_ads_spend' => ['nullable', 'numeric', 'min:0'],
+            'views_ads_used' => ['boolean'],
+            'views_ads_spend' => ['nullable', 'numeric', 'min:0'],
+            'engagement_ads_used' => ['boolean'],
+            'engagement_ads_spend' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 }

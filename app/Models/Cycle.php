@@ -19,12 +19,23 @@ class Cycle extends Model
         'reach',
         'views',
         'engagement',
+        'story_performance',
+        'ads_currency',
+        'reach_ads_used',
+        'reach_ads_spend',
+        'views_ads_used',
+        'views_ads_spend',
+        'engagement_ads_used',
+        'engagement_ads_spend',
     ];
 
     protected $casts = [
         'cycle_start_date' => 'date',
         'cycle_end_date' => 'date',
         'ai_summary_generated_at' => 'datetime',
+        'reach_ads_used' => 'boolean',
+        'views_ads_used' => 'boolean',
+        'engagement_ads_used' => 'boolean',
     ];
 
     public function account(): BelongsTo

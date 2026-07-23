@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
+import Chart from 'chart.js/auto';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
@@ -32,6 +33,18 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    growthLabels: {
+        type: Array,
+        default: () => [],
+    },
+    visibilityLabels: {
+        type: Array,
+        default: () => [],
+    },
+    engagementLabels: {
+        type: Array,
+        default: () => [],
+    },
     healthLabels: {
         type: Array,
         default: () => [],
@@ -47,6 +60,10 @@ const props = defineProps({
     scoreBuckets: {
         type: Object,
         default: () => ({}),
+    },
+    scoreDistribution: {
+        type: Object,
+        default: () => ({ tiers: [], series: [] }),
     },
 });
 
@@ -130,6 +147,9 @@ const [initialYearTo, initialMonthNumTo] = (props.filters.month_to ?? '').split(
 
 const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
+const growthFilter = ref(Array.isArray(props.filters.growth_label) ? props.filters.growth_label : []);
+const visibilityFilter = ref(Array.isArray(props.filters.visibility_label) ? props.filters.visibility_label : []);
+const engagementFilter = ref(Array.isArray(props.filters.engagement_label) ? props.filters.engagement_label : []);
 const healthFilter = ref(Array.isArray(props.filters.health_label) ? props.filters.health_label : []);
 const monthNumFromFilter = ref(initialMonthNumFrom ?? '');
 const yearFromFilter = ref(initialYearFrom ?? '');
@@ -150,6 +170,9 @@ const combinedMonthTo = computed(() => {
 const filterQuery = computed(() => ({
     search: search.value || undefined,
     account_id: accountFilter.value || undefined,
+    growth_label: growthFilter.value.length ? growthFilter.value.join(',') : undefined,
+    visibility_label: visibilityFilter.value.length ? visibilityFilter.value.join(',') : undefined,
+    engagement_label: engagementFilter.value.length ? engagementFilter.value.join(',') : undefined,
     health_label: healthFilter.value.length ? healthFilter.value.join(',') : undefined,
     month_from: combinedMonthFrom.value,
     month_to: combinedMonthFrom.value ? (combinedMonthTo.value ?? combinedMonthFrom.value) : undefined,
@@ -172,6 +195,9 @@ const clearSearch = () => {
 const activeFilterCount = computed(() => {
     let count = 0;
     if (accountFilter.value) count += 1;
+    if (growthFilter.value.length) count += 1;
+    if (visibilityFilter.value.length) count += 1;
+    if (engagementFilter.value.length) count += 1;
     if (healthFilter.value.length) count += 1;
     if (combinedMonthFrom.value) count += 1;
     return count;
@@ -182,6 +208,9 @@ const hasActiveFilters = computed(() => !!search.value || activeFilterCount.valu
 const clearAllFilters = () => {
     search.value = '';
     accountFilter.value = '';
+    growthFilter.value = [];
+    visibilityFilter.value = [];
+    engagementFilter.value = [];
     healthFilter.value = [];
     monthNumFromFilter.value = '';
     yearFromFilter.value = '';
@@ -194,12 +223,18 @@ const clearAllFilters = () => {
 
 const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
+const draftGrowthFilter = ref([]);
+const draftVisibilityFilter = ref([]);
+const draftEngagementFilter = ref([]);
 const draftHealthFilter = ref([]);
 const draftMonthFrom = ref(''); // 'YYYY-MM'
 const draftMonthTo = ref(''); // 'YYYY-MM'
 
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
+    draftGrowthFilter.value = [...growthFilter.value];
+    draftVisibilityFilter.value = [...visibilityFilter.value];
+    draftEngagementFilter.value = [...engagementFilter.value];
     draftHealthFilter.value = [...healthFilter.value];
     draftMonthFrom.value = combinedMonthFrom.value ?? '';
     draftMonthTo.value = combinedMonthTo.value ?? '';
@@ -212,6 +247,9 @@ const closeFilterModal = () => {
 
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
+    growthFilter.value = [...draftGrowthFilter.value];
+    visibilityFilter.value = [...draftVisibilityFilter.value];
+    engagementFilter.value = [...draftEngagementFilter.value];
     healthFilter.value = [...draftHealthFilter.value];
 
     const [fromYear, fromMonth] = draftMonthFrom.value.split('-');
@@ -228,6 +266,9 @@ const applyFilterModal = () => {
 
 const clearFilterModal = () => {
     draftAccountFilter.value = '';
+    draftGrowthFilter.value = [];
+    draftVisibilityFilter.value = [];
+    draftEngagementFilter.value = [];
     draftHealthFilter.value = [];
     draftMonthFrom.value = '';
     draftMonthTo.value = '';
@@ -256,6 +297,9 @@ const filterLabelParts = computed(() => {
         if (account) parts.push(`account: ${account.name}`);
     }
     if (search.value) parts.push(`search: "${search.value}"`);
+    if (growthFilter.value.length) parts.push(`growth: ${growthFilter.value.join(', ')}`);
+    if (visibilityFilter.value.length) parts.push(`visibility: ${visibilityFilter.value.join(', ')}`);
+    if (engagementFilter.value.length) parts.push(`engagement: ${engagementFilter.value.join(', ')}`);
     if (healthFilter.value.length) parts.push(`health: ${healthFilter.value.join(', ')}`);
     if (combinedMonthFrom.value) {
         const fromLabel = monthOptions.find((m) => m.value === monthNumFromFilter.value)?.label ?? monthNumFromFilter.value;
@@ -300,7 +344,127 @@ const form = useForm({
     reach: 0,
     views: 0,
     engagement: 0,
+    story_performance: 0,
+    ads_currency: 'IDR',
+    reach_ads_used: false,
+    reach_ads_spend: 0,
+    views_ads_used: false,
+    views_ads_spend: 0,
+    engagement_ads_used: false,
+    engagement_ads_spend: 0,
 });
+
+// Score distribution chart — how many matching cycles resolved to each label
+// (PARAH..SIP), one line per metric. Each metric uses its own real label
+// thresholds (backend-resolved), not a shared numeric scale.
+
+const scoreDistributionCanvas = ref(null);
+let scoreDistributionChart = null;
+
+const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const renderScoreDistributionChart = () => {
+    if (!scoreDistributionCanvas.value) return;
+
+    scoreDistributionChart?.destroy();
+
+    const inkFaint = getCssVar('--ink-faint') || '#8b979b';
+    const border = getCssVar('--border') || '#d8dedc';
+    const colors = [
+        getCssVar('--accent') || '#0f766e',
+        '#c2410c',
+        '#7c3aed',
+        '#2563eb',
+    ];
+
+    const tiers = props.scoreDistribution.tiers ?? [];
+    const series = props.scoreDistribution.series ?? [];
+
+    scoreDistributionChart = new Chart(scoreDistributionCanvas.value, {
+        type: 'line',
+        data: {
+            labels: tiers.map((tier) => String(tier)),
+            datasets: series.map((s, i) => ({
+                label: s.label,
+                data: tiers.map((tier) => s.counts[tier] ?? 0),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length],
+                pointBackgroundColor: colors[i % colors.length],
+                pointRadius: 4,
+                tension: 0.3,
+                fill: false,
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: inkFaint } },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.dataset.label}: ${context.parsed.y} cycle${context.parsed.y === 1 ? '' : 's'}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Health Label', color: inkFaint },
+                    ticks: { color: inkFaint },
+                    grid: { color: border },
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Cycle Count', color: inkFaint },
+                    ticks: { color: inkFaint, precision: 0 },
+                    grid: { color: border },
+                },
+            },
+        },
+    });
+};
+
+watch(
+    () => props.scoreDistribution,
+    async () => {
+        await nextTick();
+        renderScoreDistributionChart();
+    },
+);
+
+onMounted(async () => {
+    await nextTick();
+    renderScoreDistributionChart();
+});
+
+onBeforeUnmount(() => {
+    scoreDistributionChart?.destroy();
+});
+
+const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
+
+// Live thousand-separator display for the ads spend inputs, while keeping
+// form[...] itself a plain number for submission/validation.
+const adsSpendDisplay = (metric) => computed({
+    get: () => {
+        const value = form[`${metric}_ads_spend`];
+        if (value === '' || value === null || value === undefined) return '';
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+    },
+    set: (raw) => {
+        const digitsOnly = raw.replace(/[^0-9.]/g, '');
+        form[`${metric}_ads_spend`] = digitsOnly === '' ? '' : Number(digitsOnly);
+    },
+});
+
+const reachAdsSpendDisplay = adsSpendDisplay('reach');
+const viewsAdsSpendDisplay = adsSpendDisplay('views');
+const engagementAdsSpendDisplay = adsSpendDisplay('engagement');
+
+const adsSpendDisplayFor = (metric) => {
+    if (metric === 'reach') return reachAdsSpendDisplay;
+    if (metric === 'views') return viewsAdsSpendDisplay;
+    return engagementAdsSpendDisplay;
+};
 
 const openCreate = () => {
     editingCycle.value = null;
@@ -355,6 +519,14 @@ const openEdit = (cycle) => {
     form.reach = cycle.reach;
     form.views = cycle.views;
     form.engagement = cycle.engagement;
+    form.story_performance = cycle.story_performance ?? 0;
+    form.ads_currency = cycle.ads_currency ?? 'IDR';
+    form.reach_ads_used = cycle.reach_ads_used ?? false;
+    form.reach_ads_spend = cycle.reach_ads_spend ?? 0;
+    form.views_ads_used = cycle.views_ads_used ?? false;
+    form.views_ads_spend = cycle.views_ads_spend ?? 0;
+    form.engagement_ads_used = cycle.engagement_ads_used ?? false;
+    form.engagement_ads_spend = cycle.engagement_ads_spend ?? 0;
     form.clearErrors();
     showModal.value = true;
 };
@@ -465,6 +637,18 @@ const inputStyle =
             />
             <StatCard label="Healthy (SIP)" :value="String(summary.healthy_count)" hint="cycles at top tier" />
             <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
+        </div>
+
+        <div v-if="summary.total > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+            <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                Score Distribution
+            </h3>
+            <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+                How many matching cycles landed on each label — Growth Rate, Visibility, Engagement &amp; Health.
+            </p>
+            <div class="mt-3" style="height: 260px">
+                <canvas ref="scoreDistributionCanvas"></canvas>
+            </div>
         </div>
 
         <div class="mt-8 flex flex-wrap items-center gap-3">
@@ -842,6 +1026,62 @@ const inputStyle =
                         </div>
                     </div>
 
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Story Performance</label>
+                        <input
+                            v-model.number="form.story_performance"
+                            type="number"
+                            min="0"
+                            :class="inputStyle"
+                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                        />
+                        <p v-if="form.errors.story_performance" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                            {{ form.errors.story_performance }}
+                        </p>
+                    </div>
+
+                    <div class="space-y-3 rounded-md border p-3" style="border-color: var(--border)">
+                        <p class="text-sm font-medium" style="color: var(--ink-muted)">Ads Spend</p>
+
+                        <div v-if="anyAdsUsed">
+                            <label class="block text-xs font-medium" style="color: var(--ink-muted)">Currency</label>
+                            <select
+                                v-model="form.ads_currency"
+                                :class="inputStyle"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink); max-width: 10rem"
+                            >
+                                <option value="IDR">IDR</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                            </select>
+                        </div>
+
+                        <div v-for="metric in ['reach', 'views', 'engagement']" :key="metric">
+                            <label class="flex items-center gap-2 text-sm" style="color: var(--ink)">
+                                <input
+                                    v-model="form[`${metric}_ads_used`]"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded"
+                                    style="accent-color: var(--accent)"
+                                />
+                                Used ads for {{ metric === 'reach' ? 'Reach' : metric === 'views' ? 'Views' : 'Engagement' }}?
+                            </label>
+                            <input
+                                v-if="form[`${metric}_ads_used`]"
+                                v-model="adsSpendDisplayFor(metric).value"
+                                type="text"
+                                inputmode="decimal"
+                                placeholder="Amount spent"
+                                class="mt-1.5"
+                                :class="inputStyle"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            />
+                            <p v-if="form.errors[`${metric}_ads_spend`]" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                {{ form.errors[`${metric}_ads_spend`] }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="flex justify-end gap-3 pt-2">
                         <button
                             type="button"
@@ -867,8 +1107,8 @@ const inputStyle =
         <CycleDetailModal
             v-if="viewingCycle"
             :cycle="viewingCycle"
-            :score-buckets="scoreBuckets"
             :default-ai-provider="defaultAiProvider"
+            :score-buckets="scoreBuckets"
             @close="closeDetail"
         />
 
@@ -922,6 +1162,36 @@ const inputStyle =
                             :options="accounts"
                             clearable
                             clear-label="All accounts"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Growth</label>
+                        <MultiSelectDropdown
+                            v-model="draftGrowthFilter"
+                            :options="growthLabels"
+                            placeholder="All growth statuses"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Visibility</label>
+                        <MultiSelectDropdown
+                            v-model="draftVisibilityFilter"
+                            :options="visibilityLabels"
+                            placeholder="All visibility statuses"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Engagement</label>
+                        <MultiSelectDropdown
+                            v-model="draftEngagementFilter"
+                            :options="engagementLabels"
+                            placeholder="All engagement statuses"
                             class="mt-1"
                         />
                     </div>
