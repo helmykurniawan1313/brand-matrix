@@ -76,6 +76,11 @@
             <td class="num">{{ $scores['er_follower_rate'] }}%</td>
             <td class="score">{{ $scores['er_follower_score'] }}</td>
         </tr>
+        <tr>
+            <td>Story Performance<br><span class="formula">manual input</span></td>
+            <td class="num">{{ number_format($cycle->story_performance ?? 0) }}</td>
+            <td class="score">-</td>
+        </tr>
     </table>
 
     <p class="section-title">Aggregate Scores</p>

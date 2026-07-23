@@ -19,6 +19,7 @@ class Cycle extends Model
         'reach',
         'views',
         'engagement',
+        'story_performance',
     ];
 
     protected $casts = [

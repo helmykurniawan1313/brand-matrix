@@ -97,6 +97,7 @@ const formatDate = (value) => {
 };
 
 const scoreBadgeStyle = (score) => {
+    if (score === null || score === undefined) return 'background-color: var(--border); color: var(--ink-faint)';
     if (score <= 25) return 'background-color: var(--status-parah-bg); color: var(--status-parah-ink)';
     if (score <= 50) return 'background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)';
     return 'background-color: var(--status-sip-bg); color: var(--status-sip-ink)';
@@ -119,6 +120,7 @@ const rateRows = computed(() => [
     { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
     { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score },
     { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score },
+    { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
 ]);
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
@@ -240,10 +242,11 @@ const aggregateRows = computed(() => [
                                         class="inline-flex min-w-[3rem] cursor-default justify-center rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
                                         :style="scoreBadgeStyle(row.score)"
                                     >
-                                        {{ row.score }}
+                                        {{ row.score === null ? '-' : row.score }}
                                     </span>
 
                                     <div
+                                        v-if="row.metric"
                                         class="pointer-events-none absolute bottom-full left-0 z-30 mb-1 w-56 rounded-md border p-3 text-left opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
                                         style="background-color: var(--surface-raised); border-color: var(--border)"
                                     >

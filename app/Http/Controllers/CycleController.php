@@ -506,6 +506,7 @@ class CycleController extends Controller
             'reach' => ['required', 'integer', 'min:0'],
             'views' => ['required', 'integer', 'min:0'],
             'engagement' => ['required', 'integer', 'min:0'],
+            'story_performance' => ['nullable', 'integer', 'min:0'],
         ]);
     }
 }

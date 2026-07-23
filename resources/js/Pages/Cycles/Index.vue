@@ -300,6 +300,7 @@ const form = useForm({
     reach: 0,
     views: 0,
     engagement: 0,
+    story_performance: 0,
 });
 
 const openCreate = () => {
@@ -373,6 +374,7 @@ const openEdit = (cycle) => {
     form.reach = cycle.reach;
     form.views = cycle.views;
     form.engagement = cycle.engagement;
+    form.story_performance = cycle.story_performance ?? 0;
     form.clearErrors();
     showModal.value = true;
 };
@@ -858,6 +860,20 @@ const inputStyle =
                                 {{ form.errors.engagement }}
                             </p>
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Story Performance</label>
+                        <input
+                            v-model.number="form.story_performance"
+                            type="number"
+                            min="0"
+                            :class="inputStyle"
+                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                        />
+                        <p v-if="form.errors.story_performance" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                            {{ form.errors.story_performance }}
+                        </p>
                     </div>
 
                     <div class="flex justify-end gap-3 pt-2">
