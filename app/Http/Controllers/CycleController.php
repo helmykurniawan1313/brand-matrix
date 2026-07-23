@@ -345,41 +345,39 @@ class CycleController extends Controller
     }
 
     /**
-     * Counts how many matching cycles fall into each score tier (0/25/50/75/100)
-     * for growth/visibility/engagement/health — scores are rounded to the nearest
-     * tier since visibility/engagement/health are weighted averages that rarely
-     * land exactly on 0/25/50/75/100 (e.g. 62.5, 45.8) the way growth's direct
-     * bucket lookup does.
+     * Counts how many matching cycles resolved to each label (PARAH..SIP) per
+     * metric — using each metric's own real label thresholds (already resolved
+     * by MetricCalculator into growth_label/visibility_label/etc.), not a
+     * shared numeric tier. Health's SIP starts at >=85 while Visibility's SIP
+     * starts at >=100, for example, so a shared 0/25/50/75/100 axis would
+     * misrepresent metrics whose thresholds don't line up with those numbers.
      */
     private function buildScoreDistribution(Collection $matching): array
     {
-        $tiers = [0, 25, 50, 75, 100];
+        $labelOrder = ['PARAH', 'KURANG', 'CUKUP', 'BAGUS', 'SIP'];
         $metrics = [
-            'growth_score' => 'Growth Rate',
-            'visibility_rate' => 'Visibility',
-            'engagement_score' => 'Engagement',
-            'health_rate' => 'Health',
+            'growth_label' => 'Growth Rate',
+            'visibility_label' => 'Visibility',
+            'engagement_label' => 'Engagement',
+            'health_label' => 'Health',
         ];
 
-        $nearestTier = function (float $value) use ($tiers) {
-            $clamped = max(0, min(100, $value));
-
-            return collect($tiers)->sort(fn ($a, $b) => abs($clamped - $a) <=> abs($clamped - $b))->first();
-        };
-
-        $counts = collect($metrics)->mapWithKeys(function ($label, $key) use ($matching, $tiers, $nearestTier) {
-            $tierCounts = array_fill_keys($tiers, 0);
+        $counts = collect($metrics)->mapWithKeys(function ($label, $key) use ($matching, $labelOrder) {
+            $labelCounts = array_fill_keys($labelOrder, 0);
 
             foreach ($matching as $cycle) {
-                $tier = $nearestTier((float) $cycle['scores'][$key]);
-                $tierCounts[$tier]++;
+                $resolved = $cycle['scores'][$key] ?? null;
+
+                if ($resolved !== null && array_key_exists($resolved, $labelCounts)) {
+                    $labelCounts[$resolved]++;
+                }
             }
 
-            return [$key => ['label' => $label, 'counts' => $tierCounts]];
+            return [$key => ['label' => $label, 'counts' => $labelCounts]];
         });
 
         return [
-            'tiers' => $tiers,
+            'tiers' => $labelOrder,
             'series' => $counts->values(),
         ];
     }

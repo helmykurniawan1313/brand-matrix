@@ -315,8 +315,9 @@ const form = useForm({
     engagement_ads_spend: 0,
 });
 
-// Score distribution chart — how many matching cycles fall into each score
-// tier (0/25/50/75/100), one grouped bar per tier, one color per metric.
+// Score distribution chart — how many matching cycles resolved to each label
+// (PARAH..SIP), one line per metric. Each metric uses its own real label
+// thresholds (backend-resolved), not a shared numeric scale.
 
 const scoreDistributionCanvas = ref(null);
 let scoreDistributionChart = null;
@@ -341,14 +342,18 @@ const renderScoreDistributionChart = () => {
     const series = props.scoreDistribution.series ?? [];
 
     scoreDistributionChart = new Chart(scoreDistributionCanvas.value, {
-        type: 'bar',
+        type: 'line',
         data: {
             labels: tiers.map((tier) => String(tier)),
             datasets: series.map((s, i) => ({
                 label: s.label,
                 data: tiers.map((tier) => s.counts[tier] ?? 0),
+                borderColor: colors[i % colors.length],
                 backgroundColor: colors[i % colors.length],
-                borderRadius: 3,
+                pointBackgroundColor: colors[i % colors.length],
+                pointRadius: 4,
+                tension: 0.3,
+                fill: false,
             })),
         },
         options: {
@@ -364,7 +369,7 @@ const renderScoreDistributionChart = () => {
             },
             scales: {
                 x: {
-                    title: { display: true, text: 'Score', color: inkFaint },
+                    title: { display: true, text: 'Health Label', color: inkFaint },
                     ticks: { color: inkFaint },
                     grid: { color: border },
                 },
@@ -618,7 +623,7 @@ const inputStyle =
                 Score Distribution
             </h3>
             <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
-                How many matching cycles scored at each tier — Growth Rate, Visibility, Engagement &amp; Health.
+                How many matching cycles landed on each label — Growth Rate, Visibility, Engagement &amp; Health.
             </p>
             <div class="mt-3" style="height: 260px">
                 <canvas ref="scoreDistributionCanvas"></canvas>
