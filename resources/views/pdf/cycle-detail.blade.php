@@ -1,3 +1,16 @@
+@php
+    $currencySymbols = ['IDR' => 'Rp', 'USD' => '$', 'EUR' => '€'];
+
+    $formatAdsLine = function (bool $used, ?float $spend, ?string $currency) use ($currencySymbols) {
+        if (! $used) {
+            return 'Ads: No';
+        }
+
+        $symbol = $currencySymbols[$currency] ?? ($currency ?? 'IDR');
+
+        return 'Ads: Yes — '.$symbol.' '.number_format($spend ?? 0, 2);
+    };
+@endphp
 <!DOCTYPE html>
 <html>
 <head>
@@ -14,6 +27,7 @@
         .inputs .value { font-size: 13px; font-weight: bold; }
         .rates td { padding: 6px 4px; border-bottom: 1px solid #d8dedc; }
         .rates .formula { font-size: 9px; color: #8b979b; }
+        .rates .ads { font-size: 9px; color: #8b979b; display: block; margin-top: 1px; }
         .rates .num { text-align: right; }
         .rates .score { text-align: right; font-weight: bold; color: #0f6e63; }
         .aggregates { width: 100%; }
@@ -57,22 +71,22 @@
             <td class="score">{{ $scores['growth_score'] }}</td>
         </tr>
         <tr>
-            <td>Reach Rate<br><span class="formula">reach / end followers</span></td>
+            <td>Reach Rate<br><span class="formula">reach / end followers</span><span class="ads">{{ $formatAdsLine((bool) $cycle->reach_ads_used, $cycle->reach_ads_spend, $cycle->ads_currency) }}</span></td>
             <td class="num">{{ round($scores['reach_rate'] / 100, 2) }}</td>
             <td class="score">{{ $scores['reach_score'] }}</td>
         </tr>
         <tr>
-            <td>View Rate<br><span class="formula">views / end followers</span></td>
+            <td>View Rate<br><span class="formula">views / end followers</span><span class="ads">{{ $formatAdsLine((bool) $cycle->views_ads_used, $cycle->views_ads_spend, $cycle->ads_currency) }}</span></td>
             <td class="num">{{ round($scores['view_rate'] / 100, 2) }}</td>
             <td class="score">{{ $scores['view_score'] }}</td>
         </tr>
         <tr>
-            <td>ER (of Reach)<br><span class="formula">engagement / reach &times; 100</span></td>
+            <td>ER (of Reach)<br><span class="formula">engagement / reach &times; 100</span><span class="ads">{{ $formatAdsLine((bool) $cycle->engagement_ads_used, $cycle->engagement_ads_spend, $cycle->ads_currency) }}</span></td>
             <td class="num">{{ $scores['er_reach_rate'] }}%</td>
             <td class="score">{{ $scores['er_reach_score'] }}</td>
         </tr>
         <tr>
-            <td>ER (of Followers)<br><span class="formula">engagement / end followers &times; 100</span></td>
+            <td>ER (of Followers)<br><span class="formula">engagement / end followers &times; 100</span><span class="ads">{{ $formatAdsLine((bool) $cycle->engagement_ads_used, $cycle->engagement_ads_spend, $cycle->ads_currency) }}</span></td>
             <td class="num">{{ $scores['er_follower_rate'] }}%</td>
             <td class="score">{{ $scores['er_follower_score'] }}</td>
         </tr>

@@ -103,6 +103,19 @@ const scoreBadgeStyle = (score) => {
     return 'background-color: var(--status-sip-bg); color: var(--status-sip-ink)';
 };
 
+const formatAdsSpend = (amount, currency) => {
+    try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'IDR' }).format(amount);
+    } catch {
+        return `${amount} ${currency}`;
+    }
+};
+
+const adsLine = (used, spend) => {
+    if (!used) return 'Ads: No';
+    return `Ads: Yes — ${formatAdsSpend(spend ?? 0, props.cycle.ads_currency)}`;
+};
+
 const s = computed(() => props.cycle.scores);
 
 const inputs = computed(() => [
@@ -116,10 +129,10 @@ const inputs = computed(() => [
 const rateRows = computed(() => [
     { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
     { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
-    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score },
-    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
-    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score },
-    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score },
+    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_ads_used, props.cycle.reach_ads_spend) },
+    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.views_ads_used, props.cycle.views_ads_spend) },
+    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
     { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
 ]);
 
@@ -233,6 +246,7 @@ const aggregateRows = computed(() => [
                                 <td class="px-3 py-2.5">
                                     <p class="text-sm font-medium" style="color: var(--ink)">{{ row.label }}</p>
                                     <p class="font-mono text-[11px]" style="color: var(--ink-faint)">{{ row.formula }}</p>
+                                    <p v-if="row.ads" class="mt-0.5 text-[11px]" style="color: var(--ink-faint)">{{ row.ads }}</p>
                                 </td>
                                 <td class="px-3 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                     {{ row.rate }}

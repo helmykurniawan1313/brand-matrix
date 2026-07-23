@@ -507,6 +507,13 @@ class CycleController extends Controller
             'views' => ['required', 'integer', 'min:0'],
             'engagement' => ['required', 'integer', 'min:0'],
             'story_performance' => ['nullable', 'integer', 'min:0'],
+            'ads_currency' => ['nullable', 'string', 'in:IDR,USD,EUR'],
+            'reach_ads_used' => ['boolean'],
+            'reach_ads_spend' => ['nullable', 'numeric', 'min:0'],
+            'views_ads_used' => ['boolean'],
+            'views_ads_spend' => ['nullable', 'numeric', 'min:0'],
+            'engagement_ads_used' => ['boolean'],
+            'engagement_ads_spend' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 }

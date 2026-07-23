@@ -301,7 +301,16 @@ const form = useForm({
     views: 0,
     engagement: 0,
     story_performance: 0,
+    ads_currency: 'IDR',
+    reach_ads_used: false,
+    reach_ads_spend: 0,
+    views_ads_used: false,
+    views_ads_spend: 0,
+    engagement_ads_used: false,
+    engagement_ads_spend: 0,
 });
+
+const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
 
 const openCreate = () => {
     editingCycle.value = null;
@@ -375,6 +384,13 @@ const openEdit = (cycle) => {
     form.views = cycle.views;
     form.engagement = cycle.engagement;
     form.story_performance = cycle.story_performance ?? 0;
+    form.ads_currency = cycle.ads_currency ?? 'IDR';
+    form.reach_ads_used = cycle.reach_ads_used ?? false;
+    form.reach_ads_spend = cycle.reach_ads_spend ?? 0;
+    form.views_ads_used = cycle.views_ads_used ?? false;
+    form.views_ads_spend = cycle.views_ads_spend ?? 0;
+    form.engagement_ads_used = cycle.engagement_ads_used ?? false;
+    form.engagement_ads_spend = cycle.engagement_ads_spend ?? 0;
     form.clearErrors();
     showModal.value = true;
 };
@@ -874,6 +890,49 @@ const inputStyle =
                         <p v-if="form.errors.story_performance" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
                             {{ form.errors.story_performance }}
                         </p>
+                    </div>
+
+                    <div class="space-y-3 rounded-md border p-3" style="border-color: var(--border)">
+                        <p class="text-sm font-medium" style="color: var(--ink-muted)">Ads Spend</p>
+
+                        <div v-if="anyAdsUsed">
+                            <label class="block text-xs font-medium" style="color: var(--ink-muted)">Currency</label>
+                            <select
+                                v-model="form.ads_currency"
+                                :class="inputStyle"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink); max-width: 10rem"
+                            >
+                                <option value="IDR">IDR</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                            </select>
+                        </div>
+
+                        <div v-for="metric in ['reach', 'views', 'engagement']" :key="metric">
+                            <label class="flex items-center gap-2 text-sm" style="color: var(--ink)">
+                                <input
+                                    v-model="form[`${metric}_ads_used`]"
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded"
+                                    style="accent-color: var(--accent)"
+                                />
+                                Used ads for {{ metric === 'reach' ? 'Reach' : metric === 'views' ? 'Views' : 'Engagement' }}?
+                            </label>
+                            <input
+                                v-if="form[`${metric}_ads_used`]"
+                                v-model.number="form[`${metric}_ads_spend`]"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Amount spent"
+                                class="mt-1.5"
+                                :class="inputStyle"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            />
+                            <p v-if="form.errors[`${metric}_ads_spend`]" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                {{ form.errors[`${metric}_ads_spend`] }}
+                            </p>
+                        </div>
                     </div>
 
                     <div class="flex justify-end gap-3 pt-2">
