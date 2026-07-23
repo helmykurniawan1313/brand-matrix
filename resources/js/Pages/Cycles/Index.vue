@@ -33,6 +33,18 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    growthLabels: {
+        type: Array,
+        default: () => [],
+    },
+    visibilityLabels: {
+        type: Array,
+        default: () => [],
+    },
+    engagementLabels: {
+        type: Array,
+        default: () => [],
+    },
     healthLabels: {
         type: Array,
         default: () => [],
@@ -135,6 +147,9 @@ const [initialYearTo, initialMonthNumTo] = (props.filters.month_to ?? '').split(
 
 const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
+const growthFilter = ref(Array.isArray(props.filters.growth_label) ? props.filters.growth_label : []);
+const visibilityFilter = ref(Array.isArray(props.filters.visibility_label) ? props.filters.visibility_label : []);
+const engagementFilter = ref(Array.isArray(props.filters.engagement_label) ? props.filters.engagement_label : []);
 const healthFilter = ref(Array.isArray(props.filters.health_label) ? props.filters.health_label : []);
 const monthNumFromFilter = ref(initialMonthNumFrom ?? '');
 const yearFromFilter = ref(initialYearFrom ?? '');
@@ -155,6 +170,9 @@ const combinedMonthTo = computed(() => {
 const filterQuery = computed(() => ({
     search: search.value || undefined,
     account_id: accountFilter.value || undefined,
+    growth_label: growthFilter.value.length ? growthFilter.value.join(',') : undefined,
+    visibility_label: visibilityFilter.value.length ? visibilityFilter.value.join(',') : undefined,
+    engagement_label: engagementFilter.value.length ? engagementFilter.value.join(',') : undefined,
     health_label: healthFilter.value.length ? healthFilter.value.join(',') : undefined,
     month_from: combinedMonthFrom.value,
     month_to: combinedMonthFrom.value ? (combinedMonthTo.value ?? combinedMonthFrom.value) : undefined,
@@ -177,6 +195,9 @@ const clearSearch = () => {
 const activeFilterCount = computed(() => {
     let count = 0;
     if (accountFilter.value) count += 1;
+    if (growthFilter.value.length) count += 1;
+    if (visibilityFilter.value.length) count += 1;
+    if (engagementFilter.value.length) count += 1;
     if (healthFilter.value.length) count += 1;
     if (combinedMonthFrom.value) count += 1;
     return count;
@@ -187,6 +208,9 @@ const hasActiveFilters = computed(() => !!search.value || activeFilterCount.valu
 const clearAllFilters = () => {
     search.value = '';
     accountFilter.value = '';
+    growthFilter.value = [];
+    visibilityFilter.value = [];
+    engagementFilter.value = [];
     healthFilter.value = [];
     monthNumFromFilter.value = '';
     yearFromFilter.value = '';
@@ -199,12 +223,18 @@ const clearAllFilters = () => {
 
 const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
+const draftGrowthFilter = ref([]);
+const draftVisibilityFilter = ref([]);
+const draftEngagementFilter = ref([]);
 const draftHealthFilter = ref([]);
 const draftMonthFrom = ref(''); // 'YYYY-MM'
 const draftMonthTo = ref(''); // 'YYYY-MM'
 
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
+    draftGrowthFilter.value = [...growthFilter.value];
+    draftVisibilityFilter.value = [...visibilityFilter.value];
+    draftEngagementFilter.value = [...engagementFilter.value];
     draftHealthFilter.value = [...healthFilter.value];
     draftMonthFrom.value = combinedMonthFrom.value ?? '';
     draftMonthTo.value = combinedMonthTo.value ?? '';
@@ -217,6 +247,9 @@ const closeFilterModal = () => {
 
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
+    growthFilter.value = [...draftGrowthFilter.value];
+    visibilityFilter.value = [...draftVisibilityFilter.value];
+    engagementFilter.value = [...draftEngagementFilter.value];
     healthFilter.value = [...draftHealthFilter.value];
 
     const [fromYear, fromMonth] = draftMonthFrom.value.split('-');
@@ -233,6 +266,9 @@ const applyFilterModal = () => {
 
 const clearFilterModal = () => {
     draftAccountFilter.value = '';
+    draftGrowthFilter.value = [];
+    draftVisibilityFilter.value = [];
+    draftEngagementFilter.value = [];
     draftHealthFilter.value = [];
     draftMonthFrom.value = '';
     draftMonthTo.value = '';
@@ -261,6 +297,9 @@ const filterLabelParts = computed(() => {
         if (account) parts.push(`account: ${account.name}`);
     }
     if (search.value) parts.push(`search: "${search.value}"`);
+    if (growthFilter.value.length) parts.push(`growth: ${growthFilter.value.join(', ')}`);
+    if (visibilityFilter.value.length) parts.push(`visibility: ${visibilityFilter.value.join(', ')}`);
+    if (engagementFilter.value.length) parts.push(`engagement: ${engagementFilter.value.join(', ')}`);
     if (healthFilter.value.length) parts.push(`health: ${healthFilter.value.join(', ')}`);
     if (combinedMonthFrom.value) {
         const fromLabel = monthOptions.find((m) => m.value === monthNumFromFilter.value)?.label ?? monthNumFromFilter.value;
@@ -1141,6 +1180,36 @@ const inputStyle =
                             :options="accounts"
                             clearable
                             clear-label="All accounts"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Growth</label>
+                        <MultiSelectDropdown
+                            v-model="draftGrowthFilter"
+                            :options="growthLabels"
+                            placeholder="All growth statuses"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Visibility</label>
+                        <MultiSelectDropdown
+                            v-model="draftVisibilityFilter"
+                            :options="visibilityLabels"
+                            placeholder="All visibility statuses"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Engagement</label>
+                        <MultiSelectDropdown
+                            v-model="draftEngagementFilter"
+                            :options="engagementLabels"
+                            placeholder="All engagement statuses"
                             class="mt-1"
                         />
                     </div>

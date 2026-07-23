@@ -30,7 +30,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -47,9 +47,7 @@ class CycleController extends Controller
             'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
         ]);
 
-        if ($healthLabels) {
-            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
-        }
+        $matching = $this->applyLabelFilters($matching, $labelFilters);
 
         $page = $request->integer('page', 1);
         $perPage = 15;
@@ -73,6 +71,15 @@ class CycleController extends Controller
         return Inertia::render('Cycles/Index', [
             'cycles' => $paginator,
             'accounts' => Account::orderBy('name')->get(),
+            'growthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_GROWTH)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'visibilityLabels' => LabelBucket::where('metric', LabelBucket::METRIC_VISIBILITY)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'engagementLabels' => LabelBucket::where('metric', LabelBucket::METRIC_ENGAGEMENT)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
             'healthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_HEALTH)
                 ->orderByDesc('min_score')
                 ->pluck('label'),
@@ -87,7 +94,10 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
-                'health_label' => $healthLabels,
+                'growth_label' => $labelFilters['growth_label'],
+                'visibility_label' => $labelFilters['visibility_label'],
+                'engagement_label' => $labelFilters['engagement_label'],
+                'health_label' => $labelFilters['health_label'],
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -102,7 +112,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -129,16 +139,16 @@ class CycleController extends Controller
                 ];
             });
 
-        if ($healthLabels) {
-            $cycles = $cycles->filter(fn ($cycle) => in_array($cycle['scores']['health_label'], $healthLabels, true))->values();
-        }
+        $cycles = $this->applyLabelFilters($cycles, $labelFilters);
 
         $filterParts = [];
         if ($search = $request->string('search')->trim()->toString()) {
             $filterParts[] = "search: \"{$search}\"";
         }
-        if ($healthLabels) {
-            $filterParts[] = 'health: '.implode(', ', $healthLabels);
+        foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
+            if ($labelFilters[$field]) {
+                $filterParts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
+            }
         }
         if ($monthFrom) {
             $filterParts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -417,7 +427,7 @@ class CycleController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
@@ -434,20 +444,17 @@ class CycleController extends Controller
                 'scores' => $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights),
             ]);
 
-        if ($healthLabels) {
-            $cycles = $cycles->filter(fn ($entry) => in_array($entry['scores']['health_label'], $healthLabels, true))->values();
-        }
-
-        return $cycles;
+        return $this->applyLabelFilters($cycles, $labelFilters);
     }
 
     /**
-     * health_label arrives as a comma-separated list (multi-select filter) — split
-     * and trim into an array, or null when absent, so callers use a single check.
+     * Each *_label filter arrives as a comma-separated list (multi-select) —
+     * split and trim into an array, or null when absent, so callers use a
+     * single check regardless of which metric's filter param this is.
      */
-    private function parseHealthLabels(Request $request): ?array
+    private function parseLabelFilter(Request $request, string $param): ?array
     {
-        $raw = $request->string('health_label')->trim()->toString();
+        $raw = $request->string($param)->trim()->toString();
 
         if (! $raw) {
             return null;
@@ -456,9 +463,41 @@ class CycleController extends Controller
         return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
+    /**
+     * Resolves all four *_label filters (growth/visibility/engagement/health)
+     * from the request in one call, keyed by their scores[] field name.
+     */
+    private function parseLabelFilters(Request $request): array
+    {
+        return [
+            'growth_label' => $this->parseLabelFilter($request, 'growth_label'),
+            'visibility_label' => $this->parseLabelFilter($request, 'visibility_label'),
+            'engagement_label' => $this->parseLabelFilter($request, 'engagement_label'),
+            'health_label' => $this->parseLabelFilter($request, 'health_label'),
+        ];
+    }
+
+    /**
+     * Filters a mapped cycle collection down to those matching every active
+     * *_label filter (AND across metrics, OR within each metric's selected
+     * labels) — shared by index(), pdf(), and filteredCycles().
+     */
+    private function applyLabelFilters(Collection $matching, array $labelFilters): Collection
+    {
+        foreach ($labelFilters as $field => $labels) {
+            if (! $labels) {
+                continue;
+            }
+
+            $matching = $matching->filter(fn ($cycle) => in_array($cycle['scores'][$field], $labels, true))->values();
+        }
+
+        return $matching;
+    }
+
     private function filterDescription(Request $request): array
     {
-        $healthLabels = $this->parseHealthLabels($request);
+        $labelFilters = $this->parseLabelFilters($request);
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $search = $request->string('search')->trim()->toString() ?: null;
@@ -472,8 +511,10 @@ class CycleController extends Controller
         if ($search) {
             $parts[] = "search: \"{$search}\"";
         }
-        if ($healthLabels) {
-            $parts[] = 'health: '.implode(', ', $healthLabels);
+        foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
+            if ($labelFilters[$field]) {
+                $parts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
+            }
         }
         if ($monthFrom) {
             $parts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
@@ -483,7 +524,10 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $search,
                 'account_id' => $accountId,
-                'health_label' => $healthLabels,
+                'growth_label' => $labelFilters['growth_label'],
+                'visibility_label' => $labelFilters['visibility_label'],
+                'engagement_label' => $labelFilters['engagement_label'],
+                'health_label' => $labelFilters['health_label'],
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
             ],
@@ -498,6 +542,9 @@ class CycleController extends Controller
             'provider' => ['nullable', 'string', 'in:'.implode(',', SummaryProviderResolver::PROVIDERS)],
             'search' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
+            'growth_label' => ['nullable', 'string'],
+            'visibility_label' => ['nullable', 'string'],
+            'engagement_label' => ['nullable', 'string'],
             'health_label' => ['nullable', 'string'],
             'month_from' => ['nullable', 'string'],
             'month_to' => ['nullable', 'string'],
