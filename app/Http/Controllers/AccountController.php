@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Services\MetricCalculator;
 use App\Services\SummaryProviderResolver;
+use App\Models\Employee;
 use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
 use App\Models\ScoreBucket;
@@ -22,16 +23,31 @@ class AccountController extends Controller
     public function index(Request $request): Response
     {
         $search = $request->string('search')->trim()->toString() ?: null;
+        $pmId = $request->integer('project_manager_id') ?: null;
+
+        $sortColumns = [
+            'name' => 'accounts.name',
+            'pm' => 'employees.name',
+            'cycles' => 'cycles_count',
+        ];
+        $sort = $sortColumns[$request->string('sort')->toString()] ?? 'accounts.name';
+        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
         return Inertia::render('Accounts/Index', [
-            'accounts' => Account::withCount('cycles')
-                ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
-                ->orderBy('name')
+            'accounts' => Account::with('projectManager:id,name')
+                ->leftJoin('employees', 'employees.id', '=', 'accounts.project_manager_id')
+                ->withCount('cycles')
+                ->when($search, fn ($query, $search) => $query->where('accounts.name', 'like', "%{$search}%"))
+                ->when($pmId, fn ($query, $pmId) => $query->where('accounts.project_manager_id', $pmId))
+                ->orderBy($sort, $direction)
+                ->orderBy('accounts.name')
                 ->paginate(15)
                 ->withQueryString()
                 ->through(fn (Account $account) => [
                     'id' => $account->id,
                     'name' => $account->name,
+                    'project_manager_id' => $account->project_manager_id,
+                    'project_manager' => $account->projectManager,
                     'cycles_count' => $account->cycles_count,
                     'ig_business_id' => $account->ig_business_id,
                     'ig_username' => $account->ig_username,
@@ -39,7 +55,14 @@ class AccountController extends Controller
                 ]),
             'filters' => [
                 'search' => $search,
+                'project_manager_id' => $pmId,
+                'sort' => array_search($sort, $sortColumns) ?: 'name',
+                'direction' => $direction,
             ],
+            'accountDepartmentEmployees' => Employee::whereHas(
+                'department',
+                fn ($query) => $query->where('name', 'Account')
+            )->orderBy('name')->get(['id', 'name']),
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
     }
@@ -64,6 +87,7 @@ class AccountController extends Controller
                     'reach' => $cycle->reach,
                     'views' => $cycle->views,
                     'engagement' => $cycle->engagement,
+                    'story_performance' => $cycle->story_performance,
                     'visibility_rate' => round($scores['visibility_rate'], 2),
                     'engagement_score' => round($scores['engagement_score'], 2),
                     'health_rate' => round($scores['health_rate'], 2),
@@ -149,6 +173,7 @@ class AccountController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'project_manager_id' => ['nullable', 'exists:employees,id'],
         ]);
 
         Account::create($data);
@@ -160,6 +185,7 @@ class AccountController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'project_manager_id' => ['nullable', 'exists:employees,id'],
         ]);
 
         $account->update($data);

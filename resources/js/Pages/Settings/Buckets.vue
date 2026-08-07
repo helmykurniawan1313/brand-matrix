@@ -4,8 +4,10 @@ import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
+import { useAuth } from '../../composables/useAuth';
 
 const toast = useToast();
+const { canEdit } = useAuth();
 
 const props = defineProps({
     scoreBuckets: {
@@ -273,9 +275,10 @@ const saveWeights = (aggregate) => {
                             type="number"
                             step="0.01"
                             min="0"
+                            :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-20"
+                            class="w-20 disabled:opacity-60"
                         />
                         <span class="w-12 shrink-0 text-right text-xs tabular-nums" style="color: var(--ink-faint)">
                             {{ normalizedPercent(aggregate, component) }}%
@@ -288,6 +291,7 @@ const saveWeights = (aggregate) => {
                 </p>
 
                 <button
+                    v-if="canEdit"
                     class="mt-3 text-xs font-semibold transition-colors hover:opacity-70"
                     style="color: var(--accent)"
                     :disabled="weightForms[aggregate].processing"
@@ -321,20 +325,22 @@ const saveWeights = (aggregate) => {
                             type="number"
                             step="0.01"
                             placeholder="floor"
+                            :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-20"
+                            class="w-20 disabled:opacity-60"
                         />
                         <span class="text-xs" style="color: var(--ink-faint)">→ score</span>
                         <input
                             v-model.number="scoreForms[bucket.id].score"
                             type="number"
                             step="0.01"
+                            :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-20"
+                            class="w-20 disabled:opacity-60"
                         />
-                        <div class="ml-auto flex items-center gap-2">
+                        <div v-if="canEdit" class="ml-auto flex items-center gap-2">
                             <button
                                 class="text-xs font-medium transition-colors hover:opacity-70"
                                 style="color: var(--accent)"
@@ -354,6 +360,7 @@ const saveWeights = (aggregate) => {
                     </div>
 
                     <div
+                        v-if="canEdit"
                         class="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
                         style="border-color: var(--border-strong)"
                     >
@@ -412,18 +419,20 @@ const saveWeights = (aggregate) => {
                             type="number"
                             step="0.01"
                             placeholder="floor"
+                            :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-16"
+                            class="w-16 disabled:opacity-60"
                         />
                         <input
                             v-model="labelForms[bucket.id].label"
                             type="text"
+                            :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-24"
+                            class="w-24 disabled:opacity-60"
                         />
-                        <div class="ml-auto flex items-center gap-2">
+                        <div v-if="canEdit" class="ml-auto flex items-center gap-2">
                             <button
                                 class="text-xs font-medium transition-colors hover:opacity-70"
                                 style="color: var(--accent)"
@@ -443,6 +452,7 @@ const saveWeights = (aggregate) => {
                     </div>
 
                     <div
+                        v-if="canEdit"
                         class="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
                         style="border-color: var(--border-strong)"
                     >

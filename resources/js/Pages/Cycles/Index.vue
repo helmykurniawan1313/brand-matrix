@@ -13,8 +13,10 @@ import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
+import { useAuth } from '../../composables/useAuth';
 
 const toast = useToast();
+const { canEdit } = useAuth();
 
 const props = defineProps({
     cycles: {
@@ -24,6 +26,10 @@ const props = defineProps({
     accounts: {
         type: Array,
         required: true,
+    },
+    accountDepartmentEmployees: {
+        type: Array,
+        default: () => [],
     },
     summary: {
         type: Object,
@@ -147,6 +153,7 @@ const [initialYearTo, initialMonthNumTo] = (props.filters.month_to ?? '').split(
 
 const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
+const pmFilter = ref(props.filters.project_manager_id ?? '');
 const growthFilter = ref(Array.isArray(props.filters.growth_label) ? props.filters.growth_label : []);
 const visibilityFilter = ref(Array.isArray(props.filters.visibility_label) ? props.filters.visibility_label : []);
 const engagementFilter = ref(Array.isArray(props.filters.engagement_label) ? props.filters.engagement_label : []);
@@ -170,6 +177,7 @@ const combinedMonthTo = computed(() => {
 const filterQuery = computed(() => ({
     search: search.value || undefined,
     account_id: accountFilter.value || undefined,
+    project_manager_id: pmFilter.value || undefined,
     growth_label: growthFilter.value.length ? growthFilter.value.join(',') : undefined,
     visibility_label: visibilityFilter.value.length ? visibilityFilter.value.join(',') : undefined,
     engagement_label: engagementFilter.value.length ? engagementFilter.value.join(',') : undefined,
@@ -195,6 +203,7 @@ const clearSearch = () => {
 const activeFilterCount = computed(() => {
     let count = 0;
     if (accountFilter.value) count += 1;
+    if (pmFilter.value) count += 1;
     if (growthFilter.value.length) count += 1;
     if (visibilityFilter.value.length) count += 1;
     if (engagementFilter.value.length) count += 1;
@@ -208,6 +217,7 @@ const hasActiveFilters = computed(() => !!search.value || activeFilterCount.valu
 const clearAllFilters = () => {
     search.value = '';
     accountFilter.value = '';
+    pmFilter.value = '';
     growthFilter.value = [];
     visibilityFilter.value = [];
     engagementFilter.value = [];
@@ -223,6 +233,7 @@ const clearAllFilters = () => {
 
 const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
+const draftPmFilter = ref('');
 const draftGrowthFilter = ref([]);
 const draftVisibilityFilter = ref([]);
 const draftEngagementFilter = ref([]);
@@ -232,6 +243,7 @@ const draftMonthTo = ref(''); // 'YYYY-MM'
 
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
+    draftPmFilter.value = pmFilter.value;
     draftGrowthFilter.value = [...growthFilter.value];
     draftVisibilityFilter.value = [...visibilityFilter.value];
     draftEngagementFilter.value = [...engagementFilter.value];
@@ -247,6 +259,7 @@ const closeFilterModal = () => {
 
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
+    pmFilter.value = draftPmFilter.value;
     growthFilter.value = [...draftGrowthFilter.value];
     visibilityFilter.value = [...draftVisibilityFilter.value];
     engagementFilter.value = [...draftEngagementFilter.value];
@@ -266,6 +279,7 @@ const applyFilterModal = () => {
 
 const clearFilterModal = () => {
     draftAccountFilter.value = '';
+    draftPmFilter.value = '';
     draftGrowthFilter.value = [];
     draftVisibilityFilter.value = [];
     draftEngagementFilter.value = [];
@@ -295,6 +309,10 @@ const filterLabelParts = computed(() => {
     if (accountFilter.value) {
         const account = props.accounts.find((a) => a.id === Number(accountFilter.value));
         if (account) parts.push(`account: ${account.name}`);
+    }
+    if (pmFilter.value) {
+        const pm = props.accountDepartmentEmployees.find((e) => e.id === Number(pmFilter.value));
+        if (pm) parts.push(`PM: ${pm.name}`);
     }
     if (search.value) parts.push(`search: "${search.value}"`);
     if (growthFilter.value.length) parts.push(`growth: ${growthFilter.value.join(', ')}`);
@@ -337,6 +355,7 @@ const editingCycle = ref(null);
 
 const form = useForm({
     account_id: '',
+    project_manager_id: '',
     cycle_start_date: '',
     cycle_end_date: '',
     start_follower: 0,
@@ -346,10 +365,8 @@ const form = useForm({
     engagement: 0,
     story_performance: 0,
     ads_currency: 'IDR',
-    reach_ads_used: false,
-    reach_ads_spend: 0,
-    views_ads_used: false,
-    views_ads_spend: 0,
+    reach_views_ads_used: false,
+    reach_views_ads_spend: 0,
     engagement_ads_used: false,
     engagement_ads_spend: 0,
 });
@@ -440,7 +457,7 @@ onBeforeUnmount(() => {
     scoreDistributionChart?.destroy();
 });
 
-const anyAdsUsed = computed(() => form.reach_ads_used || form.views_ads_used || form.engagement_ads_used);
+const anyAdsUsed = computed(() => form.reach_views_ads_used || form.engagement_ads_used);
 
 // Live thousand-separator display for the ads spend inputs, while keeping
 // form[...] itself a plain number for submission/validation.
@@ -456,13 +473,11 @@ const adsSpendDisplay = (metric) => computed({
     },
 });
 
-const reachAdsSpendDisplay = adsSpendDisplay('reach');
-const viewsAdsSpendDisplay = adsSpendDisplay('views');
+const reachViewsAdsSpendDisplay = adsSpendDisplay('reach_views');
 const engagementAdsSpendDisplay = adsSpendDisplay('engagement');
 
 const adsSpendDisplayFor = (metric) => {
-    if (metric === 'reach') return reachAdsSpendDisplay;
-    if (metric === 'views') return viewsAdsSpendDisplay;
+    if (metric === 'reach_views') return reachViewsAdsSpendDisplay;
     return engagementAdsSpendDisplay;
 };
 
@@ -530,6 +545,7 @@ const applyPrefill = (data) => {
 const openEdit = (cycle) => {
     editingCycle.value = cycle;
     form.account_id = cycle.account_id;
+    form.project_manager_id = cycle.project_manager_id ?? '';
     form.cycle_start_date = cycle.cycle_start_date.slice(0, 10);
     form.cycle_end_date = cycle.cycle_end_date.slice(0, 10);
     form.start_follower = cycle.start_follower;
@@ -539,10 +555,8 @@ const openEdit = (cycle) => {
     form.engagement = cycle.engagement;
     form.story_performance = cycle.story_performance ?? 0;
     form.ads_currency = cycle.ads_currency ?? 'IDR';
-    form.reach_ads_used = cycle.reach_ads_used ?? false;
-    form.reach_ads_spend = cycle.reach_ads_spend ?? 0;
-    form.views_ads_used = cycle.views_ads_used ?? false;
-    form.views_ads_spend = cycle.views_ads_spend ?? 0;
+    form.reach_views_ads_used = cycle.reach_views_ads_used ?? false;
+    form.reach_views_ads_spend = cycle.reach_views_ads_spend ?? 0;
     form.engagement_ads_used = cycle.engagement_ads_used ?? false;
     form.engagement_ads_spend = cycle.engagement_ads_spend ?? 0;
     form.clearErrors();
@@ -637,6 +651,7 @@ const inputStyle =
                 </p>
             </div>
             <button
+                v-if="canEdit"
                 type="button"
                 class="shrink-0 rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
                 style="background-color: var(--accent); color: var(--accent-ink)"
@@ -851,11 +866,15 @@ const inputStyle =
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-right text-sm" @click.stop>
                                 <ActionsMenu
-                                    :items="[
-                                        { label: 'View', onClick: () => openDetail(cycle) },
-                                        { label: 'Edit', onClick: () => openEdit(cycle) },
-                                        { label: 'Delete', danger: true, onClick: () => confirmDestroy(cycle) },
-                                    ]"
+                                    :items="
+                                        canEdit
+                                            ? [
+                                                  { label: 'View', onClick: () => openDetail(cycle) },
+                                                  { label: 'Edit', onClick: () => openEdit(cycle) },
+                                                  { label: 'Delete', danger: true, onClick: () => confirmDestroy(cycle) },
+                                              ]
+                                            : [{ label: 'View', onClick: () => openDetail(cycle) }]
+                                    "
                                 />
                             </td>
                         </tr>
@@ -935,6 +954,19 @@ const inputStyle =
                         />
                         <p v-if="form.errors.account_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
                             {{ form.errors.account_id }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Project Manager</label>
+                        <SearchableSelect
+                            v-model="form.project_manager_id"
+                            :options="accountDepartmentEmployees"
+                            placeholder="Select a project manager"
+                            class="mt-1"
+                        />
+                        <p v-if="form.errors.project_manager_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                            {{ form.errors.project_manager_id }}
                         </p>
                     </div>
 
@@ -1074,7 +1106,7 @@ const inputStyle =
                             </select>
                         </div>
 
-                        <div v-for="metric in ['reach', 'views', 'engagement']" :key="metric">
+                        <div v-for="metric in ['reach_views', 'engagement']" :key="metric">
                             <label class="flex items-center gap-2 text-sm" style="color: var(--ink)">
                                 <input
                                     v-model="form[`${metric}_ads_used`]"
@@ -1082,7 +1114,7 @@ const inputStyle =
                                     class="h-4 w-4 rounded"
                                     style="accent-color: var(--accent)"
                                 />
-                                Used ads for {{ metric === 'reach' ? 'Reach' : metric === 'views' ? 'Views' : 'Engagement' }}?
+                                Used ads for {{ metric === 'reach_views' ? 'Reach & Views' : 'Engagement' }}?
                             </label>
                             <input
                                 v-if="form[`${metric}_ads_used`]"
@@ -1180,6 +1212,17 @@ const inputStyle =
                             :options="accounts"
                             clearable
                             clear-label="All accounts"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Project Manager</label>
+                        <SearchableSelect
+                            v-model="draftPmFilter"
+                            :options="accountDepartmentEmployees"
+                            clearable
+                            clear-label="All project managers"
                             class="mt-1"
                         />
                     </div>

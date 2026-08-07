@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\Cycle;
+use App\Models\Employee;
 use App\Models\FilterSummary;
 use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
@@ -34,8 +35,9 @@ class CycleController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
-        $filtered = Cycle::with('account')
+        $filtered = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
+            ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -71,6 +73,10 @@ class CycleController extends Controller
         return Inertia::render('Cycles/Index', [
             'cycles' => $paginator,
             'accounts' => Account::orderBy('name')->get(),
+            'accountDepartmentEmployees' => Employee::whereHas(
+                'department',
+                fn ($query) => $query->where('name', 'Account')
+            )->orderBy('name')->get(['id', 'name']),
             'growthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_GROWTH)
                 ->orderByDesc('min_score')
                 ->pluck('label'),
@@ -94,6 +100,7 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
+                'project_manager_id' => $request->integer('project_manager_id') ?: null,
                 'growth_label' => $labelFilters['growth_label'],
                 'visibility_label' => $labelFilters['visibility_label'],
                 'engagement_label' => $labelFilters['engagement_label'],
@@ -116,8 +123,9 @@ class CycleController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
-        $cycles = Cycle::with('account')
+        $cycles = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
+            ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -145,6 +153,10 @@ class CycleController extends Controller
         if ($search = $request->string('search')->trim()->toString()) {
             $filterParts[] = "search: \"{$search}\"";
         }
+        if ($pmId = $request->integer('project_manager_id')) {
+            $pm = Employee::find($pmId);
+            $filterParts[] = 'PM: '.($pm->name ?? "#{$pmId}");
+        }
         foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
             if ($labelFilters[$field]) {
                 $filterParts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
@@ -167,7 +179,7 @@ class CycleController extends Controller
     public function pdfSingle(Cycle $cycle, MetricCalculator $calculator): HttpResponse
     {
         $scores = $calculator->calculate(
-            $cycle->load('account'),
+            $cycle->load(['account', 'projectManager']),
             ScoreBucket::all(),
             LabelBucket::all(),
             FormulaWeight::all(),
@@ -394,9 +406,9 @@ class CycleController extends Controller
 
     private function applyMonthRangeFilter($query, string $monthFrom, ?string $monthTo)
     {
-        $start = Carbon::createFromFormat('Y-m', $monthFrom)->startOfMonth();
+        $start = Carbon::createFromFormat('Y-m-d', "{$monthFrom}-01")->startOfMonth();
         $end = $monthTo
-            ? Carbon::createFromFormat('Y-m', $monthTo)->endOfMonth()
+            ? Carbon::createFromFormat('Y-m-d', "{$monthTo}-01")->endOfMonth()
             : $start->copy()->endOfMonth();
 
         return $query->whereBetween('cycle_start_date', [$start->toDateString(), $end->toDateString()]);
@@ -404,13 +416,17 @@ class CycleController extends Controller
 
     private function formatMonthRange(string $monthFrom, ?string $monthTo): string
     {
-        $from = Carbon::createFromFormat('Y-m', $monthFrom);
+        // createFromFormat('Y-m', ...) without a day defaults the day to today's
+        // day-of-month, which overflows into the next month for short months
+        // (e.g. parsing "2026-06" on the 31st silently produces July 1st) —
+        // always pass an explicit day to avoid that.
+        $from = Carbon::createFromFormat('Y-m-d', "{$monthFrom}-01");
 
         if (! $monthTo || $monthTo === $monthFrom) {
             return $from->format('F Y');
         }
 
-        $to = Carbon::createFromFormat('Y-m', $monthTo);
+        $to = Carbon::createFromFormat('Y-m-d', "{$monthTo}-01");
 
         return $from->year === $to->year
             ? $from->format('F').' - '.$to->format('F Y')
@@ -431,8 +447,9 @@ class CycleController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
-        $cycles = Cycle::with('account')
+        $cycles = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
+            ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -503,10 +520,16 @@ class CycleController extends Controller
         $search = $request->string('search')->trim()->toString() ?: null;
         $accountId = $request->integer('account_id') ?: null;
 
+        $pmId = $request->integer('project_manager_id') ?: null;
+
         $parts = [];
         if ($accountId) {
             $account = Account::find($accountId);
             $parts[] = 'account: '.($account->name ?? "#{$accountId}");
+        }
+        if ($pmId) {
+            $pm = Employee::find($pmId);
+            $parts[] = 'PM: '.($pm->name ?? "#{$pmId}");
         }
         if ($search) {
             $parts[] = "search: \"{$search}\"";
@@ -524,6 +547,7 @@ class CycleController extends Controller
             'filters' => [
                 'search' => $search,
                 'account_id' => $accountId,
+                'project_manager_id' => $pmId,
                 'growth_label' => $labelFilters['growth_label'],
                 'visibility_label' => $labelFilters['visibility_label'],
                 'engagement_label' => $labelFilters['engagement_label'],
@@ -542,6 +566,7 @@ class CycleController extends Controller
             'provider' => ['nullable', 'string', 'in:'.implode(',', SummaryProviderResolver::PROVIDERS)],
             'search' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
+            'project_manager_id' => ['nullable', 'integer'],
             'growth_label' => ['nullable', 'string'],
             'visibility_label' => ['nullable', 'string'],
             'engagement_label' => ['nullable', 'string'],
@@ -587,6 +612,7 @@ class CycleController extends Controller
     {
         return $request->validate([
             'account_id' => ['required', 'exists:accounts,id'],
+            'project_manager_id' => ['nullable', 'exists:employees,id'],
             'cycle_start_date' => ['required', 'date'],
             'cycle_end_date' => ['required', 'date', 'after_or_equal:cycle_start_date'],
             'start_follower' => ['required', 'integer', 'min:0'],
@@ -596,10 +622,8 @@ class CycleController extends Controller
             'engagement' => ['required', 'integer', 'min:0'],
             'story_performance' => ['nullable', 'integer', 'min:0'],
             'ads_currency' => ['nullable', 'string', 'in:IDR,USD,EUR'],
-            'reach_ads_used' => ['boolean'],
-            'reach_ads_spend' => ['nullable', 'numeric', 'min:0'],
-            'views_ads_used' => ['boolean'],
-            'views_ads_spend' => ['nullable', 'numeric', 'min:0'],
+            'reach_views_ads_used' => ['boolean'],
+            'reach_views_ads_spend' => ['nullable', 'numeric', 'min:0'],
             'engagement_ads_used' => ['boolean'],
             'engagement_ads_spend' => ['nullable', 'numeric', 'min:0'],
         ]);

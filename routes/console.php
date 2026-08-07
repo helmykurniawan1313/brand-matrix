@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('instagram:capture-daily-snapshots')
     ->dailyAt('17:00')
     ->withoutOverlapping();
+
+Schedule::command('performance:capture-ig-snapshots')
+    ->dailyAt('17:15')
+    ->withoutOverlapping();

@@ -13,6 +13,14 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const ROLE_VIEWER = 'viewer';
+
+    public const ROLE_EDITOR = 'editor';
+
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
+    public const ROLES = [self::ROLE_VIEWER, self::ROLE_EDITOR, self::ROLE_SUPER_ADMIN];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -53,8 +61,23 @@ class User extends Authenticatable
         return $this->role === $role;
     }
 
-    public function isAdmin(): bool
+    public function isViewer(): bool
     {
-        return $this->hasRole('admin');
+        return $this->hasRole(self::ROLE_VIEWER);
+    }
+
+    public function isEditor(): bool
+    {
+        return $this->hasRole(self::ROLE_EDITOR);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(self::ROLE_SUPER_ADMIN);
+    }
+
+    public function canEdit(): bool
+    {
+        return ! $this->isViewer();
     }
 }

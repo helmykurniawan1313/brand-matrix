@@ -20,8 +20,9 @@ const error = ref(null);
 const cycles = ref([]);
 
 const tabs = [
-    { key: 'overview', label: 'Overview' },
+    { key: 'overview', label: 'Growth' },
     { key: 'volume', label: 'Volume' },
+    { key: 'story-performance', label: 'Story Performance' },
     { key: 'scores', label: 'Scores' },
     { key: 'engagement-rate', label: 'Engagement Rate' },
     { key: 'ai-summary', label: 'AI Summary' },
@@ -38,6 +39,9 @@ const chartConfigs = {
         { key: 'reach', label: 'Reach', suffix: '', single: true },
         { key: 'views', label: 'Views', suffix: '', single: true },
         { key: 'engagement', label: 'Engagement', suffix: '', single: true },
+    ],
+    'story-performance': [
+        { key: 'story_performance', label: 'Story Performance', suffix: '', single: true },
     ],
     scores: [
         {

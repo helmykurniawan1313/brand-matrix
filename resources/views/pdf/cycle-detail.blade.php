@@ -11,8 +11,7 @@
         return 'Ads: Yes — '.$symbol.' '.number_format($spend ?? 0, 2);
     };
 
-    $totalAdsSpend = ($cycle->reach_ads_used ? (float) $cycle->reach_ads_spend : 0)
-        + ($cycle->views_ads_used ? (float) $cycle->views_ads_spend : 0)
+    $totalAdsSpend = ($cycle->reach_views_ads_used ? (float) $cycle->reach_views_ads_spend : 0)
         + ($cycle->engagement_ads_used ? (float) $cycle->engagement_ads_spend : 0);
 
     $totalAdsSpendFormatted = ($currencySymbols[$cycle->ads_currency] ?? ($cycle->ads_currency ?? 'IDR')).' '.number_format($totalAdsSpend, 2);
@@ -77,12 +76,12 @@
             <td class="score">{{ $scores['growth_score'] }}</td>
         </tr>
         <tr>
-            <td>Reach Rate<br><span class="ads">{{ $formatAdsLine((bool) $cycle->reach_ads_used, $cycle->reach_ads_spend, $cycle->ads_currency) }}</span><span class="formula">reach / end followers</span></td>
+            <td>Reach Rate<br><span class="ads">{{ $formatAdsLine((bool) $cycle->reach_views_ads_used, $cycle->reach_views_ads_spend, $cycle->ads_currency) }}</span><span class="formula">reach / end followers</span></td>
             <td class="num">{{ round($scores['reach_rate'] / 100, 2) }}</td>
             <td class="score">{{ $scores['reach_score'] }}</td>
         </tr>
         <tr>
-            <td>View Rate<br><span class="ads">{{ $formatAdsLine((bool) $cycle->views_ads_used, $cycle->views_ads_spend, $cycle->ads_currency) }}</span><span class="formula">views / end followers</span></td>
+            <td>View Rate<br><span class="ads">{{ $formatAdsLine((bool) $cycle->reach_views_ads_used, $cycle->reach_views_ads_spend, $cycle->ads_currency) }}</span><span class="formula">views / end followers</span></td>
             <td class="num">{{ round($scores['view_rate'] / 100, 2) }}</td>
             <td class="score">{{ $scores['view_score'] }}</td>
         </tr>
@@ -102,7 +101,7 @@
             <td class="score">-</td>
         </tr>
         <tr>
-            <td>Total Ads Spend<br><span class="formula">reach + views + engagement ads spend</span></td>
+            <td>Total Ads Spend<br><span class="formula">reach &amp; views + engagement ads spend</span></td>
             <td class="num">{{ $totalAdsSpendFormatted }}</td>
             <td class="score">-</td>
         </tr>

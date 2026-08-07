@@ -12,6 +12,7 @@ class Cycle extends Model
 
     protected $fillable = [
         'account_id',
+        'project_manager_id',
         'cycle_start_date',
         'cycle_end_date',
         'start_follower',
@@ -21,10 +22,8 @@ class Cycle extends Model
         'engagement',
         'story_performance',
         'ads_currency',
-        'reach_ads_used',
-        'reach_ads_spend',
-        'views_ads_used',
-        'views_ads_spend',
+        'reach_views_ads_used',
+        'reach_views_ads_spend',
         'engagement_ads_used',
         'engagement_ads_spend',
     ];
@@ -33,13 +32,17 @@ class Cycle extends Model
         'cycle_start_date' => 'date',
         'cycle_end_date' => 'date',
         'ai_summary_generated_at' => 'datetime',
-        'reach_ads_used' => 'boolean',
-        'views_ads_used' => 'boolean',
+        'reach_views_ads_used' => 'boolean',
         'engagement_ads_used' => 'boolean',
     ];
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function projectManager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'project_manager_id');
     }
 }

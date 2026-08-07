@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cycle;
+use App\Models\Performance;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -11,6 +12,8 @@ class GroqSummaryService implements SummaryProvider
 {
     use BuildsSummaryPrompt;
     use BuildsFilterSummaryPrompt;
+    use BuildsPerformanceSummaryPrompt;
+    use BuildsFilterPerformanceSummaryPrompt;
 
     public function summarize(Cycle $cycle, array $scores, ?string $customPrompt = null): string
     {
@@ -24,6 +27,20 @@ class GroqSummaryService implements SummaryProvider
         $prompt = $this->buildFilterPrompt($cycles, $filterDescription, $customPrompt);
 
         return $this->request($this->filterSystemPrompt(), $prompt);
+    }
+
+    public function summarizePerformance(Performance $performance, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildPerformancePrompt($performance, $customPrompt);
+
+        return $this->request($this->performanceSystemPrompt(), $prompt);
+    }
+
+    public function summarizeFilteredPerformances(Collection $performances, array $filterDescription, ?string $customPrompt = null): string
+    {
+        $prompt = $this->buildFilterPerformancePrompt($performances, $filterDescription, $customPrompt);
+
+        return $this->request($this->filterPerformanceSystemPrompt(), $prompt);
     }
 
     private function request(string $systemPrompt, string $prompt): string

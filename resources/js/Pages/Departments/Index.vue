@@ -6,8 +6,10 @@ import EditNameModal from '../../Components/EditNameModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
+import { useAuth } from '../../composables/useAuth';
 
 const toast = useToast();
+const { canEdit } = useAuth();
 
 const props = defineProps({
     departments: {
@@ -87,7 +89,7 @@ const destroy = () => {
             Manage the departments employees can be assigned to.
         </p>
 
-        <form @submit.prevent="submitCreate" class="mt-6 flex items-start gap-3">
+        <form v-if="canEdit" @submit.prevent="submitCreate" class="mt-6 flex items-start gap-3">
             <div class="flex-1">
                 <input
                     v-model="createForm.name"
@@ -136,6 +138,7 @@ const destroy = () => {
                         </td>
                         <td class="px-4 py-3.5 text-right text-sm">
                             <ActionsMenu
+                                v-if="canEdit"
                                 :items="[
                                     { label: 'Edit', onClick: () => startEdit(department) },
                                     { label: 'Delete', danger: true, onClick: () => confirmDestroy(department) },

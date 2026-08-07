@@ -1,16 +1,22 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
+import Chart from 'chart.js/auto';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import PerformanceFormModal from '../../Components/PerformanceFormModal.vue';
 import PerformanceDetailModal from '../../Components/PerformanceDetailModal.vue';
+import FilterSummaryModal from '../../Components/FilterSummaryModal.vue';
+import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
+import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
+import { useAuth } from '../../composables/useAuth';
 
 const toast = useToast();
+const { canEdit } = useAuth();
 
 const props = defineProps({
     performances: {
@@ -37,6 +43,30 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    noteOptions: {
+        type: Array,
+        default: () => [],
+    },
+    viewsBuckets: {
+        type: Array,
+        default: () => [],
+    },
+    followerBuckets: {
+        type: Array,
+        default: () => [],
+    },
+    summary: {
+        type: Object,
+        default: () => ({}),
+    },
+    statusDistribution: {
+        type: Object,
+        default: () => ({}),
+    },
+    defaultAiProvider: {
+        type: String,
+        default: 'groq',
+    },
 });
 
 // --- Filters ---
@@ -45,11 +75,22 @@ const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
 const pmFilter = ref(props.filters.project_manager_id ?? '');
 const conceptorFilter = ref(props.filters.conceptor_id ?? '');
-const editorFilter = ref(props.filters.editor_id ?? '');
-const viewsStatusFilter = ref(props.filters.views_status ?? '');
-const adsFilter = ref(props.filters.ads === null || props.filters.ads === undefined ? '' : props.filters.ads ? '1' : '0');
+const viewsStatusFilter = ref(props.filters.views_status ? props.filters.views_status.split(',').filter(Boolean) : []);
+const adsFilter = ref(
+    props.filters.ads === null || props.filters.ads === undefined
+        ? ''
+        : props.filters.ads === 'null'
+          ? 'null'
+          : props.filters.ads
+            ? '1'
+            : '0',
+);
 const postDateFromFilter = ref(props.filters.post_date_from ?? '');
 const postDateToFilter = ref(props.filters.post_date_to ?? '');
+const viewsH7Filter = ref(props.filters.views_h7 ?? '');
+const platformFilter = ref(props.filters.platform ?? '');
+const sort = ref(props.filters.sort ?? '');
+const direction = ref(props.filters.direction ?? 'asc');
 let searchTimeout = null;
 
 const filterQuery = () => ({
@@ -57,11 +98,14 @@ const filterQuery = () => ({
     account_id: accountFilter.value || undefined,
     project_manager_id: pmFilter.value || undefined,
     conceptor_id: conceptorFilter.value || undefined,
-    editor_id: editorFilter.value || undefined,
-    views_status: viewsStatusFilter.value || undefined,
+    views_status: viewsStatusFilter.value.length ? viewsStatusFilter.value.join(',') : undefined,
     ads: adsFilter.value || undefined,
     post_date_from: postDateFromFilter.value || undefined,
     post_date_to: postDateToFilter.value || undefined,
+    views_h7: viewsH7Filter.value || undefined,
+    platform: platformFilter.value || undefined,
+    sort: sort.value || undefined,
+    direction: sort.value ? direction.value : undefined,
 });
 
 const applyFilters = () => {
@@ -79,7 +123,7 @@ const clearSearch = () => {
 };
 
 const activeFilterCount = computed(() => {
-    const { search: _search, ...rest } = filterQuery();
+    const { search: _search, sort: _sort, direction: _direction, ...rest } = filterQuery();
     return Object.values(rest).filter((v) => v !== undefined).length;
 });
 const hasActiveFilters = computed(() => !!search.value || activeFilterCount.value > 0);
@@ -89,11 +133,22 @@ const clearAllFilters = () => {
     accountFilter.value = '';
     pmFilter.value = '';
     conceptorFilter.value = '';
-    editorFilter.value = '';
-    viewsStatusFilter.value = '';
+    viewsStatusFilter.value = [];
     adsFilter.value = '';
     postDateFromFilter.value = '';
     postDateToFilter.value = '';
+    viewsH7Filter.value = '';
+    platformFilter.value = '';
+    applyFilters();
+};
+
+const sortBy = (column) => {
+    if (sort.value === column) {
+        direction.value = direction.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sort.value = column;
+        direction.value = 'asc';
+    }
     applyFilters();
 };
 
@@ -103,21 +158,23 @@ const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
 const draftPmFilter = ref('');
 const draftConceptorFilter = ref('');
-const draftEditorFilter = ref('');
-const draftViewsStatusFilter = ref('');
+const draftViewsStatusFilter = ref([]);
 const draftAdsFilter = ref('');
 const draftPostDateFromFilter = ref('');
 const draftPostDateToFilter = ref('');
+const draftViewsH7Filter = ref('');
+const draftPlatformFilter = ref('');
 
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
     draftPmFilter.value = pmFilter.value;
     draftConceptorFilter.value = conceptorFilter.value;
-    draftEditorFilter.value = editorFilter.value;
-    draftViewsStatusFilter.value = viewsStatusFilter.value;
+    draftViewsStatusFilter.value = [...viewsStatusFilter.value];
     draftAdsFilter.value = adsFilter.value;
     draftPostDateFromFilter.value = postDateFromFilter.value;
     draftPostDateToFilter.value = postDateToFilter.value;
+    draftViewsH7Filter.value = viewsH7Filter.value;
+    draftPlatformFilter.value = platformFilter.value;
     showFilterModal.value = true;
 };
 
@@ -129,11 +186,12 @@ const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
     pmFilter.value = draftPmFilter.value;
     conceptorFilter.value = draftConceptorFilter.value;
-    editorFilter.value = draftEditorFilter.value;
-    viewsStatusFilter.value = draftViewsStatusFilter.value;
+    viewsStatusFilter.value = [...draftViewsStatusFilter.value];
     adsFilter.value = draftAdsFilter.value;
     postDateFromFilter.value = draftPostDateFromFilter.value;
     postDateToFilter.value = draftPostDateToFilter.value;
+    viewsH7Filter.value = draftViewsH7Filter.value;
+    platformFilter.value = draftPlatformFilter.value;
     showFilterModal.value = false;
     applyFilters();
 };
@@ -142,15 +200,68 @@ const clearFilterModal = () => {
     draftAccountFilter.value = '';
     draftPmFilter.value = '';
     draftConceptorFilter.value = '';
-    draftEditorFilter.value = '';
-    draftViewsStatusFilter.value = '';
+    draftViewsStatusFilter.value = [];
     draftAdsFilter.value = '';
     draftPostDateFromFilter.value = '';
     draftPostDateToFilter.value = '';
+    draftViewsH7Filter.value = '';
+    draftPlatformFilter.value = '';
 };
 
 const inputStyle =
     'mt-1 w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none';
+
+// PDF export + filtered-set AI summary
+
+const pdfDownloadUrl = computed(() => {
+    const params = new URLSearchParams(
+        Object.entries(filterQuery()).filter(([, v]) => v !== undefined),
+    );
+    if (filterSummaryBanner.value) {
+        params.set('ai_summary', filterSummaryBanner.value.summary);
+    }
+    const query = params.toString();
+    return `/performances-pdf${query ? `?${query}` : ''}`;
+});
+
+const showFilterSummaryModal = ref(false);
+const filterSummaryBanner = ref(null);
+
+const filterLabelParts = computed(() => {
+    const parts = [];
+    if (accountFilter.value) {
+        const account = props.accounts.find((a) => a.id === Number(accountFilter.value));
+        if (account) parts.push(`account: ${account.name}`);
+    }
+    if (search.value) parts.push(`search: "${search.value}"`);
+    if (platformFilter.value) parts.push(`platform: ${platformFilter.value === 'instagram' ? 'Instagram' : 'TikTok'}`);
+    if (viewsStatusFilter.value.length) parts.push(`status: ${viewsStatusFilter.value.join(', ')}`);
+    if (adsFilter.value) parts.push(`ads: ${adsFilter.value === '1' ? 'Yes' : adsFilter.value === '0' ? 'No' : '-'}`);
+    if (postDateFromFilter.value) {
+        parts.push(`post date: ${postDateFromFilter.value}${postDateToFilter.value ? ` to ${postDateToFilter.value}` : '+'}`);
+    }
+    if (viewsH7Filter.value) {
+        parts.push(`views H+7: ${viewsH7Filter.value === 'null' ? 'empty' : 'not empty'}`);
+    }
+    return parts.length ? parts.join(', ') : 'none (all records)';
+});
+
+const openFilterSummaryModal = () => {
+    showFilterSummaryModal.value = true;
+};
+
+const closeFilterSummaryModal = () => {
+    showFilterSummaryModal.value = false;
+};
+
+const onSummaryGenerated = (data) => {
+    filterSummaryBanner.value = data;
+    showFilterSummaryModal.value = false;
+};
+
+const dismissSummaryBanner = () => {
+    filterSummaryBanner.value = null;
+};
 
 const goToPage = (url) => {
     if (!url) return;
@@ -178,6 +289,11 @@ const closeCreate = () => {
 };
 
 const startEdit = (performance) => {
+    editingPerformance.value = performance;
+};
+
+const editFromDetail = (performance) => {
+    viewingPerformance.value = null;
     editingPerformance.value = performance;
 };
 
@@ -219,6 +335,90 @@ const formatDate = (value) => {
     if (!value) return '—';
     return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
+
+const formatNumber = (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString('en-US'));
+
+const platformLabels = { instagram: 'Instagram', tiktok: 'TikTok' };
+const formatPlatform = (value) => platformLabels[value] ?? '—';
+
+// Status distribution chart — how many matching records landed on each
+// Views H+7 status label (PARAH..SIP). Mirrors the Cycles Score Distribution
+// chart, just with a single series since Performance only has one metric.
+
+const statusDistributionCanvas = ref(null);
+let statusDistributionChart = null;
+
+const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const renderStatusDistributionChart = () => {
+    if (!statusDistributionCanvas.value) return;
+
+    statusDistributionChart?.destroy();
+
+    const inkFaint = getCssVar('--ink-faint') || '#8b979b';
+    const border = getCssVar('--border') || '#d8dedc';
+    const accent = getCssVar('--accent') || '#0f766e';
+
+    const tiers = props.statusDistribution.tiers ?? [];
+    const counts = props.statusDistribution.counts ?? {};
+
+    statusDistributionChart = new Chart(statusDistributionCanvas.value, {
+        type: 'bar',
+        data: {
+            labels: tiers.map((tier) => String(tier)),
+            datasets: [
+                {
+                    label: 'Views H+7 Status',
+                    data: tiers.map((tier) => counts[tier] ?? 0),
+                    backgroundColor: accent,
+                    borderRadius: 4,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.parsed.y} record${context.parsed.y === 1 ? '' : 's'}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Views H+7 Status', color: inkFaint },
+                    ticks: { color: inkFaint },
+                    grid: { color: border },
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Record Count', color: inkFaint },
+                    ticks: { color: inkFaint, precision: 0 },
+                    grid: { color: border },
+                },
+            },
+        },
+    });
+};
+
+watch(
+    () => props.statusDistribution,
+    async () => {
+        await nextTick();
+        renderStatusDistributionChart();
+    },
+);
+
+onMounted(async () => {
+    await nextTick();
+    renderStatusDistributionChart();
+});
+
+onBeforeUnmount(() => {
+    statusDistributionChart?.destroy();
+});
 </script>
 
 <template>
@@ -231,6 +431,7 @@ const formatDate = (value) => {
                 </p>
             </div>
             <button
+                v-if="canEdit"
                 type="button"
                 class="shrink-0 rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
                 style="background-color: var(--accent); color: var(--accent-ink)"
@@ -240,7 +441,30 @@ const formatDate = (value) => {
             </button>
         </div>
 
-        <div class="mt-6 flex flex-wrap items-center gap-3">
+        <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Records Tracked" :value="String(summary.total)" />
+            <StatCard
+                label="Avg Views H+7"
+                :value="summary.avg_views !== null ? String(summary.avg_views) : '—'"
+                :hint="`across ${summary.total} record${summary.total === 1 ? '' : 's'}`"
+            />
+            <StatCard label="Top Performing" :value="String(summary.top_performing_count)" hint="BAGUS or SIP" />
+            <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
+        </div>
+
+        <div v-if="summary.total > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+            <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                Status Distribution
+            </h3>
+            <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+                How many matching records landed on each Views H+7 status label.
+            </p>
+            <div class="mt-3" style="height: 260px">
+                <canvas ref="statusDistributionCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="mt-8 flex flex-wrap items-center gap-3">
             <div class="relative max-w-xs flex-1">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -304,6 +528,58 @@ const formatDate = (value) => {
             >
                 Clear filters
             </button>
+
+            <button
+                type="button"
+                class="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                style="border-color: var(--border); color: var(--ink)"
+                @click="openFilterSummaryModal"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                    <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m9 9-2.1-2.1" />
+                    <circle cx="12" cy="12" r="3.5" />
+                </svg>
+                Summarize with AI
+            </button>
+
+            <a
+                :href="pdfDownloadUrl"
+                class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                style="border-color: var(--border); color: var(--ink-muted)"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Download PDF
+            </a>
+        </div>
+
+        <div
+            v-if="filterSummaryBanner"
+            class="mt-4 rounded-lg border p-4"
+            style="border-color: var(--accent); background-color: var(--surface)"
+        >
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--accent)">AI Summary</p>
+                    <p class="mt-1 text-sm leading-relaxed" style="color: var(--ink)">{{ filterSummaryBanner.summary }}</p>
+                    <p class="mt-2 text-xs" style="color: var(--ink-faint)">
+                        Based on {{ filterSummaryBanner.performance_count }} record{{ filterSummaryBanner.performance_count === 1 ? '' : 's' }}
+                        &middot; {{ filterSummaryBanner.filter_summary }}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="shrink-0 rounded-md p-1 transition-colors hover:opacity-70"
+                    style="color: var(--ink-faint)"
+                    aria-label="Dismiss summary"
+                    @click="dismissSummaryBanner"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <div
@@ -314,15 +590,43 @@ const formatDate = (value) => {
                 <table class="w-full min-w-[900px]">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border)">
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Brand</th>
+                            <th
+                                class="cursor-pointer select-none px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('account')"
+                            >
+                                Brand
+                                <span v-if="sort === 'account'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Platform</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Account Category</th>
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Post Date</th>
+                            <th
+                                class="cursor-pointer select-none px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('post_date')"
+                            >
+                                Post Date
+                                <span v-if="sort === 'post_date'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Ads</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">PM Name</th>
                             <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Conceptor Name</th>
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Editor Name</th>
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Views H+7</th>
-                            <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Status</th>
+                            <th
+                                class="cursor-pointer select-none px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('views_h7')"
+                            >
+                                Views H+7
+                                <span v-if="sort === 'views_h7'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th
+                                class="cursor-pointer select-none px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('views_status')"
+                            >
+                                Status
+                                <span v-if="sort === 'views_status'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
                             <th class="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Actions</th>
                         </tr>
                     </thead>
@@ -337,6 +641,9 @@ const formatDate = (value) => {
                             <td class="px-3 py-3.5 text-sm font-medium" style="color: var(--ink)">
                                 {{ performance.account?.name ?? '—' }}
                             </td>
+                            <td class="whitespace-nowrap px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
+                                {{ formatPlatform(performance.platform) }}
+                            </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-sm">
                                 <StatusBadge :status="performance.follower_category" />
                             </td>
@@ -344,7 +651,7 @@ const formatDate = (value) => {
                                 {{ formatDate(performance.post_date) }}
                             </td>
                             <td class="px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
-                                {{ performance.ads ? 'Yes' : 'No' }}
+                                {{ performance.ads === null ? '-' : performance.ads ? 'Yes' : 'No' }}
                             </td>
                             <td class="px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
                                 {{ performance.project_manager?.name ?? '—' }}
@@ -352,17 +659,15 @@ const formatDate = (value) => {
                             <td class="px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
                                 {{ performance.conceptor?.name ?? '—' }}
                             </td>
-                            <td class="px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
-                                {{ performance.editor?.name ?? '—' }}
-                            </td>
                             <td class="px-3 py-3.5 text-sm tabular-nums" style="color: var(--ink-muted)">
-                                {{ performance.total_views_h7 ?? '—' }}
+                                {{ formatNumber(performance.total_views_h7) }}
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-sm">
                                 <StatusBadge :status="performance.views_status" />
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-right text-sm" @click.stop>
                                 <ActionsMenu
+                                    v-if="canEdit"
                                     :items="[
                                         { label: 'Edit', onClick: () => startEdit(performance) },
                                         { label: 'Delete', danger: true, onClick: () => confirmDestroy(performance) },
@@ -411,7 +716,11 @@ const formatDate = (value) => {
         <PerformanceDetailModal
             v-if="viewingPerformance"
             :performance="viewingPerformance"
+            :views-buckets="viewsBuckets"
+            :follower-buckets="followerBuckets"
+            :default-ai-provider="defaultAiProvider"
             @close="closeDetail"
+            @edit="editFromDetail"
         />
 
         <PerformanceFormModal
@@ -420,6 +729,7 @@ const formatDate = (value) => {
             :accounts="accounts"
             :employees="employees"
             :account-department-employees="accountDepartmentEmployees"
+            :note-options="noteOptions"
             @close="closeCreate"
             @saved="closeCreate"
         />
@@ -430,6 +740,7 @@ const formatDate = (value) => {
             :accounts="accounts"
             :employees="employees"
             :account-department-employees="accountDepartmentEmployees"
+            :note-options="noteOptions"
             @close="cancelEdit"
             @saved="cancelEdit"
         />
@@ -441,6 +752,18 @@ const formatDate = (value) => {
             :processing="deleting"
             @confirm="destroy"
             @cancel="cancelDestroy"
+        />
+
+        <FilterSummaryModal
+            v-if="showFilterSummaryModal"
+            :filter-query="filterQuery()"
+            :filter-label="filterLabelParts"
+            :default-ai-provider="defaultAiProvider"
+            endpoint="/performances-summarize"
+            count-key="performance_count"
+            count-noun="record"
+            @close="closeFilterSummaryModal"
+            @generated="onSummaryGenerated"
         />
 
         <!-- Filter modal -->
@@ -492,6 +815,15 @@ const formatDate = (value) => {
                     </div>
 
                     <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Platform</label>
+                        <select v-model="draftPlatformFilter" :class="inputStyle" style="border-color: var(--border); background-color: var(--surface); color: var(--ink)">
+                            <option value="">All platforms</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="tiktok">TikTok</option>
+                        </select>
+                    </div>
+
+                    <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Project Manager</label>
                         <SearchableSelect v-model="draftPmFilter" :options="accountDepartmentEmployees" placeholder="All project managers" class="mt-1" />
                     </div>
@@ -502,16 +834,13 @@ const formatDate = (value) => {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Editor</label>
-                        <SearchableSelect v-model="draftEditorFilter" :options="employees" placeholder="All editors" class="mt-1" />
-                    </div>
-
-                    <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Performa (Status)</label>
-                        <select v-model="draftViewsStatusFilter" :class="inputStyle" style="border-color: var(--border); background-color: var(--surface); color: var(--ink)">
-                            <option value="">All statuses</option>
-                            <option v-for="label in viewsStatusOptions" :key="label" :value="label">{{ label }}</option>
-                        </select>
+                        <MultiSelectDropdown
+                            v-model="draftViewsStatusFilter"
+                            :options="viewsStatusOptions"
+                            placeholder="All statuses"
+                            class="mt-1"
+                        />
                     </div>
 
                     <div>
@@ -520,6 +849,16 @@ const formatDate = (value) => {
                             <option value="">All</option>
                             <option value="1">Ads</option>
                             <option value="0">Tidak Ads</option>
+                            <option value="null">-</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Views H+7</label>
+                        <select v-model="draftViewsH7Filter" :class="inputStyle" style="border-color: var(--border); background-color: var(--surface); color: var(--ink)">
+                            <option value="">All</option>
+                            <option value="not_null">Not empty</option>
+                            <option value="null">Empty</option>
                         </select>
                     </div>
                 </div>

@@ -1,10 +1,13 @@
 <script setup>
 import { Link, usePage } from '@inertiajs/vue3';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ProfileDropdown from '../Components/ProfileDropdown.vue';
 import ToastContainer from '../Components/ToastContainer.vue';
+import { useAuth } from '../composables/useAuth';
 
-const navItems = [
+const { isSuperAdmin } = useAuth();
+
+const baseNavItems = [
     { label: 'Cycles', href: '/cycles' },
     { label: 'Performance', href: '/performances' },
     { label: 'Accounts', href: '/accounts' },
@@ -12,6 +15,10 @@ const navItems = [
     { label: 'Departments', href: '/departments' },
     { label: 'Scoring Buckets', href: '/score-buckets' },
 ];
+
+const navItems = computed(() =>
+    isSuperAdmin.value ? [...baseNavItems, { label: 'Users', href: '/users' }] : baseNavItems,
+);
 
 const page = usePage();
 const currentPath = () => page.url.split('?')[0];

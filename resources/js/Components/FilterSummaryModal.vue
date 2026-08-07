@@ -14,6 +14,18 @@ const props = defineProps({
         type: String,
         default: 'groq',
     },
+    endpoint: {
+        type: String,
+        default: '/cycles-summarize',
+    },
+    countKey: {
+        type: String,
+        default: 'cycle_count',
+    },
+    countNoun: {
+        type: String,
+        default: 'cycle',
+    },
 });
 
 const emit = defineEmits(['close', 'generated']);
@@ -44,7 +56,7 @@ const summarize = async () => {
     summarizeError.value = null;
 
     try {
-        const response = await fetch('/cycles-summarize', {
+        const response = await fetch(props.endpoint, {
             method: 'POST',
             headers: {
                 Accept: 'application/json',
@@ -148,7 +160,7 @@ const inputStyle =
                 <div v-if="result" class="rounded-md border p-3" style="border-color: var(--border); background-color: var(--surface)">
                     <p class="text-sm leading-relaxed" style="color: var(--ink)">{{ result.summary }}</p>
                     <p class="mt-2 text-xs" style="color: var(--ink-faint)">
-                        {{ result.cycle_count }} cycle{{ result.cycle_count === 1 ? '' : 's' }} &middot;
+                        {{ result[countKey] }} {{ countNoun }}{{ result[countKey] === 1 ? '' : 's' }} &middot;
                         generated {{ formatDateTime(result.generated_at) }}
                     </p>
                 </div>

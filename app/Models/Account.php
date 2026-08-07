@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Account extends Model
@@ -12,6 +13,7 @@ class Account extends Model
 
     protected $fillable = [
         'name',
+        'project_manager_id',
     ];
 
     protected $casts = [
@@ -28,6 +30,11 @@ class Account extends Model
     public function cycles(): HasMany
     {
         return $this->hasMany(Cycle::class);
+    }
+
+    public function projectManager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'project_manager_id');
     }
 
     public function instagramDailySnapshots(): HasMany

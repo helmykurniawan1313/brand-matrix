@@ -8,6 +8,9 @@ const props = defineProps({
     },
 });
 
+// Label buckets are user-configurable text (e.g. Performance's Views status
+// uses Title Case "Parah"/"Bagus" while Cycles' health labels are uppercase
+// "PARAH"/"BAGUS") — match case-insensitively so both render with real colors.
 const tone = computed(
     () =>
         ({
@@ -16,7 +19,7 @@ const tone = computed(
             CUKUP: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
             KURANG: { bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
             PARAH: { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-        })[props.status] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' },
+        })[props.status?.toUpperCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' },
 );
 </script>
 

@@ -134,8 +134,7 @@ const adsLine = (used, spend) => {
 
 const totalAdsSpend = computed(() => {
     return [
-        [props.cycle.reach_ads_used, props.cycle.reach_ads_spend],
-        [props.cycle.views_ads_used, props.cycle.views_ads_spend],
+        [props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend],
         [props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend],
     ].reduce((sum, [used, spend]) => sum + (used ? Number(spend ?? 0) : 0), 0);
 });
@@ -153,12 +152,12 @@ const inputs = computed(() => [
 const rateRows = computed(() => [
     { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
     { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
-    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_ads_used, props.cycle.reach_ads_spend) },
-    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.views_ads_used, props.cycle.views_ads_spend) },
+    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
+    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
     { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
     { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
     { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
-    { label: 'Total Ads Spend', metric: null, formula: 'reach + views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
+    { label: 'Total Ads Spend', metric: null, formula: 'reach & views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
 ]);
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
@@ -207,6 +206,9 @@ const aggregateRows = computed(() => [
                     </h2>
                     <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">
                         {{ formatDate(cycle.cycle_start_date) }} – {{ formatDate(cycle.cycle_end_date) }}
+                    </p>
+                    <p v-if="cycle.project_manager" class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+                        PM: {{ cycle.project_manager.name }}
                     </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">

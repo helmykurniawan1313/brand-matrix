@@ -1,6 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
     user: {
@@ -8,6 +8,12 @@ const props = defineProps({
         required: true,
     },
 });
+
+const roleLabels = {
+    viewer: 'Viewer',
+    editor: 'Editor',
+    super_admin: 'Super Admin',
+};
 
 const initials = () => {
     return props.user.name
@@ -116,6 +122,14 @@ const inputStyle =
             class="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-md border shadow-lg"
             style="border-color: var(--border); background-color: var(--surface-raised)"
         >
+            <div v-if="user.role" class="border-b px-4 py-2" style="border-color: var(--border)">
+                <span
+                    class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+                    style="background-color: var(--accent-soft); color: var(--accent)"
+                >
+                    {{ roleLabels[user.role] ?? user.role }}
+                </span>
+            </div>
             <button
                 type="button"
                 class="block w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:opacity-70"
@@ -124,6 +138,14 @@ const inputStyle =
             >
                 Edit Profile
             </button>
+            <Link
+                href="/settings/legal-pages"
+                class="block w-full border-t px-4 py-2.5 text-left text-sm font-medium transition-colors hover:opacity-70"
+                style="border-color: var(--border); color: var(--ink)"
+                @click="closeMenu"
+            >
+                Legal Pages
+            </Link>
             <button
                 type="button"
                 class="block w-full border-t px-4 py-2.5 text-left text-sm font-medium transition-colors hover:opacity-70"

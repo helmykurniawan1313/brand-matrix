@@ -113,6 +113,21 @@ class InstagramController extends Controller
         ]);
     }
 
+    public function mediaList(Account $account, InstagramInsightsService $insights): JsonResponse
+    {
+        if (! $account->ig_business_id || ! $account->ig_access_token) {
+            return response()->json(['message' => 'This account is not connected to Instagram yet.'], 422);
+        }
+
+        try {
+            $media = $insights->media($account);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Instagram API error: '.$e->getMessage()], 422);
+        }
+
+        return response()->json(['media' => $media]);
+    }
+
     public function mediaInsights(Request $request, Account $account, InstagramInsightsService $insights): JsonResponse
     {
         $data = $request->validate([

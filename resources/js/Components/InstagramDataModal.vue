@@ -3,8 +3,10 @@ import { ref, reactive, computed } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import ConfirmDialog from './ConfirmDialog.vue';
 import { useToast } from '../composables/useToast';
+import { useAuth } from '../composables/useAuth';
 
 const toast = useToast();
+const { canEdit } = useAuth();
 
 const props = defineProps({
     account: {
@@ -162,64 +164,69 @@ const toggleMediaInsights = async (item) => {
             </div>
 
             <div v-if="!isConnected" class="mt-6 space-y-6">
-                <div>
-                    <a
-                        :href="`/accounts/${account.id}/instagram/oauth/redirect`"
-                        class="inline-block rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
-                        style="background-color: var(--accent); color: var(--accent-ink)"
-                    >
-                        Login with Instagram
-                    </a>
-                    <p class="mt-2 text-xs" style="color: var(--ink-faint)">
-                        Redirects to Instagram to authorize read-only access, then returns here connected.
-                    </p>
-                </div>
-
-                <details>
-                    <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                        Or connect manually with an existing token
-                    </summary>
-                    <form @submit.prevent="submitConnect" class="mt-3 space-y-3">
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                                Instagram Business ID
-                            </label>
-                            <input
-                                v-model="connectForm.ig_business_id"
-                                type="text"
-                                placeholder="e.g. 27350904627911625"
-                                class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                                style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
-                            />
-                            <p v-if="connectForm.errors.ig_business_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
-                                {{ connectForm.errors.ig_business_id }}
-                            </p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                                Access Token
-                            </label>
-                            <input
-                                v-model="connectForm.ig_access_token"
-                                type="password"
-                                placeholder="IGAAR..."
-                                class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                                style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
-                            />
-                            <p v-if="connectForm.errors.ig_access_token" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
-                                {{ connectForm.errors.ig_access_token }}
-                            </p>
-                        </div>
-                        <button
-                            type="submit"
-                            :disabled="connectForm.processing"
-                            class="rounded-md border px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
-                            style="border-color: var(--border); color: var(--ink)"
+                <p v-if="!canEdit" class="text-sm" style="color: var(--ink-faint)">
+                    You don't have permission to connect Instagram for this account.
+                </p>
+                <template v-else>
+                    <div>
+                        <a
+                            :href="`/accounts/${account.id}/instagram/oauth/redirect`"
+                            class="inline-block rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                            style="background-color: var(--accent); color: var(--accent-ink)"
                         >
-                            Connect manually
-                        </button>
-                    </form>
-                </details>
+                            Login with Instagram
+                        </a>
+                        <p class="mt-2 text-xs" style="color: var(--ink-faint)">
+                            Redirects to Instagram to authorize read-only access, then returns here connected.
+                        </p>
+                    </div>
+
+                    <details>
+                        <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                            Or connect manually with an existing token
+                        </summary>
+                        <form @submit.prevent="submitConnect" class="mt-3 space-y-3">
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                    Instagram Business ID
+                                </label>
+                                <input
+                                    v-model="connectForm.ig_business_id"
+                                    type="text"
+                                    placeholder="e.g. 27350904627911625"
+                                    class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                                    style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
+                                />
+                                <p v-if="connectForm.errors.ig_business_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                    {{ connectForm.errors.ig_business_id }}
+                                </p>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                    Access Token
+                                </label>
+                                <input
+                                    v-model="connectForm.ig_access_token"
+                                    type="password"
+                                    placeholder="IGAAR..."
+                                    class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                                    style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
+                                />
+                                <p v-if="connectForm.errors.ig_access_token" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                    {{ connectForm.errors.ig_access_token }}
+                                </p>
+                            </div>
+                            <button
+                                type="submit"
+                                :disabled="connectForm.processing"
+                                class="rounded-md border px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                                style="border-color: var(--border); color: var(--ink)"
+                            >
+                                Connect manually
+                            </button>
+                        </form>
+                    </details>
+                </template>
             </div>
 
             <div v-else class="mt-6">
@@ -308,7 +315,7 @@ const toggleMediaInsights = async (item) => {
 
                 <div class="mt-6 flex justify-between border-t pt-4" style="border-color: var(--border)">
                     <button class="text-sm font-medium" style="color: var(--ink-muted)" @click="loadData">Refresh</button>
-                    <button class="text-sm font-medium" style="color: var(--status-parah-ink)" @click="confirmDisconnect">Disconnect</button>
+                    <button v-if="canEdit" class="text-sm font-medium" style="color: var(--status-parah-ink)" @click="confirmDisconnect">Disconnect</button>
                 </div>
             </div>
         </div>
