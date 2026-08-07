@@ -79,8 +79,7 @@ Route::middleware('auth')->group(function () {
     // --- Super admin only: manage user roles ---
 
     Route::middleware('super-admin')->group(function () {
-        Route::get('users', [UserController::class, 'index'])->name('users.index');
-        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
     });
 });
 
