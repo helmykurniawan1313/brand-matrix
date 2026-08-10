@@ -38,6 +38,7 @@ class CycleController extends Controller
         $filtered = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
             ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
+            ->when($request->string('platform')->trim()->toString(), fn ($query, $platform) => $query->where('platform', $platform))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -101,6 +102,7 @@ class CycleController extends Controller
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
                 'project_manager_id' => $request->integer('project_manager_id') ?: null,
+                'platform' => $request->string('platform')->trim()->toString() ?: null,
                 'growth_label' => $labelFilters['growth_label'],
                 'visibility_label' => $labelFilters['visibility_label'],
                 'engagement_label' => $labelFilters['engagement_label'],
@@ -126,6 +128,7 @@ class CycleController extends Controller
         $cycles = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
             ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
+            ->when($request->string('platform')->trim()->toString(), fn ($query, $platform) => $query->where('platform', $platform))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -450,6 +453,7 @@ class CycleController extends Controller
         $cycles = Cycle::with(['account', 'projectManager'])
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
             ->when($request->integer('project_manager_id'), fn ($query, $id) => $query->where('project_manager_id', $id))
+            ->when($request->string('platform')->trim()->toString(), fn ($query, $platform) => $query->where('platform', $platform))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
@@ -519,6 +523,7 @@ class CycleController extends Controller
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $search = $request->string('search')->trim()->toString() ?: null;
         $accountId = $request->integer('account_id') ?: null;
+        $platform = $request->string('platform')->trim()->toString() ?: null;
 
         $pmId = $request->integer('project_manager_id') ?: null;
 
@@ -534,6 +539,9 @@ class CycleController extends Controller
         if ($search) {
             $parts[] = "search: \"{$search}\"";
         }
+        if ($platform) {
+            $parts[] = 'platform: '.ucfirst($platform);
+        }
         foreach (['growth_label' => 'growth', 'visibility_label' => 'visibility', 'engagement_label' => 'engagement', 'health_label' => 'health'] as $field => $shortLabel) {
             if ($labelFilters[$field]) {
                 $parts[] = "{$shortLabel}: ".implode(', ', $labelFilters[$field]);
@@ -548,6 +556,7 @@ class CycleController extends Controller
                 'search' => $search,
                 'account_id' => $accountId,
                 'project_manager_id' => $pmId,
+                'platform' => $platform,
                 'growth_label' => $labelFilters['growth_label'],
                 'visibility_label' => $labelFilters['visibility_label'],
                 'engagement_label' => $labelFilters['engagement_label'],
@@ -567,6 +576,7 @@ class CycleController extends Controller
             'search' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
             'project_manager_id' => ['nullable', 'integer'],
+            'platform' => ['nullable', 'string', 'in:instagram,tiktok'],
             'growth_label' => ['nullable', 'string'],
             'visibility_label' => ['nullable', 'string'],
             'engagement_label' => ['nullable', 'string'],
@@ -612,6 +622,7 @@ class CycleController extends Controller
     {
         return $request->validate([
             'account_id' => ['required', 'exists:accounts,id'],
+            'platform' => ['required', 'string', 'in:instagram,tiktok'],
             'project_manager_id' => ['nullable', 'exists:employees,id'],
             'cycle_start_date' => ['required', 'date'],
             'cycle_end_date' => ['required', 'date', 'after_or_equal:cycle_start_date'],

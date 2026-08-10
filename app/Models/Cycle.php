@@ -12,6 +12,7 @@ class Cycle extends Model
 
     protected $fillable = [
         'account_id',
+        'platform',
         'project_manager_id',
         'cycle_start_date',
         'cycle_end_date',

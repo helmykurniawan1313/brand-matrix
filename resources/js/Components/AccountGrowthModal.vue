@@ -20,15 +20,22 @@ const error = ref(null);
 const cycles = ref([]);
 
 const tabs = [
-    { key: 'overview', label: 'Growth' },
-    { key: 'volume', label: 'Volume' },
-    { key: 'story-performance', label: 'Story Performance' },
-    { key: 'scores', label: 'Scores' },
-    { key: 'engagement-rate', label: 'Engagement Rate' },
+    { key: 'instagram', label: 'Instagram' },
+    { key: 'tiktok', label: 'TikTok' },
     { key: 'ai-summary', label: 'AI Summary' },
 ];
 
-const activeTab = ref('overview');
+const activeTab = ref('instagram');
+
+const platformCycles = (platform) => cycles.value.filter((c) => (c.platform ?? 'instagram') === platform);
+
+const chartSections = [
+    { key: 'overview', title: 'Growth' },
+    { key: 'volume', title: 'Volume' },
+    { key: 'story-performance', title: 'Story Performance' },
+    { key: 'scores', title: 'Scores' },
+    { key: 'engagement-rate', title: 'Engagement Rate' },
+];
 
 const chartConfigs = {
     overview: [
@@ -87,27 +94,27 @@ const setCanvasRef = (key, el) => {
     canvasRefs[key] = el;
 };
 
-const destroyChartsForTab = () => {
+const destroyAllCharts = () => {
     Object.keys(charts).forEach((key) => {
         charts[key]?.destroy();
         delete charts[key];
     });
 };
 
-const renderChart = (config) => {
+const renderChart = (config, dataCycles) => {
     const canvas = canvasRefs[config.key];
     if (!canvas) return;
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
     const border = getCssVar('--border') || '#d8dedc';
     const colors = palette();
-    const labels = cycles.value.map((c) => c.label);
+    const labels = dataCycles.map((c) => c.label);
 
     const series = config.combined ? config.series : [{ key: config.key, label: config.label }];
 
     const datasets = series.map((s, i) => ({
         label: s.label,
-        data: cycles.value.map((c) => c[s.key]),
+        data: dataCycles.map((c) => c[s.key]),
         borderColor: colors[i % colors.length],
         backgroundColor: colors[i % colors.length],
         pointBackgroundColor: colors[i % colors.length],
@@ -147,14 +154,15 @@ const renderChart = (config) => {
     });
 };
 
-const renderActiveTab = async () => {
-    destroyChartsForTab();
-    if (activeTab.value === 'ai-summary') return;
+const renderAllCharts = async () => {
+    destroyAllCharts();
+    if (activeTab.value !== 'instagram' && activeTab.value !== 'tiktok') return;
     await nextTick();
-    chartConfigs[activeTab.value].forEach(renderChart);
+    const dataCycles = platformCycles(activeTab.value);
+    allChartConfigs().forEach((config) => renderChart(config, dataCycles));
 };
 
-watch(activeTab, renderActiveTab);
+watch(activeTab, renderAllCharts);
 
 // AI Summary tab
 
@@ -221,7 +229,7 @@ const exportError = ref(null);
 
 const allChartConfigs = () => Object.values(chartConfigs).flat();
 
-const captureChartImage = (config) => {
+const captureChartImage = (config, dataCycles) => {
     return new Promise((resolve) => {
         const offscreen = document.createElement('canvas');
         offscreen.width = 900;
@@ -230,12 +238,12 @@ const captureChartImage = (config) => {
         const inkFaint = '#8b979b';
         const border = '#d8dedc';
         const colors = palette();
-        const labels = cycles.value.map((c) => c.label);
+        const labels = dataCycles.map((c) => c.label);
         const series = config.combined ? config.series : [{ key: config.key, label: config.label }];
 
         const datasets = series.map((s, i) => ({
             label: s.label,
-            data: cycles.value.map((c) => c[s.key]),
+            data: dataCycles.map((c) => c[s.key]),
             borderColor: colors[i % colors.length],
             backgroundColor: colors[i % colors.length],
             pointBackgroundColor: colors[i % colors.length],
@@ -290,10 +298,11 @@ const downloadPdf = async () => {
     exportError.value = null;
 
     try {
+        const dataCycles = platformCycles(activeTab.value === 'tiktok' ? 'tiktok' : 'instagram');
         const images = await Promise.all(
             allChartConfigs().map(async (config) => ({
                 label: config.label,
-                image: await captureChartImage(config),
+                image: await captureChartImage(config, dataCycles),
             })),
         );
 
@@ -363,7 +372,7 @@ const load = async () => {
         }
 
         loading.value = false;
-        await renderActiveTab();
+        await renderAllCharts();
     } catch (e) {
         error.value = e.message;
         loading.value = false;
@@ -373,14 +382,14 @@ const load = async () => {
 load();
 
 onBeforeUnmount(() => {
-    destroyChartsForTab();
+    destroyAllCharts();
 });
 </script>
 
 <template>
     <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
         <div
-            class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-lg border p-6 shadow-2xl"
+            class="h-[95vh] w-[95vw] max-w-6xl overflow-y-auto rounded-lg border p-6 shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
             <div class="flex items-start justify-between gap-4">
@@ -392,7 +401,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
                     <button
-                        v-if="!loading && !error"
+                        v-if="!loading && !error && activeTab !== 'ai-summary'"
                         type="button"
                         :disabled="exporting"
                         class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70 disabled:opacity-50"
@@ -489,15 +498,34 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
 
-                <div v-else class="grid grid-cols-1 gap-6" :class="{ 'sm:grid-cols-2': chartConfigs[activeTab].length > 1 }">
-                    <div v-for="config in chartConfigs[activeTab]" :key="config.key">
-                        <p class="mb-2 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                            {{ config.label }}
-                        </p>
-                        <div class="relative" style="height: 260px">
-                            <canvas :ref="(el) => setCanvasRef(config.key, el)"></canvas>
+                <p
+                    v-else-if="platformCycles(activeTab).length === 0"
+                    class="py-12 text-center text-sm"
+                    style="color: var(--ink-faint)"
+                >
+                    No {{ activeTab === 'tiktok' ? 'TikTok' : 'Instagram' }} cycles recorded for this account yet.
+                </p>
+
+                <div v-else class="space-y-8">
+                    <section v-for="section in chartSections" :key="section.key">
+                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ section.title }}</h3>
+                        <div
+                            class="mt-3 grid grid-cols-1 gap-6"
+                            :class="{
+                                'sm:grid-cols-2': chartConfigs[section.key].length === 2,
+                                'sm:grid-cols-2 xl:grid-cols-3': chartConfigs[section.key].length >= 3,
+                            }"
+                        >
+                            <div v-for="config in chartConfigs[section.key]" :key="config.key">
+                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                    {{ config.label }}
+                                </p>
+                                <div class="relative" style="height: 260px">
+                                    <canvas :ref="(el) => setCanvasRef(config.key, el)"></canvas>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </section>
                 </div>
             </div>
         </div>

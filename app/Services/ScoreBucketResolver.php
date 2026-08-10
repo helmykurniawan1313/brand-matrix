@@ -11,20 +11,33 @@ class ScoreBucketResolver
      * A null min_rate is treated as -infinity (the floor tier), so it always matches
      * unless a higher tier also matches.
      *
+     * Single linear scan tracking the best match so far, instead of allocating a
+     * filtered + sorted Collection on every call — this is called many times per
+     * cycle (once per metric, per cycle), so the allocation overhead compounds
+     * noticeably on pages that score dozens/hundreds of cycles at once.
+     *
      * @param  Collection  $buckets  Buckets for a single metric, each exposing $minKey and $valueKey.
      */
     public function resolve(Collection $buckets, float $rate, string $minKey = 'min_rate', string $valueKey = 'score'): mixed
     {
         $rate = round($rate, 4);
 
-        $matches = $buckets->filter(function ($bucket) use ($rate, $minKey) {
+        $winner = null;
+        $winnerMin = -INF;
+
+        foreach ($buckets as $bucket) {
             $min = $bucket->{$minKey};
+            $min = $min === null ? -INF : round((float) $min, 4);
 
-            return $min === null || $rate >= round((float) $min, 4);
-        });
+            if ($min > $rate) {
+                continue;
+            }
 
-        $winner = $matches->sortByDesc(fn ($bucket) => $bucket->{$minKey} === null ? -INF : round((float) $bucket->{$minKey}, 4))
-            ->first();
+            if ($winner === null || $min > $winnerMin) {
+                $winner = $bucket;
+                $winnerMin = $min;
+            }
+        }
 
         return $winner?->{$valueKey};
     }

@@ -30,6 +30,13 @@ class MetricCalculator
         $labelBuckets ??= LabelBucket::all();
         $formulaWeights ??= FormulaWeight::all();
 
+        // Grouping once per call (instead of filtering the full collection by
+        // metric on every resolveScore()/resolveLabel() call below) avoids
+        // repeated Collection::where() allocation — this function runs once
+        // per cycle, and pages can score hundreds of cycles per request.
+        $scoreBucketsByMetric = $scoreBuckets->groupBy('metric');
+        $labelBucketsByMetric = $labelBuckets->groupBy('metric');
+
         $growth = $cycle->end_follower - $cycle->start_follower;
         $growthRate = $this->percentage($growth, $cycle->start_follower);
         $reachRate = $this->percentage($cycle->reach, $cycle->end_follower);
@@ -37,11 +44,11 @@ class MetricCalculator
         $erReachRate = $this->percentage($cycle->engagement, $cycle->reach);
         $erFollowerRate = $this->percentage($cycle->engagement, $cycle->end_follower);
 
-        $growthScore = $this->resolveScore($scoreBuckets, ScoreBucket::METRIC_GROWTH, $growthRate);
-        $reachScore = $this->resolveScore($scoreBuckets, ScoreBucket::METRIC_REACH, $reachRate);
-        $viewScore = $this->resolveScore($scoreBuckets, ScoreBucket::METRIC_VIEW, $viewRate);
-        $erReachScore = $this->resolveScore($scoreBuckets, ScoreBucket::METRIC_ER_REACH, $erReachRate);
-        $erFollowerScore = $this->resolveScore($scoreBuckets, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate);
+        $growthScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_GROWTH, $growthRate);
+        $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate);
+        $viewScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_VIEW, $viewRate);
+        $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate);
+        $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate);
 
         $visibilityRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_VISIBILITY, [
             'reach_score' => $reachScore,
@@ -53,16 +60,16 @@ class MetricCalculator
             'er_follower_score' => $erFollowerScore,
         ]);
 
-        $growthLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_GROWTH, $growthRate);
-        $visibilityLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_VISIBILITY, $visibilityRate);
-        $engagementLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_ENGAGEMENT, $engagementScore);
+        $growthLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_GROWTH, $growthRate);
+        $visibilityLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_VISIBILITY, $visibilityRate);
+        $engagementLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_ENGAGEMENT, $engagementScore);
 
         $healthRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_HEALTH, [
             'growth_score' => $growthScore,
             'visibility_rate' => $visibilityRate,
             'engagement_score' => $engagementScore,
         ]);
-        $healthLabel = $this->resolveLabel($labelBuckets, LabelBucket::METRIC_HEALTH, $healthRate);
+        $healthLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_HEALTH, $healthRate);
 
         return [
             'growth' => $growth,
@@ -110,17 +117,17 @@ class MetricCalculator
         return $weightedSum / $totalWeight;
     }
 
-    private function resolveScore(Collection $scoreBuckets, string $metric, float $rate): float
+    private function resolveScore(Collection $scoreBucketsByMetric, string $metric, float $rate): float
     {
-        $value = $this->resolver->resolve($scoreBuckets->where('metric', $metric), $rate);
+        $value = $this->resolver->resolve($scoreBucketsByMetric->get($metric, Collection::empty()), $rate);
 
         return $value === null ? 0.0 : (float) $value;
     }
 
-    private function resolveLabel(Collection $labelBuckets, string $metric, float $score): ?string
+    private function resolveLabel(Collection $labelBucketsByMetric, string $metric, float $score): ?string
     {
         return $this->resolver->resolve(
-            $labelBuckets->where('metric', $metric),
+            $labelBucketsByMetric->get($metric, Collection::empty()),
             $score,
             minKey: 'min_score',
             valueKey: 'label',

@@ -82,6 +82,7 @@ class AccountController extends Controller
                 return [
                     'label' => $cycle->cycle_start_date->format('M Y'),
                     'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
+                    'platform' => $cycle->platform,
                     'growth_rate' => round($scores['growth_rate'], 2),
                     'end_follower' => $cycle->end_follower,
                     'reach' => $cycle->reach,

@@ -73,6 +73,11 @@ const props = defineProps({
     },
 });
 
+const platformOptions = [
+    { id: 'instagram', name: 'Instagram' },
+    { id: 'tiktok', name: 'TikTok' },
+];
+
 const monthOptions = [
     { value: '01', label: 'January' },
     { value: '02', label: 'February' },
@@ -90,6 +95,7 @@ const monthOptions = [
 
 const columns = [
     { key: 'account', label: 'Account' },
+    { key: 'platform', label: 'Platform' },
     { key: 'cycle_start_date', label: 'Period' },
     { key: 'growth_rate', label: 'Growth' },
     { key: 'visibility_rate', label: 'Visibility' },
@@ -154,6 +160,7 @@ const [initialYearTo, initialMonthNumTo] = (props.filters.month_to ?? '').split(
 const search = ref(props.filters.search ?? '');
 const accountFilter = ref(props.filters.account_id ?? '');
 const pmFilter = ref(props.filters.project_manager_id ?? '');
+const platformFilter = ref(props.filters.platform ?? '');
 const growthFilter = ref(Array.isArray(props.filters.growth_label) ? props.filters.growth_label : []);
 const visibilityFilter = ref(Array.isArray(props.filters.visibility_label) ? props.filters.visibility_label : []);
 const engagementFilter = ref(Array.isArray(props.filters.engagement_label) ? props.filters.engagement_label : []);
@@ -178,6 +185,7 @@ const filterQuery = computed(() => ({
     search: search.value || undefined,
     account_id: accountFilter.value || undefined,
     project_manager_id: pmFilter.value || undefined,
+    platform: platformFilter.value || undefined,
     growth_label: growthFilter.value.length ? growthFilter.value.join(',') : undefined,
     visibility_label: visibilityFilter.value.length ? visibilityFilter.value.join(',') : undefined,
     engagement_label: engagementFilter.value.length ? engagementFilter.value.join(',') : undefined,
@@ -204,6 +212,7 @@ const activeFilterCount = computed(() => {
     let count = 0;
     if (accountFilter.value) count += 1;
     if (pmFilter.value) count += 1;
+    if (platformFilter.value) count += 1;
     if (growthFilter.value.length) count += 1;
     if (visibilityFilter.value.length) count += 1;
     if (engagementFilter.value.length) count += 1;
@@ -218,6 +227,7 @@ const clearAllFilters = () => {
     search.value = '';
     accountFilter.value = '';
     pmFilter.value = '';
+    platformFilter.value = '';
     growthFilter.value = [];
     visibilityFilter.value = [];
     engagementFilter.value = [];
@@ -234,6 +244,7 @@ const clearAllFilters = () => {
 const showFilterModal = ref(false);
 const draftAccountFilter = ref('');
 const draftPmFilter = ref('');
+const draftPlatformFilter = ref('');
 const draftGrowthFilter = ref([]);
 const draftVisibilityFilter = ref([]);
 const draftEngagementFilter = ref([]);
@@ -244,6 +255,7 @@ const draftMonthTo = ref(''); // 'YYYY-MM'
 const openFilterModal = () => {
     draftAccountFilter.value = accountFilter.value;
     draftPmFilter.value = pmFilter.value;
+    draftPlatformFilter.value = platformFilter.value;
     draftGrowthFilter.value = [...growthFilter.value];
     draftVisibilityFilter.value = [...visibilityFilter.value];
     draftEngagementFilter.value = [...engagementFilter.value];
@@ -260,6 +272,7 @@ const closeFilterModal = () => {
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
     pmFilter.value = draftPmFilter.value;
+    platformFilter.value = draftPlatformFilter.value;
     growthFilter.value = [...draftGrowthFilter.value];
     visibilityFilter.value = [...draftVisibilityFilter.value];
     engagementFilter.value = [...draftEngagementFilter.value];
@@ -280,6 +293,7 @@ const applyFilterModal = () => {
 const clearFilterModal = () => {
     draftAccountFilter.value = '';
     draftPmFilter.value = '';
+    draftPlatformFilter.value = '';
     draftGrowthFilter.value = [];
     draftVisibilityFilter.value = [];
     draftEngagementFilter.value = [];
@@ -315,6 +329,7 @@ const filterLabelParts = computed(() => {
         if (pm) parts.push(`PM: ${pm.name}`);
     }
     if (search.value) parts.push(`search: "${search.value}"`);
+    if (platformFilter.value) parts.push(`platform: ${platformFilter.value === 'instagram' ? 'Instagram' : 'TikTok'}`);
     if (growthFilter.value.length) parts.push(`growth: ${growthFilter.value.join(', ')}`);
     if (visibilityFilter.value.length) parts.push(`visibility: ${visibilityFilter.value.join(', ')}`);
     if (engagementFilter.value.length) parts.push(`engagement: ${engagementFilter.value.join(', ')}`);
@@ -355,6 +370,7 @@ const editingCycle = ref(null);
 
 const form = useForm({
     account_id: '',
+    platform: '',
     project_manager_id: '',
     cycle_start_date: '',
     cycle_end_date: '',
@@ -545,6 +561,7 @@ const applyPrefill = (data) => {
 const openEdit = (cycle) => {
     editingCycle.value = cycle;
     form.account_id = cycle.account_id;
+    form.platform = cycle.platform ?? 'instagram';
     form.project_manager_id = cycle.project_manager_id ?? '';
     form.cycle_start_date = cycle.cycle_start_date.slice(0, 10);
     form.cycle_end_date = cycle.cycle_end_date.slice(0, 10);
@@ -844,6 +861,9 @@ const inputStyle =
                                 {{ cycle.account?.name }}
                             </td>
                             <td class="whitespace-nowrap px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
+                                {{ cycle.platform === 'tiktok' ? 'TikTok' : 'Instagram' }}
+                            </td>
+                            <td class="whitespace-nowrap px-3 py-3.5 text-sm" style="color: var(--ink-muted)">
                                 {{ formatDate(cycle.cycle_start_date) }} – {{ formatDate(cycle.cycle_end_date) }}
                             </td>
                             <td
@@ -879,7 +899,7 @@ const inputStyle =
                             </td>
                         </tr>
                         <tr v-if="sortedCycles.length === 0">
-                            <td colspan="8" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                            <td colspan="9" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                                 <template v-if="hasActiveFilters">No cycles match the current filters.</template>
                                 <template v-else>No cycles yet. Add your first cycle to see health scores.</template>
                             </td>
@@ -944,17 +964,32 @@ const inputStyle =
                 </div>
 
                 <form @submit.prevent="submit" class="mt-5 space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Account</label>
-                        <SearchableSelect
-                            v-model="form.account_id"
-                            :options="accounts"
-                            placeholder="Select an account"
-                            class="mt-1"
-                        />
-                        <p v-if="form.errors.account_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
-                            {{ form.errors.account_id }}
-                        </p>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium" style="color: var(--ink-muted)">Account</label>
+                            <SearchableSelect
+                                v-model="form.account_id"
+                                :options="accounts"
+                                placeholder="Select an account"
+                                class="mt-1"
+                            />
+                            <p v-if="form.errors.account_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                {{ form.errors.account_id }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium" style="color: var(--ink-muted)">Platform</label>
+                            <SearchableSelect
+                                v-model="form.platform"
+                                :options="platformOptions"
+                                placeholder="Select platform"
+                                class="mt-1"
+                            />
+                            <p v-if="form.errors.platform" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
+                                {{ form.errors.platform }}
+                            </p>
+                        </div>
                     </div>
 
                     <div>
