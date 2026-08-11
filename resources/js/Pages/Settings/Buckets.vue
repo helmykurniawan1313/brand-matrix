@@ -2,9 +2,12 @@
 import { computed, reactive, ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -238,7 +241,6 @@ const saveWeights = (aggregate) => {
 </script>
 
 <template>
-    <AppLayout>
         <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Scoring Buckets</h1>
         <p class="mt-1 max-w-2xl text-sm" style="color: var(--ink-muted)">
             Each tier fires when a metric's rate is at or above its minimum — the highest matching tier wins. Leave
@@ -495,5 +497,4 @@ const saveWeights = (aggregate) => {
             @confirm="confirmDeleteBucket"
             @cancel="cancelDeleteBucket"
         />
-    </AppLayout>
 </template>

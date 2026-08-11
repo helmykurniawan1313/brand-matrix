@@ -2,9 +2,12 @@
 import { ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import RichTextEditor from '../../Components/RichTextEditor.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -36,7 +39,6 @@ const save = () => {
 </script>
 
 <template>
-    <AppLayout>
         <div>
             <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Legal Pages</h1>
             <p class="mt-1 text-sm" style="color: var(--ink-muted)">
@@ -89,5 +91,4 @@ const save = () => {
                 </button>
             </div>
         </div>
-    </AppLayout>
 </template>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CycleController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\FormulaWeightController;
@@ -15,9 +16,11 @@ use App\Models\LegalPage;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function () {
-    Route::redirect('/', '/cycles');
+    Route::redirect('/', '/dashboard');
 
     // --- Read-only routes: any authenticated user (including viewers) ---
+
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::resource('accounts', AccountController::class)->only(['index']);
     Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');

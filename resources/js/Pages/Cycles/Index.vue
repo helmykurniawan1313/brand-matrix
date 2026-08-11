@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useForm, router } from '@inertiajs/vue3';
 import Chart from 'chart.js/auto';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import CycleDetailModal from '../../Components/CycleDetailModal.vue';
@@ -14,6 +15,8 @@ import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -508,7 +511,7 @@ const prefillStartFollower = async () => {
     if (editingCycle.value || !form.account_id || !form.cycle_start_date) return;
 
     try {
-        const params = new URLSearchParams({ start_date: form.cycle_start_date });
+        const params = new URLSearchParams({ start_date: form.cycle_start_date, platform: form.platform || 'instagram' });
         if (form.cycle_end_date) params.set('end_date', form.cycle_end_date);
 
         const response = await fetch(`/accounts/${form.account_id}/neighboring-cycle?${params}`, {
@@ -526,7 +529,7 @@ const prefillEndFollower = async () => {
     if (editingCycle.value || !form.account_id || !form.cycle_end_date) return;
 
     try {
-        const params = new URLSearchParams({ end_date: form.cycle_end_date });
+        const params = new URLSearchParams({ end_date: form.cycle_end_date, platform: form.platform || 'instagram' });
         if (form.cycle_start_date) params.set('start_date', form.cycle_start_date);
 
         const response = await fetch(`/accounts/${form.account_id}/neighboring-cycle?${params}`, {
@@ -537,6 +540,16 @@ const prefillEndFollower = async () => {
         applyPrefill(data);
     } catch {
         // Silently ignore — user can still fill values manually.
+    }
+};
+
+const prefillFollowersForPlatform = async () => {
+    if (editingCycle.value || !form.account_id) return;
+    if (form.cycle_start_date) {
+        await prefillStartFollower();
+    }
+    if (form.cycle_end_date) {
+        await prefillEndFollower();
     }
 };
 
@@ -657,7 +670,6 @@ const inputStyle =
 </script>
 
 <template>
-    <AppLayout>
         <div class="flex items-start justify-between gap-4">
             <div>
                 <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">
@@ -985,6 +997,7 @@ const inputStyle =
                                 :options="platformOptions"
                                 placeholder="Select platform"
                                 class="mt-1"
+                                @update:model-value="prefillFollowersForPlatform"
                             />
                             <p v-if="form.errors.platform" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
                                 {{ form.errors.platform }}
@@ -1348,5 +1361,4 @@ const inputStyle =
                 </div>
             </div>
         </div>
-    </AppLayout>
 </template>

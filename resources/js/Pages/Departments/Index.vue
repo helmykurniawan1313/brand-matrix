@@ -2,11 +2,14 @@
 import { ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import EditNameModal from '../../Components/EditNameModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -83,7 +86,6 @@ const destroy = () => {
 </script>
 
 <template>
-    <AppLayout>
         <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Departments</h1>
         <p class="mt-1 text-sm" style="color: var(--ink-muted)">
             Manage the departments employees can be assigned to.
@@ -201,5 +203,4 @@ const destroy = () => {
             @confirm="destroy"
             @cancel="cancelDestroy"
         />
-    </AppLayout>
 </template>

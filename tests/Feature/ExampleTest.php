@@ -17,10 +17,10 @@ class ExampleTest extends TestCase
         $response->assertRedirect('/login');
     }
 
-    public function test_authenticated_users_are_redirected_to_cycles(): void
+    public function test_authenticated_users_are_redirected_to_dashboard(): void
     {
         $response = $this->actingAs(User::factory()->create())->get('/');
 
-        $response->assertRedirect('/cycles');
+        $response->assertRedirect('/dashboard');
     }
 }

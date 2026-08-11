@@ -242,21 +242,24 @@ class CycleController extends Controller
         $data = $request->validate([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
+            'platform' => ['nullable', 'string', 'in:instagram,tiktok'],
         ]);
+
+        $platform = $data['platform'] ?? 'instagram';
 
         $response = [];
 
         if ($startDate = $data['start_date'] ?? null) {
-            $response['start_follower'] = $this->resolveInstagramFollowerNear($account, $startDate)
-                ?? $this->resolveStartFollower($account, $startDate);
+            $response['start_follower'] = ($platform === 'instagram' ? $this->resolveInstagramFollowerNear($account, $startDate) : null)
+                ?? $this->resolveStartFollower($account, $startDate, $platform);
         }
 
         if ($endDate = $data['end_date'] ?? null) {
-            $response['end_follower'] = $this->resolveInstagramFollowerNear($account, $endDate)
-                ?? $this->resolveEndFollower($account, $endDate);
+            $response['end_follower'] = ($platform === 'instagram' ? $this->resolveInstagramFollowerNear($account, $endDate) : null)
+                ?? $this->resolveEndFollower($account, $endDate, $platform);
         }
 
-        if ($startDate && $endDate) {
+        if ($startDate && $endDate && $platform === 'instagram') {
             $totals = $this->resolveInstagramTotals($account, $startDate, $endDate);
 
             if ($totals) {
@@ -315,9 +318,10 @@ class CycleController extends Controller
         ];
     }
 
-    private function resolveStartFollower(Account $account, string $startDate): ?int
+    private function resolveStartFollower(Account $account, string $startDate, string $platform): ?int
     {
         $previous = $account->cycles()
+            ->where('platform', $platform)
             ->where('cycle_end_date', '<=', $startDate)
             ->orderByDesc('cycle_end_date')
             ->first();
@@ -327,6 +331,7 @@ class CycleController extends Controller
         }
 
         $next = $account->cycles()
+            ->where('platform', $platform)
             ->where('cycle_start_date', '>', $startDate)
             ->orderBy('cycle_start_date')
             ->first();
@@ -334,9 +339,10 @@ class CycleController extends Controller
         return $next?->start_follower;
     }
 
-    private function resolveEndFollower(Account $account, string $endDate): ?int
+    private function resolveEndFollower(Account $account, string $endDate, string $platform): ?int
     {
         $next = $account->cycles()
+            ->where('platform', $platform)
             ->where('cycle_start_date', '>=', $endDate)
             ->orderBy('cycle_start_date')
             ->first();

@@ -9,6 +9,12 @@ defineProps({
     },
 });
 
+// Module-scoped so only one ActionsMenu instance across the whole page can be open at a time —
+// otherwise opening a second row's menu leaves the first row's panel open too, and since both are
+// Teleported to <body> and positioned independently, they can visually overlap.
+let activeMenuId = null;
+const menuId = Symbol('actions-menu');
+
 const open = ref(false);
 const buttonRef = ref(null);
 const menuStyle = ref({});
@@ -20,6 +26,7 @@ const closeOnScrollOrResize = () => {
 const toggleOpen = async () => {
     if (open.value) {
         open.value = false;
+        activeMenuId = null;
         return;
     }
 
@@ -29,11 +36,14 @@ const toggleOpen = async () => {
         top: `${rect.bottom + 4}px`,
         left: `${rect.right - 160}px`,
     };
+    activeMenuId = menuId;
     open.value = true;
+    document.dispatchEvent(new Event('actions-menu-opened'));
 };
 
 const runItem = (item) => {
     open.value = false;
+    activeMenuId = null;
     item.onClick();
 };
 
@@ -43,12 +53,20 @@ const onClickOutside = (event) => {
     }
 };
 
+const closeIfNotActive = () => {
+    if (activeMenuId !== menuId) {
+        open.value = false;
+    }
+};
+
 document.addEventListener('click', onClickOutside);
+document.addEventListener('actions-menu-opened', closeIfNotActive);
 window.addEventListener('scroll', closeOnScrollOrResize, true);
 window.addEventListener('resize', closeOnScrollOrResize);
 
 onBeforeUnmount(() => {
     document.removeEventListener('click', onClickOutside);
+    document.removeEventListener('actions-menu-opened', closeIfNotActive);
     window.removeEventListener('scroll', closeOnScrollOrResize, true);
     window.removeEventListener('resize', closeOnScrollOrResize);
 });

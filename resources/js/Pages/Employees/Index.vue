@@ -2,12 +2,15 @@
 import { ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import EditEmployeeModal from '../../Components/EditEmployeeModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -88,7 +91,6 @@ const destroy = () => {
 </script>
 
 <template>
-    <AppLayout>
         <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Employees</h1>
         <p class="mt-1 text-sm" style="color: var(--ink-muted)">
             Manage employees and their department assignments.
@@ -240,5 +242,4 @@ const destroy = () => {
             @confirm="destroy"
             @cancel="cancelDestroy"
         />
-    </AppLayout>
 </template>

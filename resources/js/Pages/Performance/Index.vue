@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3';
 import Chart from 'chart.js/auto';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import PerformanceFormModal from '../../Components/PerformanceFormModal.vue';
 import PerformanceDetailModal from '../../Components/PerformanceDetailModal.vue';
 import FilterSummaryModal from '../../Components/FilterSummaryModal.vue';
@@ -14,6 +15,8 @@ import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -422,7 +425,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <AppLayout>
         <div class="flex items-start justify-between gap-4">
             <div>
                 <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Performance</h1>
@@ -893,5 +895,4 @@ onBeforeUnmount(() => {
                 </div>
             </div>
         </div>
-    </AppLayout>
 </template>

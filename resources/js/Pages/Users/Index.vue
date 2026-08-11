@@ -2,10 +2,13 @@
 import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
+
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useToast } from '../../composables/useToast';
+
+defineOptions({ layout: AppLayout });
 
 const toast = useToast();
 const { user: currentUser } = useAuth();
@@ -96,7 +99,6 @@ const destroy = () => {
 </script>
 
 <template>
-    <AppLayout>
         <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Users</h1>
         <p class="mt-1 text-sm" style="color: var(--ink-muted)">
             Manage who can view, edit, or administer Brand Matrix.
@@ -252,5 +254,4 @@ const destroy = () => {
             @confirm="destroy"
             @cancel="cancelDestroy"
         />
-    </AppLayout>
 </template>
