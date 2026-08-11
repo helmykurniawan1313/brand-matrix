@@ -1,3 +1,10 @@
+<script>
+// Real module-scope (outside <script setup>, which re-runs its own top-level
+// declarations per component instance) so every ActionsMenu instance on the
+// page shares the same "who's open" tracker.
+let activeMenuId = null;
+</script>
+
 <script setup>
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 
@@ -9,17 +16,19 @@ defineProps({
     },
 });
 
-// Module-scoped so only one ActionsMenu instance across the whole page can be open at a time —
-// otherwise opening a second row's menu leaves the first row's panel open too, and since both are
-// Teleported to <body> and positioned independently, they can visually overlap.
-let activeMenuId = null;
 const menuId = Symbol('actions-menu');
 
 const open = ref(false);
 const buttonRef = ref(null);
 const menuStyle = ref({});
 
+// Teleporting the panel into <body> can itself shift layout enough to fire a
+// scroll/resize event on the very same tick the menu opens — ignore that first
+// event so the menu doesn't immediately close itself right after opening.
+let justOpened = false;
+
 const closeOnScrollOrResize = () => {
+    if (justOpened) return;
     open.value = false;
 };
 
@@ -39,6 +48,12 @@ const toggleOpen = async () => {
     activeMenuId = menuId;
     open.value = true;
     document.dispatchEvent(new Event('actions-menu-opened'));
+
+    justOpened = true;
+    await nextTick();
+    requestAnimationFrame(() => {
+        justOpened = false;
+    });
 };
 
 const runItem = (item) => {
