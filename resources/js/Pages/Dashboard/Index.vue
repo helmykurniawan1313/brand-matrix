@@ -293,7 +293,7 @@ const renderPlatformPieChart = () => {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom', labels: { color: getCssVar('--ink-muted') || '#4b5563' } },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         label: (context) => `${context.label}: ${context.parsed} cycle${context.parsed === 1 ? '' : 's'}`,
@@ -336,7 +336,7 @@ const renderPerformancePlatformPieChart = () => {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom', labels: { color: getCssVar('--ink-muted') || '#4b5563' } },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         label: (context) => `${context.label}: ${context.parsed} post${context.parsed === 1 ? '' : 's'}`,
@@ -463,50 +463,28 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+            <div class="mt-4 max-w-sm">
+                <div class="flex flex-col rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                     <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                         Cycles by Platform
                     </h3>
-                    <div class="mx-auto mt-3" style="height: 240px; max-width: 320px">
-                        <canvas ref="platformPieCanvas"></canvas>
-                    </div>
-                </div>
-
-                <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                    <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                        Top Project Managers
-                    </h3>
-                    <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">Ranked by average Health Rate across their assigned cycles.</p>
-
-                    <div v-if="cycleData.topProjectManagers?.length" class="mt-3 space-y-2">
-                        <div
-                            v-for="(pm, index) in cycleData.topProjectManagers"
-                            :key="pm.employee_id"
-                            class="flex items-center gap-3 rounded-md border p-3"
-                            style="border-color: var(--border); background-color: var(--bg)"
-                        >
-                            <span
-                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold"
-                                :style="
-                                    index === 0
-                                        ? 'background-color: #fde68a; color: #92400e'
-                                        : index === 1
-                                            ? 'background-color: #e5e7eb; color: #374151'
-                                            : 'background-color: #fdba74; color: #7c2d12'
-                                "
-                            >
-                                {{ index + 1 }}
-                            </span>
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold" style="color: var(--ink)">{{ pm.employee_name }}</p>
-                                <p class="text-xs" style="color: var(--ink-muted)">
-                                    {{ pm.avg_health_rate }} avg &middot; {{ pm.cycle_count }} cycle{{ pm.cycle_count === 1 ? '' : 's' }}
-                                </p>
+                    <div class="flex flex-1 flex-col items-center justify-center py-2">
+                        <div style="height: 170px; width: 170px">
+                            <canvas ref="platformPieCanvas"></canvas>
+                        </div>
+                        <div class="mt-4 flex justify-center gap-6">
+                            <div class="flex items-center gap-2">
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #e1306c"></span>
+                                <span class="text-sm" style="color: var(--ink-muted)">Instagram</span>
+                                <span class="text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ platformCounts.instagram ?? 0 }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #010101"></span>
+                                <span class="text-sm" style="color: var(--ink-muted)">TikTok</span>
+                                <span class="text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ platformCounts.tiktok ?? 0 }}</span>
                             </div>
                         </div>
                     </div>
-                    <p v-else class="mt-3 text-sm" style="color: var(--ink-faint)">No cycles with a project manager assigned yet.</p>
                 </div>
             </div>
         </template>
@@ -550,86 +528,28 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+            <div class="mt-4 max-w-sm">
+                <div class="flex flex-col rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                     <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                         Posts by Platform
                     </h3>
-                    <div class="mx-auto mt-3" style="height: 220px; max-width: 280px">
-                        <canvas ref="performancePlatformPieCanvas"></canvas>
-                    </div>
-                </div>
-
-                <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                    <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                        Top Project Managers
-                    </h3>
-                    <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">Ranked by number of posts managed.</p>
-
-                    <div v-if="performanceData.topProjectManagers?.length" class="mt-3 space-y-2">
-                        <div
-                            v-for="(pm, index) in performanceData.topProjectManagers"
-                            :key="pm.employee_id"
-                            class="flex items-center gap-3 rounded-md border p-3"
-                            style="border-color: var(--border); background-color: var(--bg)"
-                        >
-                            <span
-                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold"
-                                :style="
-                                    index === 0
-                                        ? 'background-color: #fde68a; color: #92400e'
-                                        : index === 1
-                                            ? 'background-color: #e5e7eb; color: #374151'
-                                            : 'background-color: #fdba74; color: #7c2d12'
-                                "
-                            >
-                                {{ index + 1 }}
-                            </span>
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold" style="color: var(--ink)">{{ pm.employee_name }}</p>
-                                <p class="text-xs" style="color: var(--ink-muted)">
-                                    {{ pm.post_count }} post{{ pm.post_count === 1 ? '' : 's' }}
-                                </p>
+                    <div class="flex flex-1 flex-col items-center justify-center py-2">
+                        <div style="height: 170px; width: 170px">
+                            <canvas ref="performancePlatformPieCanvas"></canvas>
+                        </div>
+                        <div class="mt-4 flex justify-center gap-6">
+                            <div class="flex items-center gap-2">
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #e1306c"></span>
+                                <span class="text-sm" style="color: var(--ink-muted)">Instagram</span>
+                                <span class="text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ performanceData.platformCounts?.instagram ?? 0 }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #010101"></span>
+                                <span class="text-sm" style="color: var(--ink-muted)">TikTok</span>
+                                <span class="text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ performanceData.platformCounts?.tiktok ?? 0 }}</span>
                             </div>
                         </div>
                     </div>
-                    <p v-else class="mt-3 text-sm" style="color: var(--ink-faint)">No posts with a project manager assigned yet.</p>
-                </div>
-
-                <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                    <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                        Top Conceptors
-                    </h3>
-                    <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">Ranked by number of posts conceptualized.</p>
-
-                    <div v-if="performanceData.topConceptors?.length" class="mt-3 space-y-2">
-                        <div
-                            v-for="(conceptor, index) in performanceData.topConceptors"
-                            :key="conceptor.employee_id"
-                            class="flex items-center gap-3 rounded-md border p-3"
-                            style="border-color: var(--border); background-color: var(--bg)"
-                        >
-                            <span
-                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold"
-                                :style="
-                                    index === 0
-                                        ? 'background-color: #fde68a; color: #92400e'
-                                        : index === 1
-                                            ? 'background-color: #e5e7eb; color: #374151'
-                                            : 'background-color: #fdba74; color: #7c2d12'
-                                "
-                            >
-                                {{ index + 1 }}
-                            </span>
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-semibold" style="color: var(--ink)">{{ conceptor.employee_name }}</p>
-                                <p class="text-xs" style="color: var(--ink-muted)">
-                                    {{ conceptor.post_count }} post{{ conceptor.post_count === 1 ? '' : 's' }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <p v-else class="mt-3 text-sm" style="color: var(--ink-faint)">No posts with a conceptor assigned yet.</p>
                 </div>
             </div>
         </template>

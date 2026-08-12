@@ -81,8 +81,6 @@ class DashboardController extends Controller
         // Monthly cycle-count trend for the last 6 months, always all-time regardless of range filter.
         $monthlyTrend = $this->buildMonthlyTrend($allCyclesForPlatform, fn (Cycle $cycle) => $cycle->cycle_start_date);
 
-        $topProjectManagers = $this->buildTopProjectManagers($scoredCycles);
-
         $accountsCount = $platform === 'all'
             ? Account::count()
             : $allCyclesForPlatform->pluck('account_id')->unique()->count();
@@ -101,7 +99,6 @@ class DashboardController extends Controller
                 'counts' => $healthDistribution,
             ],
             'monthlyTrend' => $monthlyTrend,
-            'topProjectManagers' => $topProjectManagers,
         ];
     }
 
@@ -180,31 +177,7 @@ class DashboardController extends Controller
                 'instagram' => $performances->where('platform', 'instagram')->count(),
                 'tiktok' => $performances->where('platform', 'tiktok')->count(),
             ],
-            'topProjectManagers' => $this->buildTopEmployeesByPostCount($performances, 'project_manager_id'),
-            'topConceptors' => $this->buildTopEmployeesByPostCount($performances, 'conceptor_id'),
         ];
-    }
-
-    /**
-     * Top 3 employees by number of performance posts assigned to them under
-     * the given foreign key (editor_id or conceptor_id). Posts with no one
-     * assigned are excluded rather than grouped under a fake "unassigned" entry.
-     */
-    private function buildTopEmployeesByPostCount(Collection $performances, string $foreignKey): array
-    {
-        $assigned = $performances->filter(fn (Performance $performance) => $performance->{$foreignKey} !== null);
-
-        $byEmployee = $assigned->groupBy($foreignKey);
-
-        $employeeNames = Employee::whereIn('id', $byEmployee->keys())->pluck('name', 'id');
-
-        $ranked = $byEmployee->map(fn (Collection $rows, $employeeId) => [
-            'employee_id' => (int) $employeeId,
-            'employee_name' => $employeeNames->get($employeeId, 'Unknown'),
-            'post_count' => $rows->count(),
-        ])->sortByDesc('post_count')->take(3)->values();
-
-        return $ranked->all();
     }
 
     /**
@@ -228,31 +201,4 @@ class DashboardController extends Controller
         ])->values()->all();
     }
 
-    /**
-     * Top 3 project managers by average Health Rate across the cycles
-     * assigned to them (via cycle.project_manager_id — a cycle's PM can
-     * differ from its account's default PM). Cycles with no PM set are
-     * excluded rather than grouped under a fake "unassigned" entry.
-     */
-    private function buildTopProjectManagers(Collection $scoredCycles): array
-    {
-        $withPm = $scoredCycles->filter(fn ($row) => $row['cycle']->project_manager_id !== null);
-
-        $byPm = $withPm->groupBy(fn ($row) => $row['cycle']->project_manager_id);
-
-        $employeeNames = Employee::whereIn('id', $byPm->keys())->pluck('name', 'id');
-
-        $ranked = $byPm->map(function (Collection $rows, $pmId) use ($employeeNames) {
-            $avgHealthRate = $rows->avg('scores.health_rate');
-
-            return [
-                'employee_id' => (int) $pmId,
-                'employee_name' => $employeeNames->get($pmId, 'Unknown'),
-                'avg_health_rate' => round($avgHealthRate, 2),
-                'cycle_count' => $rows->count(),
-            ];
-        })->sortByDesc('avg_health_rate')->take(3)->values();
-
-        return $ranked->all();
-    }
 }
