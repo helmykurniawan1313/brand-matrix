@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import StatusBadge from './StatusBadge.vue';
+import { useAuth } from '../composables/useAuth';
 
 const props = defineProps({
     cycle: {
@@ -18,7 +19,9 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'edit']);
+
+const { canEdit } = useAuth();
 
 const bucketsFor = (metric) => props.scoreBuckets[metric] ?? [];
 
@@ -212,6 +215,19 @@ const aggregateRows = computed(() => [
                     </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
+                    <button
+                        v-if="canEdit"
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                        style="color: var(--ink-muted)"
+                        aria-label="Edit"
+                        @click="emit('edit', cycle)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" />
+                        </svg>
+                    </button>
                     <a
                         :href="pdfUrl"
                         class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"

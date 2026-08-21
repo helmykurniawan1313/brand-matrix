@@ -665,6 +665,11 @@ const closeDetail = () => {
     viewingCycle.value = null;
 };
 
+const editFromDetail = (cycle) => {
+    closeDetail();
+    openEdit(cycle);
+};
+
 const inputStyle =
     'mt-1 w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2';
 </script>
@@ -1208,6 +1213,7 @@ const inputStyle =
             :default-ai-provider="defaultAiProvider"
             :score-buckets="scoreBuckets"
             @close="closeDetail"
+            @edit="editFromDetail"
         />
 
         <FilterSummaryModal
