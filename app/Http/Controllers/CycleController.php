@@ -8,8 +8,10 @@ use App\Models\Employee;
 use App\Models\FilterSummary;
 use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
+use App\Models\Performance;
 use App\Models\ScoreBucket;
 use App\Services\MetricCalculator;
+use App\Services\PerformanceCycleAssigner;
 use App\Services\SummaryProviderResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -115,7 +117,13 @@ class CycleController extends Controller
         ]);
     }
 
-    public function pdf(Request $request, MetricCalculator $calculator): HttpResponse
+    /**
+     * The filtered, scored cycle collection shared by the PDF and Excel exports —
+     * same query/filter logic as index(), plus formatted dates and rounded scores
+     * for display. Also returns a human-readable filter summary for both exports'
+     * headers.
+     */
+    private function filteredScoredCyclesForExport(Request $request, MetricCalculator $calculator): array
     {
         $scoreBuckets = ScoreBucket::all();
         $labelBuckets = LabelBucket::all();
@@ -169,14 +177,34 @@ class CycleController extends Controller
             $filterParts[] = 'period: '.$this->formatMonthRange($monthFrom, $monthTo);
         }
 
+        return [
+            'cycles' => $cycles,
+            'filterSummary' => $filterParts ? implode(', ', $filterParts) : 'none',
+        ];
+    }
+
+    public function pdf(Request $request, MetricCalculator $calculator): HttpResponse
+    {
+        ['cycles' => $cycles, 'filterSummary' => $filterSummary] = $this->filteredScoredCyclesForExport($request, $calculator);
+
         $pdf = Pdf::loadView('pdf.cycles-list', [
             'cycles' => $cycles,
             'generatedAt' => now()->format('M j, Y g:i A'),
-            'filterSummary' => $filterParts ? implode(', ', $filterParts) : 'none',
+            'filterSummary' => $filterSummary,
             'aiSummary' => $request->string('ai_summary')->trim()->toString() ?: null,
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download('performance-cycles-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    public function exportExcel(Request $request, MetricCalculator $calculator): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        ['cycles' => $cycles] = $this->filteredScoredCyclesForExport($request, $calculator);
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\CyclesExport($cycles),
+            'performance-cycles-'.now()->format('Y-m-d').'.xlsx',
+        );
     }
 
     public function pdfSingle(Cycle $cycle, MetricCalculator $calculator): HttpResponse
@@ -350,27 +378,44 @@ class CycleController extends Controller
         return $next?->start_follower;
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
         $data = $this->validated($request);
 
-        Cycle::create($data);
+        $cycle = Cycle::create($data);
+
+        $cycleAssigner->syncForCycle($cycle);
 
         return back();
     }
 
-    public function update(Request $request, Cycle $cycle): RedirectResponse
+    public function update(Request $request, Cycle $cycle, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
         $data = $this->validated($request);
 
         $cycle->update($data);
 
+        // The cycle's account/platform/date range may have changed, so re-sync in both
+        // directions against the *new* range: pick up posts newly covered by it (previously
+        // unassigned or on another cycle), then re-resolve posts that were pointing at this
+        // cycle but may have fallen outside its new range and need to move elsewhere.
+        $cycleAssigner->syncForCycle($cycle);
+        $cycleAssigner->reassignAwayFromCycle($cycle);
+
         return back();
     }
 
-    public function destroy(Cycle $cycle): RedirectResponse
+    public function destroy(Cycle $cycle, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
+        // Capture affected posts before deleting — once the cycle is gone, the FK's
+        // nullOnDelete has already cleared their cycle_id, and re-resolving after that
+        // (rather than before) is what lets them fall back onto another covering cycle
+        // instead of just matching this same cycle again because it still existed.
+        $affectedPerformanceIds = $cycle->performances()->pluck('id');
+
         $cycle->delete();
+
+        $cycleAssigner->reassignMany(Performance::whereIn('id', $affectedPerformanceIds)->get());
 
         return back();
     }

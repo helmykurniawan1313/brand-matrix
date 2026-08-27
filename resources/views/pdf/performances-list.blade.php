@@ -37,6 +37,7 @@
         <thead>
             <tr>
                 <th>Account</th>
+                <th>Platform</th>
                 <th>Post Date</th>
                 <th>Ads</th>
                 <th>PM</th>
@@ -49,6 +50,7 @@
             @forelse ($performances as $performance)
                 <tr>
                     <td>{{ $performance['account']['name'] }}</td>
+                    <td>{{ ($performance['platform'] ?? 'instagram') === 'tiktok' ? 'TikTok' : 'Instagram' }}</td>
                     <td>{{ $performance['post_date_formatted'] }}</td>
                     <td>{{ $performance['ads'] === null ? '-' : ($performance['ads'] ? 'Yes' : 'No') }}</td>
                     <td>{{ $performance['project_manager']['name'] ?? '—' }}</td>
@@ -58,7 +60,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="empty">No records match the current filters.</td>
+                    <td colspan="8" class="empty">No records match the current filters.</td>
                 </tr>
             @endforelse
         </tbody>

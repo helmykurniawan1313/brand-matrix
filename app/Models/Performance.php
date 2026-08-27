@@ -21,6 +21,7 @@ class Performance extends Model
     protected $fillable = [
         'account_id',
         'platform',
+        'cycle_id',
         'post_date',
         'preview_date',
         'ads',
@@ -48,6 +49,11 @@ class Performance extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function cycle(): BelongsTo
+    {
+        return $this->belongsTo(Cycle::class);
     }
 
     public function projectManager(): BelongsTo

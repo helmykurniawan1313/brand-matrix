@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\FilterSummary;
 use App\Models\LabelBucket;
 use App\Models\Performance;
+use App\Services\PerformanceCycleAssigner;
 use App\Services\PerformanceIgSnapshotService;
 use App\Services\ScoreBucketResolver;
 use App\Services\SummaryProviderResolver;
@@ -80,16 +81,20 @@ class PerformanceController extends Controller
             'followerBuckets' => $followerBuckets->sortByDesc('min_score')->values(),
             'summary' => $summary,
             'statusDistribution' => $statusDistribution,
+            'topTierLabels' => $topTierLabels->values(),
+            'bottomTierLabels' => $bottomTierLabels->values(),
             'filters' => $this->filterDescription($request)['filters'],
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
     }
 
-    public function store(Request $request, VideoLinkThumbnailResolver $resolver, PerformanceIgSnapshotService $snapshots): RedirectResponse
+    public function store(Request $request, VideoLinkThumbnailResolver $resolver, PerformanceIgSnapshotService $snapshots, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
         $data = $this->validated($request);
 
-        $performance = Performance::create($this->tableData($data));
+        $performance = new Performance($this->tableData($data));
+        $cycleAssigner->assign($performance);
+        $performance->save();
 
         $this->storeProof($request, $performance);
         $this->syncVideoLinks($performance, $data['video_links'] ?? [], $resolver);
@@ -112,14 +117,16 @@ class PerformanceController extends Controller
         return back();
     }
 
-    public function update(Request $request, Performance $performance, VideoLinkThumbnailResolver $resolver): RedirectResponse
+    public function update(Request $request, Performance $performance, VideoLinkThumbnailResolver $resolver, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
         $data = $this->validated($request);
 
         // ig_media_id/ig_media_product_type are intentionally excluded from tableData()
         // here — linking/unlinking only ever happens through the dedicated endpoints,
         // never as a side effect of a generic edit-form save.
-        $performance->update($this->tableData($data));
+        $performance->fill($this->tableData($data));
+        $cycleAssigner->assign($performance);
+        $performance->save();
 
         $this->storeProof($request, $performance);
         $this->syncVideoLinks($performance, $data['video_links'] ?? [], $resolver);
@@ -140,7 +147,7 @@ class PerformanceController extends Controller
 
     public function pdf(Performance $performance, ScoreBucketResolver $resolver): HttpResponse
     {
-        $performance->load(['account', 'projectManager', 'conceptor', 'igSnapshots' => fn ($query) => $query->limit(1)]);
+        $performance->load(['account', 'cycle', 'projectManager', 'conceptor', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)]);
 
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
         $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
@@ -160,17 +167,24 @@ class PerformanceController extends Controller
         return $pdf->download($filename);
     }
 
-    public function pdfFiltered(Request $request, ScoreBucketResolver $resolver): HttpResponse
+    /**
+     * The filtered performance collection shared by the PDF and Excel exports.
+     */
+    private function filteredPerformancesForExport(Request $request, ScoreBucketResolver $resolver): Collection
     {
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
         $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
 
-        $performances = $this->filteredPerformances($request, $resolver, $viewsBuckets, $followerBuckets)
+        return $this->filteredPerformances($request, $resolver, $viewsBuckets, $followerBuckets)
             ->map(fn (Performance $performance) => [
                 ...$performance->toArray(),
                 'post_date_formatted' => $performance->post_date->format('M j, Y'),
             ]);
+    }
 
+    public function pdfFiltered(Request $request, ScoreBucketResolver $resolver): HttpResponse
+    {
+        $performances = $this->filteredPerformancesForExport($request, $resolver);
         $filterDescription = $this->filterDescription($request);
 
         $pdf = Pdf::loadView('pdf.performances-list', [
@@ -181,6 +195,16 @@ class PerformanceController extends Controller
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download('performance-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    public function exportExcel(Request $request, ScoreBucketResolver $resolver): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $performances = $this->filteredPerformancesForExport($request, $resolver);
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\PerformancesExport($performances),
+            'performance-'.now()->format('Y-m-d').'.xlsx',
+        );
     }
 
     public function summarize(Request $request, Performance $performance, ScoreBucketResolver $resolver, SummaryProviderResolver $providerResolver): JsonResponse
@@ -341,7 +365,7 @@ class PerformanceController extends Controller
         $search = $request->string('search')->trim()->toString() ?: null;
         $viewsH7 = $this->parseNullableFilter($request, 'views_h7');
 
-        $matching = Performance::with(['account', 'projectManager', 'conceptor', 'editor', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)])
+        $matching = Performance::with(['account', 'cycle', 'projectManager', 'conceptor', 'editor', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)])
             ->when($search, function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })

@@ -50,7 +50,13 @@
 <body>
     <div class="header">
         <h1>{{ $cycle->account->name }}</h1>
-        <p class="meta">{{ $cycle->cycle_start_date->format('M j, Y') }} &ndash; {{ $cycle->cycle_end_date->format('M j, Y') }}</p>
+        <p class="meta">
+            {{ $cycle->cycle_start_date->format('M j, Y') }} &ndash; {{ $cycle->cycle_end_date->format('M j, Y') }}
+            &nbsp;|&nbsp; {{ $cycle->platform === 'tiktok' ? 'TikTok' : 'Instagram' }}
+            @if ($cycle->projectManager)
+                &nbsp;|&nbsp; PM: {{ $cycle->projectManager->name }}
+            @endif
+        </p>
     </div>
 
     <table class="inputs">

@@ -66,6 +66,14 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    topTierLabels: {
+        type: Array,
+        default: () => [],
+    },
+    bottomTierLabels: {
+        type: Array,
+        default: () => [],
+    },
     defaultAiProvider: {
         type: String,
         default: 'groq',
@@ -143,6 +151,15 @@ const clearAllFilters = () => {
     viewsH7Filter.value = '';
     platformFilter.value = '';
     applyFilters();
+};
+
+// KPI tiles/banner are clickable shortcuts onto the same views-status filter
+// the Filter modal exposes — scrolls to the (now-filtered) table so the click
+// reads as "show me those records," not just a static count.
+const filterByViewsStatus = (labels) => {
+    viewsStatusFilter.value = [...labels];
+    applyFilters();
+    document.getElementById('performance-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 const sortBy = (column) => {
@@ -225,6 +242,14 @@ const pdfDownloadUrl = computed(() => {
     }
     const query = params.toString();
     return `/performances-pdf${query ? `?${query}` : ''}`;
+});
+
+const excelDownloadUrl = computed(() => {
+    const params = new URLSearchParams(
+        Object.entries(filterQuery()).filter(([, v]) => v !== undefined),
+    );
+    const query = params.toString();
+    return `/performances-excel${query ? `?${query}` : ''}`;
 });
 
 const showFilterSummaryModal = ref(false);
@@ -353,6 +378,20 @@ let statusDistributionChart = null;
 
 const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Each bar is a status tier (PARAH..SIP), so it wears the app's real status
+// color for that tier rather than one flat accent hue — matches the Dashboard's
+// Health Distribution chart convention (statusColorFor).
+const statusColorFor = (tier) =>
+    getCssVar(
+        {
+            SIP: '--status-sip-ink',
+            BAGUS: '--status-bagus-ink',
+            CUKUP: '--status-cukup-ink',
+            KURANG: '--status-kurang-ink',
+            PARAH: '--status-parah-ink',
+        }[String(tier).toUpperCase()] ?? '--accent',
+    ) || '#0f766e';
+
 const renderStatusDistributionChart = () => {
     if (!statusDistributionCanvas.value) return;
 
@@ -360,7 +399,6 @@ const renderStatusDistributionChart = () => {
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
     const border = getCssVar('--border') || '#d8dedc';
-    const accent = getCssVar('--accent') || '#0f766e';
 
     const tiers = props.statusDistribution.tiers ?? [];
     const counts = props.statusDistribution.counts ?? {};
@@ -373,7 +411,7 @@ const renderStatusDistributionChart = () => {
                 {
                     label: 'Views H+7 Status',
                     data: tiers.map((tier) => counts[tier] ?? 0),
-                    backgroundColor: accent,
+                    backgroundColor: tiers.map((tier) => statusColorFor(tier)),
                     borderRadius: 4,
                 },
             ],
@@ -393,7 +431,7 @@ const renderStatusDistributionChart = () => {
                 x: {
                     title: { display: true, text: 'Views H+7 Status', color: inkFaint },
                     ticks: { color: inkFaint },
-                    grid: { color: border },
+                    grid: { display: false },
                 },
                 y: {
                     beginAtZero: true,
@@ -443,22 +481,63 @@ onBeforeUnmount(() => {
             </button>
         </div>
 
-        <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard label="Records Tracked" :value="String(summary.total)" />
             <StatCard
                 label="Avg Views H+7"
                 :value="summary.avg_views !== null ? String(summary.avg_views) : '—'"
                 :hint="`across ${summary.total} record${summary.total === 1 ? '' : 's'}`"
             />
-            <StatCard label="Top Performing" :value="String(summary.top_performing_count)" hint="BAGUS or SIP" />
-            <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
+            <button
+                type="button"
+                class="rounded-lg border p-4 text-left transition-colors hover:opacity-80"
+                style="border-color: var(--border); background-color: var(--surface)"
+                title="Show top performing records"
+                @click="filterByViewsStatus(topTierLabels)"
+            >
+                <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Top Performing</p>
+                <p class="mt-1.5 font-display text-2xl font-bold tabular-nums" style="color: var(--ink)">{{ summary.top_performing_count }}</p>
+                <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">{{ topTierLabels.join(' or ') || '—' }}</p>
+            </button>
+        </div>
+
+        <!-- Needs Attention draws the eye as a status-colored banner rather than another
+             neutral stat card carrying the same visual weight as the rest (matches Dashboard/Cycles).
+             Clickable when there's something to show — filters the table below to those records. -->
+        <button
+            v-if="summary.total > 0 && summary.at_risk_count > 0"
+            type="button"
+            class="mt-3 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:opacity-90"
+            style="border-color: var(--status-parah-ink); background-color: var(--status-parah-bg)"
+            title="Show records that need attention"
+            @click="filterByViewsStatus(bottomTierLabels)"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6 shrink-0" style="color: var(--status-parah-ink)">
+                <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+            </svg>
+            <div>
+                <p class="font-display text-lg font-bold" style="color: var(--status-parah-ink)">
+                    {{ summary.at_risk_count }} record{{ summary.at_risk_count === 1 ? '' : 's' }} need{{ summary.at_risk_count === 1 ? 's' : '' }} attention
+                </p>
+                <p class="text-sm" style="color: var(--status-parah-ink)">Views H+7 status is KURANG or PARAH — click to filter the table below.</p>
+            </div>
+        </button>
+        <div
+            v-else-if="summary.total > 0"
+            class="mt-3 flex items-center gap-3 rounded-lg border p-4"
+            style="border-color: var(--status-sip-ink); background-color: var(--status-sip-bg)"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6 shrink-0" style="color: var(--status-sip-ink)">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3" />
+            </svg>
+            <p class="text-sm font-semibold" style="color: var(--status-sip-ink)">All records are performing well — nothing needs attention right now.</p>
         </div>
 
         <div v-if="summary.total > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-            <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+            <h3 class="text-sm font-semibold" style="color: var(--ink)">
                 Status Distribution
             </h3>
-            <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">
                 How many matching records landed on each Views H+7 status label.
             </p>
             <div class="mt-3" style="height: 260px">
@@ -467,7 +546,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="mt-8 flex flex-wrap items-center gap-3">
-            <div class="relative max-w-xs flex-1">
+            <div class="relative max-w-xs flex-1 sm:min-w-[16rem]">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -531,29 +610,43 @@ onBeforeUnmount(() => {
                 Clear filters
             </button>
 
-            <button
-                type="button"
-                class="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
-                style="border-color: var(--border); color: var(--ink)"
-                @click="openFilterSummaryModal"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-                    <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m9 9-2.1-2.1" />
-                    <circle cx="12" cy="12" r="3.5" />
-                </svg>
-                Summarize with AI
-            </button>
+            <div class="ml-auto flex items-center gap-3">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--accent); color: var(--accent)"
+                    @click="openFilterSummaryModal"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m9 9-2.1-2.1" />
+                        <circle cx="12" cy="12" r="3.5" />
+                    </svg>
+                    Summarize with AI
+                </button>
 
-            <a
-                :href="pdfDownloadUrl"
-                class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
-                style="border-color: var(--border); color: var(--ink-muted)"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
-                Download PDF
-            </a>
+                <a
+                    :href="excelDownloadUrl"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--border); color: var(--ink-muted)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
+                        <path d="M14 2v6h6M9.5 13l5 6M14.5 13l-5 6" />
+                    </svg>
+                    Export Excel
+                </a>
+
+                <a
+                    :href="pdfDownloadUrl"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--border); color: var(--ink-muted)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    Download PDF
+                </a>
+            </div>
         </div>
 
         <div
@@ -585,7 +678,8 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-            class="mt-4 overflow-hidden rounded-lg border"
+            id="performance-table"
+            class="mt-4 overflow-hidden rounded-lg border scroll-mt-4"
             style="border-color: var(--border); background-color: var(--surface)"
         >
             <div class="overflow-x-auto">

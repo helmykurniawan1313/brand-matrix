@@ -8,6 +8,8 @@ import InstagramDataModal from '../../Components/InstagramDataModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
+import StatCard from '../../Components/StatCard.vue';
+import StatusBadge from '../../Components/StatusBadge.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -20,6 +22,10 @@ const props = defineProps({
     accounts: {
         type: Object,
         required: true,
+    },
+    summary: {
+        type: Object,
+        default: () => ({ total: 0, instagram_connected: 0, at_risk: 0 }),
     },
     filters: {
         type: Object,
@@ -43,7 +49,7 @@ const goToPage = (url) => {
 };
 
 const search = ref(props.filters.search ?? '');
-const pmFilter = ref(props.filters.project_manager_id ? String(props.filters.project_manager_id) : '');
+const pmFilter = ref(props.filters.project_manager_id ? Number(props.filters.project_manager_id) : '');
 const sort = ref(props.filters.sort ?? 'name');
 const direction = ref(props.filters.direction ?? 'asc');
 let searchTimeout = null;
@@ -86,6 +92,11 @@ const sortBy = (column) => {
 };
 
 const pmOptions = props.accountDepartmentEmployees.map((employee) => ({ id: employee.id, name: employee.name }));
+
+const platformMeta = {
+    instagram: { label: 'IG', color: '#e1306c' },
+    tiktok: { label: 'TT', color: '#010101' },
+};
 
 // Create/Edit modal
 
@@ -213,6 +224,12 @@ const closeInstagram = () => {
             {{ flash.ig_error }}
         </div>
 
+        <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatCard label="Total Accounts" :value="String(summary.total)" />
+            <StatCard label="Instagram Connected" :value="String(summary.instagram_connected)" :hint="`of ${summary.total} accounts`" />
+            <StatCard label="Needs Attention" :value="String(summary.at_risk)" hint="latest cycle is KURANG or PARAH" />
+        </div>
+
         <div v-if="canEdit" class="mt-6">
             <button
                 type="button"
@@ -224,7 +241,8 @@ const closeInstagram = () => {
             </button>
         </div>
 
-        <div class="mt-8 flex flex-wrap items-center gap-3">
+        <div class="mt-6 flex flex-wrap items-center gap-3">
+            <span class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Filter</span>
             <div class="relative max-w-xs flex-1">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -260,17 +278,15 @@ const closeInstagram = () => {
                 </button>
             </div>
 
-            <select
+            <SearchableSelect
                 v-model="pmFilter"
-                class="rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none"
-                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                :options="pmOptions"
+                placeholder="All PMs"
+                clearable
+                clear-label="All PMs"
+                class="w-48"
                 @change="onPmFilterChange"
-            >
-                <option value="">All PMs</option>
-                <option v-for="employee in accountDepartmentEmployees" :key="employee.id" :value="String(employee.id)">
-                    {{ employee.name }}
-                </option>
-            </select>
+            />
         </div>
 
         <div
@@ -287,6 +303,17 @@ const closeInstagram = () => {
                         >
                             Name
                             <span v-if="sort === 'name'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                            Platforms
+                        </th>
+                        <th
+                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                            style="color: var(--ink-faint)"
+                            @click="sortBy('health')"
+                        >
+                            Health
+                            <span v-if="sort === 'health'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
                         </th>
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
@@ -320,6 +347,24 @@ const closeInstagram = () => {
                         <td class="px-4 py-3.5 text-sm font-medium" style="color: var(--ink)">
                             {{ account.name }}
                         </td>
+                        <td class="px-4 py-3.5 text-sm">
+                            <div v-if="account.platforms?.length" class="flex items-center gap-1.5">
+                                <span
+                                    v-for="platform in account.platforms"
+                                    :key="platform"
+                                    class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                                    :style="`background-color: ${platformMeta[platform]?.color ?? 'var(--ink-faint)'}`"
+                                    :title="platformMeta[platform]?.label ?? platform"
+                                >
+                                    {{ platformMeta[platform]?.label ?? '?' }}
+                                </span>
+                            </div>
+                            <span v-else style="color: var(--ink-faint)">—</span>
+                        </td>
+                        <td class="px-4 py-3.5 text-sm">
+                            <StatusBadge v-if="account.health_label" :status="account.health_label" />
+                            <span v-else style="color: var(--ink-faint)">No data</span>
+                        </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">
                             {{ account.project_manager?.name ?? '—' }}
                         </td>
@@ -341,7 +386,7 @@ const closeInstagram = () => {
                         </td>
                     </tr>
                     <tr v-if="accounts.data.length === 0">
-                        <td colspan="4" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td colspan="6" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             <template v-if="search">No accounts match "{{ search }}".</template>
                             <template v-else>No accounts yet. Add one to start tracking cycles.</template>
                         </td>

@@ -12,6 +12,7 @@ use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\ScoreBucketController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ViewsTrendController;
 use App\Models\LegalPage;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,9 @@ Route::middleware('auth')->group(function () {
     // --- Read-only routes: any authenticated user (including viewers) ---
 
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('views-trend', [ViewsTrendController::class, 'index'])->name('views-trend.index');
+    Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
 
     Route::resource('accounts', AccountController::class)->only(['index']);
     Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');
@@ -33,6 +37,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('cycles', CycleController::class)->only(['index']);
     Route::get('accounts/{account}/neighboring-cycle', [CycleController::class, 'neighboring'])->name('cycles.neighboring');
     Route::get('cycles-pdf', [CycleController::class, 'pdf'])->name('cycles.pdf');
+    Route::get('cycles-excel', [CycleController::class, 'exportExcel'])->name('cycles.excel');
     Route::get('cycles/{cycle}/pdf', [CycleController::class, 'pdfSingle'])->name('cycles.pdf-single');
     Route::post('cycles/{cycle}/summarize', [CycleController::class, 'summarize'])->name('cycles.summarize');
     Route::post('cycles-summarize', [CycleController::class, 'summarizeFiltered'])->name('cycles.summarize-filtered');
@@ -47,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::get('performances/{performance}/pdf', [PerformanceController::class, 'pdf'])->name('performances.pdf');
     Route::post('performances/{performance}/summarize', [PerformanceController::class, 'summarize'])->name('performances.summarize');
     Route::get('performances-pdf', [PerformanceController::class, 'pdfFiltered'])->name('performances.pdf-filtered');
+    Route::get('performances-excel', [PerformanceController::class, 'exportExcel'])->name('performances.excel');
     Route::post('performances-summarize', [PerformanceController::class, 'summarizeFiltered'])->name('performances.summarize-filtered');
 
     Route::get('settings/legal-pages', [LegalPageController::class, 'edit'])->name('legal-pages.edit');

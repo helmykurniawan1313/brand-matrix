@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cycle extends Model
 {
@@ -45,5 +46,10 @@ class Cycle extends Model
     public function projectManager(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'project_manager_id');
+    }
+
+    public function performances(): HasMany
+    {
+        return $this->hasMany(Performance::class);
     }
 }

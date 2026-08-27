@@ -22,6 +22,10 @@
         .insights .value { font-size: 13px; font-weight: bold; }
         .summary-box { border: 1px solid #d8dedc; padding: 10px; margin-top: 6px; line-height: 1.5; }
         .summary-meta { font-size: 9px; color: #8b979b; margin-top: 6px; }
+        .notes { margin-top: 4px; }
+        .note-tag { display: inline-block; background: #e3f1ee; color: #0f6e63; font-size: 9px; font-weight: bold; padding: 3px 8px; border-radius: 3px; margin: 0 4px 4px 0; }
+        .links td { padding: 6px 8px; border: 1px solid #d8dedc; font-size: 10px; word-break: break-all; }
+        .proof-img { max-width: 260px; max-height: 260px; margin-top: 6px; border: 1px solid #d8dedc; }
     </style>
 </head>
 <body>
@@ -38,11 +42,21 @@
     <table class="inputs">
         <tr>
             <td><span class="label">Preview Date</span><span class="value">{{ $performance->preview_date?->format('M j, Y') ?? '—' }}</span></td>
+            <td><span class="label">Cycle</span><span class="value">{{ $performance->cycle ? $performance->cycle->cycle_start_date->format('M j, Y').' – '.$performance->cycle->cycle_end_date->format('M j, Y') : 'No cycle' }}</span></td>
             <td><span class="label">Ads</span><span class="value">{{ $performance->ads === null ? '-' : ($performance->ads ? 'Yes' : 'No') }}</span></td>
             <td><span class="label">Followers</span><span class="value">{{ $performance->followers !== null ? number_format($performance->followers) : '—' }}</span></td>
             <td><span class="label">Views H+7</span><span class="value">{{ $performance->total_views_h7 !== null ? number_format($performance->total_views_h7) : '—' }}</span></td>
         </tr>
     </table>
+
+    @if ($performance->notes)
+        <p class="section-title">Notes</p>
+        <div class="notes">
+            @foreach ($performance->notes as $note)
+                <span class="note-tag">{{ $note }}</span>
+            @endforeach
+        </div>
+    @endif
 
     <p class="section-title">Status</p>
     <table class="aggregates">
@@ -82,6 +96,22 @@
                 @endforeach
             </tr>
         </table>
+    @endif
+
+    @if ($performance->videoLinks->isNotEmpty())
+        <p class="section-title">Video Links</p>
+        <table class="links">
+            @foreach ($performance->videoLinks as $link)
+                <tr>
+                    <td>{{ ucfirst($link->platform ?? '—') }}: {{ $link->url }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
+    @if ($performance->proof_path && file_exists(storage_path('app/public/'.$performance->proof_path)))
+        <p class="section-title">Upload Proof</p>
+        <img class="proof-img" src="{{ storage_path('app/public/'.$performance->proof_path) }}">
     @endif
 
     @if ($performance->ai_summary)

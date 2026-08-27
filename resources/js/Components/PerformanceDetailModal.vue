@@ -238,6 +238,13 @@ onMounted(processEmbeds);
                     <p class="mt-0.5 text-sm font-semibold" style="color: var(--ink)">{{ formatDate(performance.preview_date) }}</p>
                 </div>
                 <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
+                    <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Cycle</p>
+                    <p v-if="performance.cycle" class="mt-0.5 text-sm font-semibold" style="color: var(--ink)">
+                        {{ formatDate(performance.cycle.cycle_start_date) }} – {{ formatDate(performance.cycle.cycle_end_date) }}
+                    </p>
+                    <p v-else class="mt-0.5 text-sm" style="color: var(--ink-faint)">No cycle</p>
+                </div>
+                <div class="rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
                     <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Ads</p>
                     <p class="mt-0.5 text-sm font-semibold" style="color: var(--ink)">{{ performance.ads === null ? '-' : performance.ads ? 'Yes' : 'No' }}</p>
                 </div>

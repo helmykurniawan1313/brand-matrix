@@ -1,6 +1,7 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from 'chart.js/auto';
+import StatusBadge from './StatusBadge.vue';
 
 const props = defineProps({
     account: {
@@ -11,6 +12,10 @@ const props = defineProps({
         type: String,
         default: 'groq',
     },
+    initialPlatform: {
+        type: String,
+        default: 'instagram',
+    },
 });
 
 const emit = defineEmits(['close']);
@@ -18,6 +23,15 @@ const emit = defineEmits(['close']);
 const loading = ref(true);
 const error = ref(null);
 const cycles = ref([]);
+const emptyCountAndViews = () => ({ total_posts: 0, total_views: 0 });
+const emptySummary = () => ({
+    total_posts: 0,
+    total_views: 0,
+    avg_views: null,
+    with_cycle: emptyCountAndViews(),
+    without_cycle: emptyCountAndViews(),
+});
+const postSummary = ref({ instagram: emptySummary(), tiktok: emptySummary() });
 
 const tabs = [
     { key: 'instagram', label: 'Instagram' },
@@ -25,30 +39,87 @@ const tabs = [
     { key: 'ai-summary', label: 'AI Summary' },
 ];
 
-const activeTab = ref('instagram');
+const activeTab = ref(props.initialPlatform === 'tiktok' ? 'tiktok' : 'instagram');
 
 const platformCycles = (platform) => cycles.value.filter((c) => (c.platform ?? 'instagram') === platform);
 
+// Range filter for the CHARTS only — scopes every chart together (one control, above
+// everything it affects, never silently truncated). The KPI headline/delta always
+// reads the true latest cycle regardless of this filter, since "vs last cycle" means
+// the actual last cycle, not whatever the chart window happens to include.
+const rangeOptions = [
+    { value: 6, label: 'Last 6 cycles' },
+    { value: 12, label: 'Last 12 cycles' },
+    { value: 'all', label: 'All cycles' },
+];
+const range = ref(12);
+
+const allActiveCycles = computed(() => platformCycles(activeTab.value));
+const activeCycles = computed(() => {
+    if (range.value === 'all') return allActiveCycles.value;
+    return allActiveCycles.value.slice(-range.value);
+});
+const latestCycle = computed(() => allActiveCycles.value.at(-1) ?? null);
+const previousCycle = computed(() => allActiveCycles.value.at(-2) ?? null);
+
+const activePlatformSummary = () => postSummary.value[activeTab.value] ?? emptySummary();
+
+const formatCount = (value) => new Intl.NumberFormat('en-US').format(value ?? 0);
+
+const formatCountOrDash = (value) => (value === null || value === undefined ? '—' : formatCount(value));
+
+// Compact form for stat-tile values: 1,284 / 12.9K / 4.2M, matching the "auto-compact" contract.
+const formatCompact = (value) => {
+    if (value === null || value === undefined) return '—';
+    return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+};
+
+// Delta between the latest cycle and the one before it — direction + magnitude,
+// used by stat tiles so a single number doesn't have to carry "is this good?" alone.
+const deltaFor = (key) => {
+    if (!latestCycle.value || !previousCycle.value) return null;
+    const current = latestCycle.value[key];
+    const previous = previousCycle.value[key];
+    if (current === null || previous === null || previous === undefined || current === undefined) return null;
+    if (previous === 0) return null;
+    return ((current - previous) / previous) * 100;
+};
+
+const formatDelta = (delta) => {
+    if (delta === null) return null;
+    const rounded = Math.round(delta * 10) / 10;
+    return `${rounded > 0 ? '+' : ''}${rounded}%`;
+};
+
+// volumeTiles: Reach / Views / Engagement / Story Performance as stat tiles with
+// a delta arrow instead of four separate single-series line charts — the reader
+// needs "is it up or down since last cycle," not four more mini line-charts.
+const volumeTiles = computed(() => [
+    { key: 'reach', label: 'Reach' },
+    { key: 'views', label: 'Views' },
+    { key: 'engagement', label: 'Engagement' },
+    { key: 'story_performance', label: 'Story Performance' },
+]);
+
+// Posts & Views gets its own full-width row (it's two stacked single-series charts,
+// so it needs the room); Scores and Engagement Rate are single combined charts and
+// pair comfortably in a row together.
+const wideChartSection = { key: 'posts', title: 'Posts & Views per Cycle', description: 'How much was posted, and how many views it earned, cycle by cycle.' };
 const chartSections = [
-    { key: 'overview', title: 'Growth' },
-    { key: 'volume', title: 'Volume' },
-    { key: 'story-performance', title: 'Story Performance' },
-    { key: 'scores', title: 'Scores' },
-    { key: 'engagement-rate', title: 'Engagement Rate' },
+    { key: 'scores', title: 'Scores', description: 'Visibility, Engagement, and Health scores side by side.' },
+    { key: 'engagement-rate', title: 'Engagement Rate', description: 'Engagement measured against reach vs. against followers.' },
 ];
 
 const chartConfigs = {
-    overview: [
+    followers: [
         { key: 'end_follower', label: 'Followers', suffix: '', single: true },
-        { key: 'growth_rate', label: 'Growth Rate', suffix: '%', single: true },
     ],
-    volume: [
-        { key: 'reach', label: 'Reach', suffix: '', single: true },
-        { key: 'views', label: 'Views', suffix: '', single: true },
-        { key: 'engagement', label: 'Engagement', suffix: '', single: true },
-    ],
-    'story-performance': [
-        { key: 'story_performance', label: 'Story Performance', suffix: '', single: true },
+    posts: [
+        // Posts (small counts) and Views (tens of thousands) sit on wildly different
+        // scales — one combined line chart would flatten Posts to a near-invisible
+        // line at the bottom, so these stay two separate single-series charts.
+        { key: 'post_count', label: 'Posts', suffix: '', single: true },
+        { key: 'view_count', label: 'Views', suffix: '', single: true },
     ],
     scores: [
         {
@@ -82,6 +153,7 @@ const charts = {};
 
 const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Fixed categorical order (never cycled) — accent first, then two more app-consistent hues.
 const palette = () => [
     getCssVar('--accent') || '#0f766e',
     '#c2410c',
@@ -118,7 +190,10 @@ const renderChart = (config, dataCycles) => {
         borderColor: colors[i % colors.length],
         backgroundColor: colors[i % colors.length],
         pointBackgroundColor: colors[i % colors.length],
-        pointRadius: 3,
+        pointBorderColor: getCssVar('--surface') || '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        borderWidth: 2,
         tension: 0.3,
         fill: false,
     }));
@@ -130,7 +205,8 @@ const renderChart = (config, dataCycles) => {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: config.combined, labels: { color: inkFaint } },
+                // A single series names itself in the section title — no legend box needed.
+                legend: { display: series.length > 1, labels: { color: inkFaint, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (context) => `${context.dataset.label}: ${formatValue(context.parsed.y, config.suffix)}`,
@@ -140,7 +216,7 @@ const renderChart = (config, dataCycles) => {
             scales: {
                 x: {
                     ticks: { color: inkFaint },
-                    grid: { color: border },
+                    grid: { display: false },
                 },
                 y: {
                     ticks: {
@@ -158,11 +234,11 @@ const renderAllCharts = async () => {
     destroyAllCharts();
     if (activeTab.value !== 'instagram' && activeTab.value !== 'tiktok') return;
     await nextTick();
-    const dataCycles = platformCycles(activeTab.value);
-    allChartConfigs().forEach((config) => renderChart(config, dataCycles));
+    allChartConfigs().forEach((config) => renderChart(config, activeCycles.value));
 };
 
 watch(activeTab, renderAllCharts);
+watch(range, renderAllCharts);
 
 // AI Summary tab
 
@@ -260,7 +336,7 @@ const captureChartImage = (config, dataCycles) => {
                 animation: false,
                 backgroundColor: 'white',
                 plugins: {
-                    legend: { display: config.combined, labels: { color: '#12181a' } },
+                    legend: { display: series.length > 1, labels: { color: '#12181a' } },
                 },
                 scales: {
                     x: { ticks: { color: inkFaint }, grid: { color: border } },
@@ -298,7 +374,7 @@ const downloadPdf = async () => {
     exportError.value = null;
 
     try {
-        const dataCycles = platformCycles(activeTab.value === 'tiktok' ? 'tiktok' : 'instagram');
+        const dataCycles = activeCycles.value;
         const images = await Promise.all(
             allChartConfigs().map(async (config) => ({
                 label: config.label,
@@ -319,6 +395,24 @@ const downloadPdf = async () => {
             body: JSON.stringify({
                 charts: images,
                 ai_summary: summaryResult.value?.summary ?? undefined,
+                // Headline numbers the modal leads with — same data the KPI tiles and
+                // Volume section show, so the PDF isn't just charts with no numbers.
+                summary: {
+                    platform: activeTab.value === 'tiktok' ? 'TikTok' : 'Instagram',
+                    followers: latestCycle.value?.end_follower ?? null,
+                    followers_delta: deltaFor('end_follower'),
+                    health_label: latestCycle.value?.health_label ?? null,
+                    health_rate: latestCycle.value?.health_rate ?? null,
+                    growth_rate: latestCycle.value?.growth_rate ?? null,
+                    avg_views: activePlatformSummary().avg_views ?? null,
+                    total_posts: activePlatformSummary().total_posts ?? null,
+                    latest_cycle_label: latestCycle.value?.label ?? null,
+                    volume: volumeTiles.value.map((tile) => ({
+                        label: tile.label,
+                        value: latestCycle.value?.[tile.key] ?? null,
+                        delta: deltaFor(tile.key),
+                    })),
+                },
             }),
         });
 
@@ -362,6 +456,7 @@ const load = async () => {
         }
 
         cycles.value = data.cycles;
+        postSummary.value = data.postSummary ?? postSummary.value;
 
         if (data.ai_summary) {
             summaryResult.value = {
@@ -506,26 +601,135 @@ onBeforeUnmount(() => {
                     No {{ activeTab === 'tiktok' ? 'TikTok' : 'Instagram' }} cycles recorded for this account yet.
                 </p>
 
-                <div v-else class="space-y-8">
-                    <section v-for="section in chartSections" :key="section.key">
-                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ section.title }}</h3>
-                        <div
-                            class="mt-3 grid grid-cols-1 gap-6"
-                            :class="{
-                                'sm:grid-cols-2': chartConfigs[section.key].length === 2,
-                                'sm:grid-cols-2 xl:grid-cols-3': chartConfigs[section.key].length >= 3,
-                            }"
+                <div v-else>
+                    <!-- Headline: the numbers this modal exists to answer, stated plainly. -->
+                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Followers</p>
+                            <p class="mt-1 font-display text-2xl font-bold" style="color: var(--ink)">
+                                {{ formatCompact(latestCycle?.end_follower) }}
+                            </p>
+                            <p v-if="deltaFor('end_follower') !== null" class="mt-0.5 text-xs font-medium" :style="deltaFor('end_follower') >= 0 ? 'color: var(--status-sip-ink)' : 'color: var(--status-parah-ink)'">
+                                {{ formatDelta(deltaFor('end_follower')) }} vs last cycle
+                            </p>
+                        </div>
+                        <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Health</p>
+                            <div class="mt-1.5">
+                                <StatusBadge :status="latestCycle?.health_label" />
+                            </div>
+                            <p class="mt-1.5 text-xs" style="color: var(--ink-muted)">{{ latestCycle?.health_rate }} rate</p>
+                        </div>
+                        <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Growth Rate</p>
+                            <p class="mt-1 font-display text-2xl font-bold" :style="latestCycle?.growth_rate >= 0 ? 'color: var(--ink)' : 'color: var(--status-parah-ink)'">
+                                {{ latestCycle?.growth_rate }}%
+                            </p>
+                            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">latest cycle</p>
+                        </div>
+                        <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Avg Views</p>
+                            <p class="mt-1 font-display text-2xl font-bold" style="color: var(--ink)">
+                                {{ formatCountOrDash(activePlatformSummary().avg_views) }}
+                            </p>
+                            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">
+                                {{ formatCount(activePlatformSummary().total_posts) }} posts total
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Range filter — one control, above every chart it scopes; the KPI row above
+                         stays fixed to the true latest cycle regardless of this selection. -->
+                    <div v-if="allActiveCycles.length > 6" class="mt-4 flex items-center justify-end gap-2">
+                        <label class="text-xs font-medium" style="color: var(--ink-muted)">Chart range</label>
+                        <select
+                            v-model="range"
+                            class="rounded-md border px-2.5 py-1.5 text-xs transition-colors focus:outline-none"
+                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
                         >
-                            <div v-for="config in chartConfigs[section.key]" :key="config.key">
-                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                            <option v-for="option in rangeOptions" :key="option.value" :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- The one real trend that matters at a glance: followers over time. -->
+                    <div class="mt-4 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">Followers</h3>
+                        <p class="text-xs" style="color: var(--ink-faint)">End-of-cycle follower count.</p>
+                        <div class="relative mt-3" style="height: 220px">
+                            <canvas :ref="(el) => setCanvasRef('end_follower', el)"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Volume: stat tiles with a delta arrow instead of three more mini line-charts. -->
+                    <div class="mt-4 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">Volume</h3>
+                        <p class="text-xs" style="color: var(--ink-faint)">Latest cycle, compared to the one before it.</p>
+                        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div v-for="tile in volumeTiles" :key="tile.key" class="rounded-md border p-3" style="border-color: var(--border); background-color: var(--bg)">
+                                <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">{{ tile.label }}</p>
+                                <p class="mt-0.5 font-display text-lg font-bold" style="color: var(--ink)">
+                                    {{ formatCompact(latestCycle?.[tile.key]) }}
+                                </p>
+                                <p v-if="deltaFor(tile.key) !== null" class="mt-0.5 text-xs font-medium" :style="deltaFor(tile.key) >= 0 ? 'color: var(--status-sip-ink)' : 'color: var(--status-parah-ink)'">
+                                    {{ deltaFor(tile.key) >= 0 ? '▲' : '▼' }} {{ Math.abs(Math.round(deltaFor(tile.key) * 10) / 10) }}%
+                                </p>
+                                <p v-else class="mt-0.5 text-xs" style="color: var(--ink-faint)">—</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ wideChartSection.title }}</h3>
+                        <p class="text-xs" style="color: var(--ink-faint)">{{ wideChartSection.description }}</p>
+                        <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div v-for="config in chartConfigs[wideChartSection.key]" :key="config.key">
+                                <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                                     {{ config.label }}
                                 </p>
-                                <div class="relative" style="height: 260px">
+                                <div class="relative" style="height: 220px">
                                     <canvas :ref="(el) => setCanvasRef(config.key, el)"></canvas>
                                 </div>
                             </div>
                         </div>
-                    </section>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div v-for="section in chartSections" :key="section.key" class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ section.title }}</h3>
+                            <p class="text-xs" style="color: var(--ink-faint)">{{ section.description }}</p>
+                            <div v-for="config in chartConfigs[section.key]" :key="config.key">
+                                <div class="relative mt-3" style="height: 220px">
+                                    <canvas :ref="(el) => setCanvasRef(config.key, el)"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cycle coverage detail — supporting detail, not the headline, so it sits below the charts. -->
+                    <div class="mt-4 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                        <h3 class="font-display text-sm font-bold" style="color: var(--ink)">Cycle Coverage</h3>
+                        <p class="text-xs" style="color: var(--ink-faint)">Posts that fall inside a tracked cycle vs. posts that don't yet.</p>
+                        <div class="mt-3 grid grid-cols-2 gap-3 sm:max-w-md">
+                            <div class="rounded-md border p-3" style="border-color: var(--border); background-color: var(--bg)">
+                                <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">With Cycle</p>
+                                <p class="mt-0.5 font-display text-lg font-bold" style="color: var(--ink)">
+                                    {{ formatCount(activePlatformSummary().with_cycle.total_posts) }}
+                                    <span class="text-xs font-normal" style="color: var(--ink-faint)">posts</span>
+                                </p>
+                                <p class="text-xs" style="color: var(--ink-muted)">{{ formatCount(activePlatformSummary().with_cycle.total_views) }} views</p>
+                            </div>
+                            <div class="rounded-md border p-3" style="border-color: var(--border); background-color: var(--bg)">
+                                <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Without Cycle</p>
+                                <p class="mt-0.5 font-display text-lg font-bold" style="color: var(--ink)">
+                                    {{ formatCount(activePlatformSummary().without_cycle.total_posts) }}
+                                    <span class="text-xs font-normal" style="color: var(--ink-faint)">posts</span>
+                                </p>
+                                <p class="text-xs" style="color: var(--ink-muted)">{{ formatCount(activePlatformSummary().without_cycle.total_views) }} views</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

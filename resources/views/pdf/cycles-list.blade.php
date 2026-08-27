@@ -39,7 +39,9 @@
         <thead>
             <tr>
                 <th>Account</th>
+                <th>Platform</th>
                 <th>Period</th>
+                <th>PM Name</th>
                 <th class="num">Growth Rate</th>
                 <th class="num">Visibility</th>
                 <th class="num">Engagement</th>
@@ -51,7 +53,9 @@
             @forelse ($cycles as $cycle)
                 <tr>
                     <td>{{ $cycle['account']['name'] }}</td>
+                    <td>{{ $cycle['platform'] === 'tiktok' ? 'TikTok' : 'Instagram' }}</td>
                     <td>{{ $cycle['cycle_start_date_formatted'] }} &ndash; {{ $cycle['cycle_end_date_formatted'] }}</td>
+                    <td>{{ $cycle['project_manager']['name'] ?? '—' }}</td>
                     <td class="num">{{ $cycle['scores']['growth_rate'] }}%</td>
                     <td class="num">{{ $cycle['scores']['visibility_rate'] }}</td>
                     <td class="num">{{ $cycle['scores']['engagement_score'] }}</td>
@@ -60,7 +64,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="empty">No cycles match the current filters.</td>
+                    <td colspan="9" class="empty">No cycles match the current filters.</td>
                 </tr>
             @endforelse
         </tbody>

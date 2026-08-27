@@ -201,6 +201,17 @@ const applyFilters = () => {
     router.get('/cycles', filterQuery.value, { preserveScroll: true, preserveState: true, replace: true });
 };
 
+// KPI tiles/banner are clickable shortcuts onto the Health Status filter —
+// scrolls to the (now-filtered) table so the click reads as "show me those
+// cycles," not just a static count. Health labels are fixed strings per the
+// scoring model (SIP/BAGUS/CUKUP/KURANG/PARAH), unlike Performance's
+// user-configurable views-status buckets, so these are safe to hardcode here.
+const filterByHealth = (labels) => {
+    healthFilter.value = [...labels];
+    applyFilters();
+    document.getElementById('cycles-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 const onSearchInput = () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(applyFilters, 300);
@@ -316,6 +327,14 @@ const pdfDownloadUrl = computed(() => {
     return `/cycles-pdf${query ? `?${query}` : ''}`;
 });
 
+const excelDownloadUrl = computed(() => {
+    const params = new URLSearchParams(
+        Object.entries(filterQuery.value).filter(([, v]) => v !== undefined),
+    );
+    const query = params.toString();
+    return `/cycles-excel${query ? `?${query}` : ''}`;
+});
+
 // Filtered-set AI summary
 
 const showFilterSummaryModal = ref(false);
@@ -399,6 +418,18 @@ let scoreDistributionChart = null;
 
 const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Validated colorblind-safe categorical slots 1-4 (blue/orange/aqua/yellow), fixed
+// order — Growth/Visibility/Engagement/Health are 4 distinct series here, not a
+// magnitude ramp, so each gets its own identity hue rather than a shared accent.
+const isDarkMode = () =>
+    document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+const categoricalColors = () =>
+    isDarkMode()
+        ? ['#3987e5', '#d95926', '#199e70', '#c98500']
+        : ['#2a78d6', '#eb6834', '#1baf7a', '#eda100'];
+
 const renderScoreDistributionChart = () => {
     if (!scoreDistributionCanvas.value) return;
 
@@ -406,12 +437,7 @@ const renderScoreDistributionChart = () => {
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
     const border = getCssVar('--border') || '#d8dedc';
-    const colors = [
-        getCssVar('--accent') || '#0f766e',
-        '#c2410c',
-        '#7c3aed',
-        '#2563eb',
-    ];
+    const colors = categoricalColors();
 
     const tiers = props.scoreDistribution.tiers ?? [];
     const series = props.scoreDistribution.series ?? [];
@@ -695,22 +721,63 @@ const inputStyle =
             </button>
         </div>
 
-        <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard label="Cycles Tracked" :value="String(summary.total)" />
             <StatCard
                 label="Avg Health Rate"
                 :value="String(summary.avg_health_rate)"
                 :hint="`across ${summary.total} cycle${summary.total === 1 ? '' : 's'}`"
             />
-            <StatCard label="Healthy (SIP)" :value="String(summary.healthy_count)" hint="cycles at top tier" />
-            <StatCard label="Needs Attention" :value="String(summary.at_risk_count)" hint="KURANG or PARAH" />
+            <button
+                type="button"
+                class="rounded-lg border p-4 text-left transition-colors hover:opacity-80"
+                style="border-color: var(--border); background-color: var(--surface)"
+                title="Show healthy (SIP) cycles"
+                @click="filterByHealth(['SIP'])"
+            >
+                <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Healthy (SIP)</p>
+                <p class="mt-1.5 font-display text-2xl font-bold tabular-nums" style="color: var(--ink)">{{ summary.healthy_count }}</p>
+                <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">cycles at top tier</p>
+            </button>
+        </div>
+
+        <!-- Needs Attention draws the eye as a status-colored banner rather than another
+             neutral stat card carrying the same visual weight as the rest (matches Dashboard).
+             Clickable when there's something to show — filters the table below to those cycles. -->
+        <button
+            v-if="summary.total > 0 && summary.at_risk_count > 0"
+            type="button"
+            class="mt-3 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:opacity-90"
+            style="border-color: var(--status-parah-ink); background-color: var(--status-parah-bg)"
+            title="Show cycles that need attention"
+            @click="filterByHealth(['KURANG', 'PARAH'])"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6 shrink-0" style="color: var(--status-parah-ink)">
+                <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+            </svg>
+            <div>
+                <p class="font-display text-lg font-bold" style="color: var(--status-parah-ink)">
+                    {{ summary.at_risk_count }} cycle{{ summary.at_risk_count === 1 ? '' : 's' }} need{{ summary.at_risk_count === 1 ? 's' : '' }} attention
+                </p>
+                <p class="text-sm" style="color: var(--status-parah-ink)">Health label is KURANG or PARAH — click to filter the table below.</p>
+            </div>
+        </button>
+        <div
+            v-else-if="summary.total > 0"
+            class="mt-3 flex items-center gap-3 rounded-lg border p-4"
+            style="border-color: var(--status-sip-ink); background-color: var(--status-sip-bg)"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-6 w-6 shrink-0" style="color: var(--status-sip-ink)">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3" />
+            </svg>
+            <p class="text-sm font-semibold" style="color: var(--status-sip-ink)">All cycles are in good health — nothing needs attention right now.</p>
         </div>
 
         <div v-if="summary.total > 0" class="mt-6 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-            <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+            <h3 class="text-sm font-semibold" style="color: var(--ink)">
                 Score Distribution
             </h3>
-            <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">
+            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">
                 How many matching cycles landed on each label — Growth Rate, Visibility, Engagement &amp; Health.
             </p>
             <div class="mt-3" style="height: 260px">
@@ -719,7 +786,7 @@ const inputStyle =
         </div>
 
         <div class="mt-8 flex flex-wrap items-center gap-3">
-            <div class="relative max-w-xs flex-1">
+            <div class="relative max-w-xs flex-1 sm:min-w-[16rem]">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -783,29 +850,43 @@ const inputStyle =
                 Clear filters
             </button>
 
-            <button
-                type="button"
-                class="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
-                style="border-color: var(--border); color: var(--ink)"
-                @click="openFilterSummaryModal"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-                    <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m9 9-2.1-2.1" />
-                    <circle cx="12" cy="12" r="3.5" />
-                </svg>
-                Summarize with AI
-            </button>
+            <div class="ml-auto flex items-center gap-3">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--accent); color: var(--accent)"
+                    @click="openFilterSummaryModal"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.5-6.5-2.1 2.1M8.6 15.4l-2.1 2.1m0-11 2.1 2.1m9 9-2.1-2.1" />
+                        <circle cx="12" cy="12" r="3.5" />
+                    </svg>
+                    Summarize with AI
+                </button>
 
-            <a
-                :href="pdfDownloadUrl"
-                class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
-                style="border-color: var(--border); color: var(--ink-muted)"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
-                Download PDF
-            </a>
+                <a
+                    :href="excelDownloadUrl"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--border); color: var(--ink-muted)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
+                        <path d="M14 2v6h6M9.5 13l5 6M14.5 13l-5 6" />
+                    </svg>
+                    Export Excel
+                </a>
+
+                <a
+                    :href="pdfDownloadUrl"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--border); color: var(--ink-muted)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    Download PDF
+                </a>
+            </div>
         </div>
 
         <div
@@ -837,7 +918,8 @@ const inputStyle =
         </div>
 
         <div
-            class="mt-3 overflow-hidden rounded-lg border"
+            id="cycles-table"
+            class="mt-3 overflow-hidden rounded-lg border scroll-mt-4"
             style="border-color: var(--border); background-color: var(--surface)"
         >
             <div class="overflow-x-auto">

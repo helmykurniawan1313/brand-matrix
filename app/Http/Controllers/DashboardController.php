@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\Cycle;
-use App\Models\Employee;
 use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
 use App\Models\Performance;
@@ -38,7 +37,6 @@ class DashboardController extends Controller
                 'range' => $range,
             ],
             'platformCounts' => $platformCounts,
-            'employeesCount' => Employee::count(),
             'cycleData' => fn () => $this->buildCycleData($platform, $range, $calculator),
             'performanceData' => fn () => $this->buildPerformanceData($platform, $range, $resolver),
         ]);
