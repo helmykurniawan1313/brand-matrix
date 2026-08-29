@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
-import Chart from 'chart.js/auto';
+import Chart from '../../chartSetup';
 import AppLayout from '../../Layouts/AppLayout.vue';
 
 import PerformanceFormModal from '../../Components/PerformanceFormModal.vue';

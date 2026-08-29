@@ -18,6 +18,7 @@ const icons = {
     buckets: 'M4 4h16l-6.5 8v6l-3 2v-8L4 4z',
     viewsTrend: 'M22 12h-4l-3 9L9 3l-3 9H2',
     users: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+    siteSettings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
     instagram: 'M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM17.5 6.5h.01',
     tiktok: 'M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5',
 };
@@ -55,7 +56,11 @@ const baseNavItems = [
 
 const navItems = computed(() =>
     isSuperAdmin.value
-        ? [...baseNavItems, { label: 'Users', href: '/users', icon: icons.users }]
+        ? [
+              ...baseNavItems,
+              { label: 'Users', href: '/users', icon: icons.users },
+              { label: 'Site Settings', href: '/settings/site', icon: icons.siteSettings },
+          ]
         : baseNavItems,
 );
 

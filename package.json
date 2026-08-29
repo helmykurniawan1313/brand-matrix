@@ -16,6 +16,7 @@
     },
     "dependencies": {
         "@inertiajs/vue3": "^3.6.1",
+        "@lottiefiles/dotlottie-wc": "^0.9.28",
         "@tiptap/extension-link": "^3.28.0",
         "@tiptap/starter-kit": "^3.28.0",
         "@tiptap/vue-3": "^3.28.0",

@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\SanitizesForSpreadsheet;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -16,6 +17,8 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  */
 class CyclesExport implements FromCollection, WithHeadings, WithMapping, WithStyles
 {
+    use SanitizesForSpreadsheet;
+
     public function __construct(private Collection $cycles)
     {
     }
@@ -44,11 +47,11 @@ class CyclesExport implements FromCollection, WithHeadings, WithMapping, WithSty
     public function map($cycle): array
     {
         return [
-            $cycle['account']['name'] ?? '—',
+            $this->sanitizeForSpreadsheet($cycle['account']['name'] ?? '—'),
             $cycle['platform'] === 'tiktok' ? 'TikTok' : 'Instagram',
             $cycle['cycle_start_date_formatted'],
             $cycle['cycle_end_date_formatted'],
-            $cycle['project_manager']['name'] ?? '—',
+            $this->sanitizeForSpreadsheet($cycle['project_manager']['name'] ?? '—'),
             $cycle['scores']['growth_rate'],
             $cycle['scores']['visibility_rate'],
             $cycle['scores']['engagement_score'],

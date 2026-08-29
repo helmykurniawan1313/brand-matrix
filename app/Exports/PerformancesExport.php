@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\SanitizesForSpreadsheet;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -16,6 +17,8 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  */
 class PerformancesExport implements FromCollection, WithHeadings, WithMapping, WithStyles
 {
+    use SanitizesForSpreadsheet;
+
     public function __construct(private Collection $performances)
     {
     }
@@ -42,12 +45,12 @@ class PerformancesExport implements FromCollection, WithHeadings, WithMapping, W
     public function map($performance): array
     {
         return [
-            $performance['account']['name'] ?? '—',
+            $this->sanitizeForSpreadsheet($performance['account']['name'] ?? '—'),
             ($performance['platform'] ?? 'instagram') === 'tiktok' ? 'TikTok' : 'Instagram',
             $performance['post_date_formatted'],
             $performance['ads'] === null ? '-' : ($performance['ads'] ? 'Yes' : 'No'),
-            $performance['project_manager']['name'] ?? '—',
-            $performance['conceptor']['name'] ?? '—',
+            $this->sanitizeForSpreadsheet($performance['project_manager']['name'] ?? '—'),
+            $this->sanitizeForSpreadsheet($performance['conceptor']['name'] ?? '—'),
             $performance['total_views_h7'],
             $performance['views_status'] ?? '—',
         ];

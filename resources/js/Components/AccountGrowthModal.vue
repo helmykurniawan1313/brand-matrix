@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import Chart from 'chart.js/auto';
+import Chart from '../chartSetup';
 import StatusBadge from './StatusBadge.vue';
 
 const props = defineProps({

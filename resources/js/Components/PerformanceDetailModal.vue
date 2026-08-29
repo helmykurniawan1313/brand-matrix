@@ -1,3 +1,12 @@
+<script>
+// True module scope (a plain <script>, not <script setup>) — a `const` inside
+// <script setup> is re-declared fresh every time the component is instantiated,
+// which defeats the point of caching across "closed and reopened" modal
+// instances. This has to live outside setup() entirely so it survives for the
+// life of the page/tab, not just one mount.
+const liveLoadedUrls = new Set();
+</script>
+
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
@@ -158,20 +167,57 @@ const waitFor = async (check, attempts = 20, delayMs = 100) => {
     return false;
 };
 
-const processEmbeds = async () => {
-    const hasInstagram = props.performance.video_links?.some((link) => link.platform === 'instagram');
-    const hasTiktok = props.performance.video_links?.some((link) => link.platform === 'tiktok');
+// liveLoadedUrls (which URLs have already been live-embedded, ever, in this
+// tab) is declared in the plain <script> block above — true module scope, so
+// it survives this detail modal being closed and reopened for the same post.
+// An embedded post's <iframe src="..."> re-fetches from Instagram/TikTok's
+// servers every single time it's inserted into the page — that's true even if
+// the surrounding HTML came from a cache, since the browser always navigates
+// an iframe when its src is (re-)mounted. So the only way to actually stop
+// repeat requests to the platform is to not re-insert a live iframe at all on
+// a later open: the first time a given post is opened in this tab, embed it
+// live as usual; every later open of that same post shows a static preview
+// card instead, with an explicit "View live post" button that loads the real
+// embed only if the user actually asks for it again. Opening a performance
+// record's detail modal is a normal, repeated thing to do while reviewing
+// data — without this, that alone was generating enough automated-looking
+// traffic to the platform's embed CDN to risk the account/IP being flagged.
+const liveLoadedInThisOpen = ref(new Set());
 
+const igContainerRefs = {};
+const setIgContainerRef = (linkId, el) => {
+    if (el) igContainerRefs[linkId] = el;
+};
+
+const loadLiveEmbed = async (link) => {
+    liveLoadedUrls.add(link.url);
+    liveLoadedInThisOpen.value = new Set([...liveLoadedInThisOpen.value, link.url]);
     await nextTick();
 
-    if (hasInstagram) {
+    if (link.platform === 'instagram') {
         await loadScript('https://www.instagram.com/embed.js');
         await waitFor(() => window.instgrm?.Embeds?.process);
         window.instgrm?.Embeds?.process();
-    }
-
-    if (hasTiktok) {
+    } else if (link.platform === 'tiktok') {
         await loadScript('https://www.tiktok.com/embed.js');
+    }
+};
+
+const isLiveLoaded = (link) => liveLoadedInThisOpen.value.has(link.url);
+
+const processEmbeds = async () => {
+    const links = props.performance.video_links ?? [];
+
+    // Only auto-load a link the very first time it's ever been opened in this
+    // tab. A link seen before stays on its static preview card (isLiveLoaded
+    // stays false for it on this mount) — the raw blockquote/iframe markup
+    // still exists in embed_html, but nothing calls embed.js on it again here,
+    // so it never gets processed and never fetches. The user's explicit "View
+    // live post" click is the only other path into loadLiveEmbed().
+    for (const link of links) {
+        if (link.embed_html && !liveLoadedUrls.has(link.url)) {
+            await loadLiveEmbed(link);
+        }
     }
 };
 
@@ -350,7 +396,44 @@ onMounted(processEmbeds);
                 <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Video Links</h3>
                 <div v-if="performance.video_links?.length" class="mt-2 space-y-4">
                     <div v-for="link in performance.video_links" :key="link.id">
-                        <div v-if="link.embed_html" v-html="link.embed_html" />
+                        <!-- Live embed: only rendered the first time this post is opened in
+                             this tab (or after an explicit "View live post" click) — this is
+                             what actually makes a network request to Instagram/TikTok. -->
+                        <div
+                            v-if="link.embed_html && link.platform === 'instagram' && isLiveLoaded(link)"
+                            :ref="(el) => setIgContainerRef(link.id, el)"
+                            v-html="link.embed_html"
+                        />
+                        <div v-else-if="link.embed_html && isLiveLoaded(link)" v-html="link.embed_html" />
+
+                        <!-- Static preview: shown once this post has already been live-loaded
+                             before in this tab, so reopening its detail modal doesn't silently
+                             re-fetch from the platform every time. -->
+                        <div
+                            v-else-if="link.embed_html"
+                            class="flex items-center gap-3 rounded-md border p-3"
+                            style="border-color: var(--border); background-color: var(--bg)"
+                        >
+                            <div
+                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold uppercase"
+                                style="background-color: var(--surface); border: 1px solid var(--border); color: var(--ink-faint)"
+                            >
+                                {{ link.platform }}
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm" style="color: var(--ink-muted)">{{ link.url }}</p>
+                                <p class="mt-0.5 text-xs" style="color: var(--ink-faint)">Already viewed this session — click to reload the live post.</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
+                                style="border-color: var(--border); color: var(--accent)"
+                                @click="loadLiveEmbed(link)"
+                            >
+                                View live post
+                            </button>
+                        </div>
+
                         <a
                             v-if="!link.embed_html"
                             :href="link.url"
@@ -368,7 +451,7 @@ onMounted(processEmbeds);
                             <span class="truncate text-sm" style="color: var(--accent)">{{ link.url }}</span>
                         </a>
                         <a
-                            v-else
+                            v-else-if="isLiveLoaded(link)"
                             :href="link.url"
                             target="_blank"
                             rel="noopener noreferrer"

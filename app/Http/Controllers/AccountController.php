@@ -31,15 +31,24 @@ class AccountController extends Controller
         $sortKey = $request->string('sort')->toString() ?: 'name';
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
+        $allAccountIds = Account::pluck('id');
+
+        // The health-sort path already computes health for every *matching* account
+        // (it has to, to sort by it) — when there's no search/PM filter narrowing
+        // that set, "matching" is the same as "every account," so the summary KPI
+        // (which always covers every account, unfiltered) can reuse that map
+        // instead of running MetricCalculator over every account a second time.
+        // With a filter active, the health-sort path's set is a subset of all
+        // accounts, so the summary still needs its own unfiltered pass.
+        $healthForSummary = null;
+
         $accounts = $sortKey === 'health'
-            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator)
+            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthForSummary)
             : $this->paginateSortedBySqlColumn($request, $search, $pmId, $sortKey, $direction);
 
-        // KPIs computed over ALL accounts (not just this page), same convention as the
-        // Dashboard's header row — a paginated table shouldn't make the summary numbers
-        // page-dependent.
-        $allAccountIds = Account::pluck('id');
-        $allHealth = $this->latestCycleHealthByAccount($allAccountIds, $calculator);
+        $allHealth = ($healthForSummary !== null && ! $search && ! $pmId)
+            ? $healthForSummary
+            : $this->latestCycleHealthByAccount($allAccountIds, $calculator);
 
         return Inertia::render('Accounts/Index', [
             'accounts' => $accounts,
@@ -99,7 +108,7 @@ class AccountController extends Controller
      * order, then paginates the already-sorted PHP collection manually — same
      * pattern CycleController uses for its own score-based sorting.
      */
-    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator): LengthAwarePaginator
+    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
     {
         $matching = Account::with('projectManager:id,name')
             ->withCount('cycles')
@@ -109,6 +118,7 @@ class AccountController extends Controller
             ->get();
 
         $healthByAccount = $this->latestCycleHealthByAccount($matching->pluck('id'), $calculator);
+        $healthByAccountOut = $healthByAccount;
         $platformsByAccount = $this->platformsByAccount($matching->pluck('id'));
 
         // Severity order worst-to-best; accounts with no cycles (no health label at
@@ -235,7 +245,14 @@ class AccountController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        $postCountsByCycle = $this->postCountsByCycle($account);
+        // Fetched once and passed into both helpers below — they used to each run
+        // their own identical Performance::where('account_id', ...)->with('igSnapshots')
+        // query independently, doubling the query for every "View Growth" modal open.
+        $performances = Performance::where('account_id', $account->id)
+            ->with(['igSnapshots' => fn ($query) => $query->limit(1)])
+            ->get();
+
+        $postCountsByCycle = $this->postCountsByCycle($performances);
 
         $cycles = $account->cycles()
             ->orderBy('cycle_start_date')
@@ -268,7 +285,7 @@ class AccountController extends Controller
         return response()->json([
             'account' => ['id' => $account->id, 'name' => $account->name],
             'cycles' => $cycles,
-            'postSummary' => $this->postSummaryByPlatform($account),
+            'postSummary' => $this->postSummaryByPlatform($performances),
             'ai_summary' => $account->ai_summary,
             'ai_summary_generated_at' => $account->ai_summary_generated_at?->toIso8601String(),
         ]);
@@ -295,12 +312,8 @@ class AccountController extends Controller
      * actually covers its post_date (see PerformanceCycleAssigner) and some
      * posts legitimately have none yet.
      */
-    private function postSummaryByPlatform(Account $account): array
+    private function postSummaryByPlatform(Collection $performances): array
     {
-        $performances = Performance::where('account_id', $account->id)
-            ->with(['igSnapshots' => fn ($query) => $query->limit(1)])
-            ->get();
-
         $countAndViews = function (Collection $group) {
             $viewsWithValue = $group->map(fn (Performance $performance) => $this->viewsFor($performance))
                 ->filter(fn ($views) => $views !== null);
@@ -340,12 +353,10 @@ class AccountController extends Controller
      * auto-assigned cycle_id is null) are simply excluded, since this report
      * is indexed by cycle.
      */
-    private function postCountsByCycle(Account $account): Collection
+    private function postCountsByCycle(Collection $performances): Collection
     {
-        return Performance::where('account_id', $account->id)
+        return $performances
             ->whereNotNull('cycle_id')
-            ->with(['igSnapshots' => fn ($query) => $query->limit(1)])
-            ->get()
             ->groupBy('cycle_id')
             ->map(fn (Collection $performances) => [
                 'post_count' => $performances->count(),

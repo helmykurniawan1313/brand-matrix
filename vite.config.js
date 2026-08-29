@@ -16,6 +16,12 @@ export default defineConfig({
                     base: null,
                     includeAbsolute: false,
                 },
+                compilerOptions: {
+                    // dotlottie-wc is a native web component (from @lottiefiles/dotlottie-wc),
+                    // not a Vue component — without this, Vue's compiler treats the tag as
+                    // unknown and warns/may not initialize it as a real custom element.
+                    isCustomElement: (tag) => tag === 'dotlottie-wc',
+                },
             },
         }),
     ],

@@ -11,6 +11,7 @@ use App\Http\Controllers\LabelBucketController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\ScoreBucketController;
+use App\Http\Controllers\SiteSettingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ViewsTrendController;
 use App\Models\LegalPage;
@@ -24,6 +25,8 @@ Route::middleware('auth')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('views-trend', [ViewsTrendController::class, 'index'])->name('views-trend.index');
+    Route::get('views-trend-pdf', [ViewsTrendController::class, 'pdf'])->name('views-trend.pdf');
+    Route::get('views-trend-excel', [ViewsTrendController::class, 'exportExcel'])->name('views-trend.excel');
     Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
 
     Route::resource('accounts', AccountController::class)->only(['index']);
@@ -89,6 +92,9 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('super-admin')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'update', 'destroy']);
+
+        Route::get('settings/site', [SiteSettingController::class, 'edit'])->name('site-settings.edit');
+        Route::put('settings/site', [SiteSettingController::class, 'update'])->name('site-settings.update');
     });
 });
 
