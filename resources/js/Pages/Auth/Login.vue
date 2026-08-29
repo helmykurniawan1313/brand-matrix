@@ -78,10 +78,5 @@ const inputSurface = 'border-color: var(--border); background-color: var(--surfa
                 Sign in
             </button>
         </form>
-
-        <p class="mt-6 text-center text-sm" style="color: var(--ink-muted)">
-            Don't have an account?
-            <Link href="/register" class="font-medium" style="color: var(--accent)">Create one</Link>
-        </p>
     </AuthLayout>
 </template>

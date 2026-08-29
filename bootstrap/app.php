@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -39,5 +41,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Renders a proper Inertia/Vue 404 page instead of Laravel's default
+        // Blade error view, so an unmatched route stays inside the app's own
+        // layout/theme rather than dropping to a bare unstyled error page.
+        $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $exception, Request $request) {
+            if ($response->getStatusCode() === 404 && ! $request->expectsJson()) {
+                return \Inertia\Inertia::render('Errors/NotFound')
+                    ->toResponse($request)
+                    ->setStatusCode(404);
+            }
+
+            return $response;
+        });
     })->create();

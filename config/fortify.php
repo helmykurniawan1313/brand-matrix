@@ -162,7 +162,10 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Registration is intentionally disabled: new users are created only by
+        // a super admin via the Users page (UserController::store), not via
+        // public self-registration. See resources/js/Pages/Users/Index.vue.
+        // Features::registration(),
         Features::resetPasswords(),
         // Features::emailVerification(),
         Features::updateProfileInformation(),
