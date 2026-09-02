@@ -27,6 +27,8 @@ Route::middleware('auth')->group(function () {
     Route::get('views-trend', [ViewsTrendController::class, 'index'])->name('views-trend.index');
     Route::get('views-trend-pdf', [ViewsTrendController::class, 'pdf'])->name('views-trend.pdf');
     Route::get('views-trend-excel', [ViewsTrendController::class, 'exportExcel'])->name('views-trend.excel');
+    Route::get('views-trend-ranking', [ViewsTrendController::class, 'ranking'])->name('views-trend.ranking');
+    Route::get('views-trend-ranking/{employee}', [ViewsTrendController::class, 'personSeries'])->name('views-trend.ranking.person');
     Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
 
     Route::resource('accounts', AccountController::class)->only(['index']);

@@ -6,7 +6,9 @@ use App\Exports\ViewsTrendExport;
 use App\Models\Account;
 use App\Models\Cycle;
 use App\Models\Performance;
+use App\Models\Employee;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -302,6 +304,144 @@ class ViewsTrendController extends Controller
             'platform' => $platform,
             'series' => $seriesWithDelta,
         ]);
+    }
+
+    /**
+     * PM and Conceptor leaderboards, ranked by average Views H+7 across every
+     * post they're credited on — "best" here means the highest average views
+     * per post, not total volume, so someone with 5 posts isn't automatically
+     * beaten by someone with 50. Only counts posts with a recorded view value;
+     * a person with zero recorded-view posts has nothing to rank and is
+     * excluded rather than shown with a misleading "0 avg views".
+     */
+    public function ranking(Request $request): JsonResponse
+    {
+        $platform = $request->string('platform')->toString();
+        $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
+
+        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+
+        $performances = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
+            ->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo))
+            ->get()
+            ->map(function (Performance $performance) {
+                $snapshot = $performance->igSnapshots->first();
+                $performance->resolved_views = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
+
+                return $performance;
+            })
+            ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
+
+        return response()->json([
+            'filters' => ['platform' => $platform, 'month_from' => $monthFrom, 'month_to' => $monthTo],
+            'projectManagers' => $this->rankByEmployee($performances, 'project_manager_id'),
+            'conceptors' => $this->rankByEmployee($performances, 'conceptor_id'),
+        ]);
+    }
+
+    /**
+     * Monthly views trend for one employee (as PM and/or Conceptor), used by the
+     * ranking modal's per-person drill-down chart. Buckets by the month of
+     * post_date (SQLite-portable whereBetween, matching the rest of this app's
+     * month-range filtering — see CycleController).
+     */
+    public function personSeries(Request $request, Employee $employee): JsonResponse
+    {
+        $platform = $request->string('platform')->toString();
+        $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
+        $role = $request->string('role')->toString();
+        $role = in_array($role, ['project_manager_id', 'conceptor_id'], true) ? $role : 'project_manager_id';
+
+        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+
+        $performances = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
+            ->where($role, $employee->id)
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
+            ->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo))
+            ->orderBy('post_date')
+            ->get()
+            ->map(function (Performance $performance) {
+                $snapshot = $performance->igSnapshots->first();
+                $performance->resolved_views = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
+
+                return $performance;
+            })
+            ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
+
+        $series = $performances
+            ->groupBy(fn (Performance $performance) => $performance->post_date->format('Y-m'))
+            ->map(function (Collection $group, string $month) {
+                $views = $group->pluck('resolved_views');
+
+                return [
+                    'month' => $month,
+                    'label' => Carbon::createFromFormat('Y-m-d', "{$month}-01")->format('M Y'),
+                    'avg_views' => (int) round($views->avg()),
+                    'total_views' => (int) $views->sum(),
+                    'post_count' => $group->count(),
+                ];
+            })
+            ->sortKeys()
+            ->values()
+            ->all();
+
+        return response()->json([
+            'employee' => ['id' => $employee->id, 'name' => $employee->name],
+            'filters' => ['platform' => $platform, 'role' => $role, 'month_from' => $monthFrom, 'month_to' => $monthTo],
+            'series' => $series,
+        ]);
+    }
+
+    /**
+     * Applies a month_from/month_to range (Y-m format, inclusive) to a
+     * Performance query's post_date column. Same semantics as CycleController's
+     * month-range filter: a single month if month_to is omitted.
+     */
+    private function applyMonthRange($query, string $monthFrom, ?string $monthTo)
+    {
+        $start = Carbon::createFromFormat('Y-m-d', "{$monthFrom}-01")->startOfMonth();
+        $end = $monthTo
+            ? Carbon::createFromFormat('Y-m-d', "{$monthTo}-01")->endOfMonth()
+            : $start->copy()->endOfMonth();
+
+        return $query->whereBetween('post_date', [$start->toDateString(), $end->toDateString()]);
+    }
+
+    /**
+     * Groups the given (already view-resolved) performances by an employee
+     * foreign key, computes avg/total views + post count per person, and
+     * returns them ranked best-to-worst by average views.
+     */
+    private function rankByEmployee(Collection $performances, string $employeeIdColumn): array
+    {
+        $grouped = $performances
+            ->whereNotNull($employeeIdColumn)
+            ->groupBy($employeeIdColumn);
+
+        if ($grouped->isEmpty()) {
+            return [];
+        }
+
+        $employeeNames = Employee::whereIn('id', $grouped->keys())->pluck('name', 'id');
+
+        return $grouped
+            ->map(function (Collection $group, $employeeId) use ($employeeNames) {
+                $views = $group->pluck('resolved_views');
+
+                return [
+                    'employee_id' => (int) $employeeId,
+                    'employee_name' => $employeeNames->get($employeeId, 'Unknown'),
+                    'post_count' => $group->count(),
+                    'avg_views' => (int) round($views->avg()),
+                    'total_views' => (int) $views->sum(),
+                ];
+            })
+            ->sortByDesc('avg_views')
+            ->values()
+            ->all();
     }
 
     /**

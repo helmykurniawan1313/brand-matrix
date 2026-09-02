@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import ViewsTrendDetailModal from '../../Components/ViewsTrendDetailModal.vue';
+import PmConceptorRankingModal from '../../Components/PmConceptorRankingModal.vue';
 
 defineOptions({ layout: AppLayout });
 
@@ -222,6 +223,10 @@ const closeDetail = () => {
         cameFromChart.value = false;
     }
 };
+
+// Best PM/Conceptor ranking modal — scoped to whatever platform tab is active
+// on the page, so "best" always matches what the reader is currently looking at.
+const showRankingModal = ref(false);
 </script>
 
 <template>
@@ -233,21 +238,35 @@ const closeDetail = () => {
             </p>
         </div>
 
-        <div class="flex gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+        <div class="flex flex-wrap items-center gap-3">
             <button
-                v-for="tab in platformTabs"
-                :key="tab.value"
                 type="button"
-                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                :style="
-                    platform === tab.value
-                        ? 'background-color: var(--accent); color: var(--accent-ink)'
-                        : 'color: var(--ink-muted)'
-                "
-                @click="setPlatform(tab.value)"
+                class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                style="border-color: var(--border); color: var(--ink)"
+                @click="showRankingModal = true"
             >
-                {{ tab.label }}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                    <path d="M8 21h8M12 17v4M17 3H7v6a5 5 0 0 0 10 0V3ZM3 6v2a3 3 0 0 0 3 3M21 6v2a3 3 0 0 1-3 3" />
+                </svg>
+                Best PM &amp; Conceptor
             </button>
+
+            <div class="flex gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+                <button
+                    v-for="tab in platformTabs"
+                    :key="tab.value"
+                    type="button"
+                    class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                    :style="
+                        platform === tab.value
+                            ? 'background-color: var(--accent); color: var(--accent-ink)'
+                            : 'color: var(--ink-muted)'
+                    "
+                    @click="setPlatform(tab.value)"
+                >
+                    {{ tab.label }}
+                </button>
+            </div>
         </div>
     </div>
 
@@ -547,6 +566,12 @@ const closeDetail = () => {
         :platform="selectedPlatform"
         :show-back-button="cameFromChart"
         @close="closeDetail"
+    />
+
+    <PmConceptorRankingModal
+        v-if="showRankingModal"
+        :platform="platform"
+        @close="showRankingModal = false"
     />
 
     <!-- Chart modal -->
