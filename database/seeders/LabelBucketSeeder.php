@@ -66,6 +66,15 @@ class LabelBucketSeeder extends Seeder
                 [1000.0, 'Nano'],
             ]);
         }
+
+        if (! LabelBucket::query()->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH)->exists()) {
+            $this->seedMetric(LabelBucket::METRIC_ACCOUNT_GROWTH, [
+                [15.0, 'Sip'],
+                [5.0, 'Good'],
+                [0.0, 'Cukup'],
+                [null, 'Need attention'],
+            ]);
+        }
     }
 
     private function seedMetric(string $metric, array $tiers): void

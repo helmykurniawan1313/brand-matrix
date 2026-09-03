@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Cycle;
 use App\Models\Performance;
 use App\Services\MetricCalculator;
+use App\Services\ScoreBucketResolver;
 use App\Services\SummaryProviderResolver;
 use App\Models\Employee;
 use App\Models\FormulaWeight;
@@ -30,23 +31,32 @@ class AccountController extends Controller
         $pmId = $request->integer('project_manager_id') ?: null;
         $sortKey = $request->string('sort')->toString() ?: 'name';
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
+        $healthFilter = $this->parseLabelFilter($request, 'health_label');
+        $growthFilter = $this->parseLabelFilter($request, 'growth_label');
 
         $allAccountIds = Account::pluck('id');
 
-        // The health-sort path already computes health for every *matching* account
-        // (it has to, to sort by it) — when there's no search/PM filter narrowing
-        // that set, "matching" is the same as "every account," so the summary KPI
-        // (which always covers every account, unfiltered) can reuse that map
-        // instead of running MetricCalculator over every account a second time.
-        // With a filter active, the health-sort path's set is a subset of all
-        // accounts, so the summary still needs its own unfiltered pass.
+        // The health-sort path already computes health/growth for every *matching*
+        // account (it has to, to sort/filter by it) — when there's no search/PM/
+        // health/growth filter narrowing that set, "matching" is the same as "every
+        // account," so the summary KPI (which always covers every account,
+        // unfiltered) can reuse that map instead of running MetricCalculator over
+        // every account a second time. Any filter active means the health-sort
+        // path's set is a subset of all accounts, so the summary needs its own
+        // unfiltered pass regardless of which one narrowed it.
         $healthForSummary = null;
 
-        $accounts = $sortKey === 'health'
-            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthForSummary)
+        // A health/growth filter can only be applied after scores are computed
+        // (they're not real DB columns), so it forces the same PHP-side compute-
+        // then-filter-then-paginate path that sort=health already uses — even if
+        // the user is sorting by name/PM/cycles instead.
+        $needsScorePath = $sortKey === 'health' || $healthFilter || $growthFilter;
+
+        $accounts = $needsScorePath
+            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthFilter, $growthFilter, $sortKey, $healthForSummary)
             : $this->paginateSortedBySqlColumn($request, $search, $pmId, $sortKey, $direction);
 
-        $allHealth = ($healthForSummary !== null && ! $search && ! $pmId)
+        $allHealth = ($healthForSummary !== null && ! $search && ! $pmId && ! $healthFilter && ! $growthFilter)
             ? $healthForSummary
             : $this->latestCycleHealthByAccount($allAccountIds, $calculator);
 
@@ -55,20 +65,44 @@ class AccountController extends Controller
             'summary' => [
                 'total' => $allAccountIds->count(),
                 'instagram_connected' => Account::whereNotNull('ig_business_id')->count(),
-                'at_risk' => $allHealth->filter(fn ($label) => in_array($label, ['KURANG', 'PARAH'], true))->count(),
+                'at_risk' => $allHealth->filter(fn ($row) => in_array($row['health_label'] ?? null, ['KURANG', 'PARAH'], true))->count(),
             ],
             'filters' => [
                 'search' => $search,
                 'project_manager_id' => $pmId,
                 'sort' => $sortKey,
                 'direction' => $direction,
+                'health_label' => $healthFilter,
+                'growth_label' => $growthFilter,
             ],
             'accountDepartmentEmployees' => Employee::whereHas(
                 'department',
                 fn ($query) => $query->where('name', 'Account')
             )->orderBy('name')->get(['id', 'name']),
+            'healthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_HEALTH)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'growthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
+    }
+
+    /**
+     * Parses a comma-separated multi-value filter param (e.g. "SIP,BAGUS") into
+     * an array, or null if absent — same convention as CycleController's label
+     * filters, reused here for Accounts' Health/Growth Rate filters.
+     */
+    private function parseLabelFilter(Request $request, string $param): ?array
+    {
+        $raw = $request->string($param)->trim()->toString();
+
+        if (! $raw) {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
     /**
@@ -101,14 +135,17 @@ class AccountController extends Controller
     }
 
     /**
-     * Sort by Health — not a real column (it's computed per-account from that
-     * account's latest cycle via MetricCalculator, and bucket thresholds are
-     * user-configurable so it can't be precomputed in SQL). Loads every account
-     * matching the filters, computes health for all of them, sorts by severity
-     * order, then paginates the already-sorted PHP collection manually — same
-     * pattern CycleController uses for its own score-based sorting.
+     * Sort by Health, and/or filter by Health/Growth Rate — none of these are
+     * real columns (they're computed per-account from that account's latest
+     * cycle via MetricCalculator, and bucket thresholds are user-configurable
+     * so they can't be precomputed in SQL). Loads every account matching the
+     * search/PM filters, computes health+growth for all of them, filters by
+     * the selected labels, sorts (by severity when sort=health, otherwise
+     * name — the caller only routes here for sort=health or an active
+     * health/growth filter), then paginates the PHP collection manually —
+     * same pattern CycleController uses for its own score-based filtering.
      */
-    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
+    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?array $healthFilter, ?array $growthFilter, string $sortKey, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
     {
         $matching = Account::with('projectManager:id,name')
             ->withCount('cycles')
@@ -126,13 +163,20 @@ class AccountController extends Controller
         // than a real score, it just doesn't belong ranked among scored accounts.
         $severityRank = ['PARAH' => 0, 'KURANG' => 1, 'CUKUP' => 2, 'BAGUS' => 3, 'SIP' => 4];
 
-        $sorted = $matching
+        $rows = $matching
             ->map(fn (Account $account) => [
                 'account' => $account,
-                'health_label' => $healthByAccount->get($account->id),
+                'health_label' => $healthByAccount->get($account->id)['health_label'] ?? null,
+                'growth_rate' => $healthByAccount->get($account->id)['growth_rate'] ?? null,
+                'growth_label' => $healthByAccount->get($account->id)['growth_label'] ?? null,
                 'platforms' => $platformsByAccount->get($account->id, []),
             ])
-            ->sort(function ($a, $b) use ($severityRank, $direction) {
+            ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
+            ->when($growthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['growth_label'], $growthFilter, true)))
+            ->values();
+
+        $sorted = $sortKey === 'health'
+            ? $rows->sort(function ($a, $b) use ($severityRank, $direction) {
                 $rankA = $severityRank[$a['health_label']] ?? PHP_INT_MAX;
                 $rankB = $severityRank[$b['health_label']] ?? PHP_INT_MAX;
 
@@ -144,8 +188,8 @@ class AccountController extends Controller
                 }
 
                 return $direction === 'desc' ? $rankB <=> $rankA : $rankA <=> $rankB;
-            })
-            ->values();
+            })->values()
+            : $rows;
 
         $page = $request->integer('page', 1);
         $perPage = 15;
@@ -158,7 +202,13 @@ class AccountController extends Controller
             ['path' => $request->url(), 'query' => $request->query()],
         );
 
-        $paginator->through(fn ($row) => $this->presentAccount($row['account'], $row['health_label'], $row['platforms']));
+        $paginator->through(fn ($row) => $this->presentAccount(
+            $row['account'],
+            $row['health_label'],
+            $row['platforms'],
+            $row['growth_rate'],
+            $row['growth_label'],
+        ));
 
         return $paginator;
     }
@@ -175,12 +225,14 @@ class AccountController extends Controller
 
         $accounts->through(fn (Account $account) => $this->presentAccount(
             $account,
-            $healthByAccount->get($account->id),
+            $healthByAccount->get($account->id)['health_label'] ?? null,
             $platformsByAccount->get($account->id, []),
+            $healthByAccount->get($account->id)['growth_rate'] ?? null,
+            $healthByAccount->get($account->id)['growth_label'] ?? null,
         ));
     }
 
-    private function presentAccount(Account $account, ?string $healthLabel, array $platforms): array
+    private function presentAccount(Account $account, ?string $healthLabel, array $platforms, ?float $growthRate = null, ?string $growthLabel = null): array
     {
         return [
             'id' => $account->id,
@@ -192,15 +244,19 @@ class AccountController extends Controller
             'ig_username' => $account->ig_username,
             'ig_connected_at' => $account->ig_connected_at?->toIso8601String(),
             'health_label' => $healthLabel,
+            'growth_rate' => $growthRate !== null ? round($growthRate, 2) : null,
+            'growth_label' => $growthLabel,
             'platforms' => $platforms,
         ];
     }
 
     /**
-     * Health label of each account's most recently-started cycle, keyed by
-     * account_id — the same "latest cycle" convention used by the Account
-     * Growth modal's headline stat. Accounts with no cycles simply have no
-     * entry (row shows "No data" instead of a status badge).
+     * Health label + Growth Rate label of each account's most recently-started
+     * cycle, keyed by account_id — the same "latest cycle" convention used by
+     * the Account Growth modal's headline stat. Growth Rate uses its own
+     * LabelBucket metric (METRIC_ACCOUNT_GROWTH), separate from the Cycles-page
+     * growth label, so its thresholds can be tuned independently in Settings.
+     * Accounts with no cycles simply have no entry (row shows "No data").
      */
     private function latestCycleHealthByAccount(Collection $accountIds, MetricCalculator $calculator): Collection
     {
@@ -211,15 +267,22 @@ class AccountController extends Controller
         $scoreBuckets = ScoreBucket::all();
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
+        $accountGrowthBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH);
+        $resolver = new ScoreBucketResolver();
 
         return Cycle::whereIn('account_id', $accountIds)
             ->orderBy('cycle_start_date')
             ->get()
             ->groupBy('account_id')
-            ->map(function (Collection $cycles) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights) {
+            ->map(function (Collection $cycles) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $resolver) {
                 $latest = $cycles->last();
+                $scores = $calculator->calculate($latest, $scoreBuckets, $labelBuckets, $formulaWeights);
 
-                return $calculator->calculate($latest, $scoreBuckets, $labelBuckets, $formulaWeights)['health_label'];
+                return [
+                    'health_label' => $scores['health_label'],
+                    'growth_rate' => $scores['growth_rate'],
+                    'growth_label' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
+                ];
             });
     }
 
@@ -244,6 +307,8 @@ class AccountController extends Controller
         $scoreBuckets = ScoreBucket::all();
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
+        $accountGrowthBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH);
+        $resolver = new ScoreBucketResolver();
 
         // Fetched once and passed into both helpers below — they used to each run
         // their own identical Performance::where('account_id', ...)->with('igSnapshots')
@@ -257,7 +322,7 @@ class AccountController extends Controller
         $cycles = $account->cycles()
             ->orderBy('cycle_start_date')
             ->get()
-            ->map(function ($cycle) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $postCountsByCycle) {
+            ->map(function ($cycle) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $postCountsByCycle, $accountGrowthBuckets, $resolver) {
                 $scores = $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights);
                 $postCounts = $postCountsByCycle->get($cycle->id, ['post_count' => 0, 'view_count' => 0]);
 
@@ -266,6 +331,7 @@ class AccountController extends Controller
                     'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
                     'platform' => $cycle->platform,
                     'growth_rate' => round($scores['growth_rate'], 2),
+                    'growth_rate_label' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
                     'end_follower' => $cycle->end_follower,
                     'reach' => $cycle->reach,
                     'views' => $cycle->views,

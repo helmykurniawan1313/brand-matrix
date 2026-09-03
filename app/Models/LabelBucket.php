@@ -18,6 +18,11 @@ class LabelBucket extends Model
 
     public const METRIC_FOLLOWERS = 'followers';
 
+    // Separate from METRIC_GROWTH (used by Cycles/Dashboard) — this one drives
+    // only the Accounts table's/Growth modal's Growth Rate badge, so its own
+    // thresholds/labels can be tuned without touching the cycle-level scheme.
+    public const METRIC_ACCOUNT_GROWTH = 'account_growth';
+
     public const METRICS = [
         self::METRIC_GROWTH,
         self::METRIC_VISIBILITY,
@@ -25,6 +30,7 @@ class LabelBucket extends Model
         self::METRIC_HEALTH,
         self::METRIC_VIEWS,
         self::METRIC_FOLLOWERS,
+        self::METRIC_ACCOUNT_GROWTH,
     ];
 
     protected $fillable = [

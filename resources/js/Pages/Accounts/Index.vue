@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 
@@ -8,6 +8,7 @@ import InstagramDataModal from '../../Components/InstagramDataModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
+import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import { useToast } from '../../composables/useToast';
@@ -35,6 +36,14 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    healthLabels: {
+        type: Array,
+        default: () => [],
+    },
+    growthLabels: {
+        type: Array,
+        default: () => [],
+    },
     defaultAiProvider: {
         type: String,
         default: 'groq',
@@ -52,6 +61,8 @@ const search = ref(props.filters.search ?? '');
 const pmFilter = ref(props.filters.project_manager_id ? Number(props.filters.project_manager_id) : '');
 const sort = ref(props.filters.sort ?? 'name');
 const direction = ref(props.filters.direction ?? 'asc');
+const healthFilter = ref(props.filters.health_label ?? []);
+const growthFilter = ref(props.filters.growth_label ?? []);
 let searchTimeout = null;
 
 const applySearch = () => {
@@ -62,9 +73,44 @@ const applySearch = () => {
             project_manager_id: pmFilter.value || undefined,
             sort: sort.value !== 'name' || direction.value !== 'asc' ? sort.value : undefined,
             direction: sort.value !== 'name' || direction.value !== 'asc' ? direction.value : undefined,
+            health_label: healthFilter.value.length ? healthFilter.value.join(',') : undefined,
+            growth_label: growthFilter.value.length ? growthFilter.value.join(',') : undefined,
         },
         { preserveScroll: true, preserveState: true, replace: true },
     );
+};
+
+// --- Filter modal (Health / Growth Rate) ---
+// Draft state pattern (matches Cycles' Filter modal): edits stay local to the
+// modal until "Apply" commits them to the live refs above and triggers a
+// navigation — closing/canceling discards any in-progress edits.
+
+const showFilterModal = ref(false);
+const draftHealthFilter = ref([]);
+const draftGrowthFilter = ref([]);
+
+const activeFilterCount = computed(() => healthFilter.value.length + growthFilter.value.length);
+
+const openFilterModal = () => {
+    draftHealthFilter.value = [...healthFilter.value];
+    draftGrowthFilter.value = [...growthFilter.value];
+    showFilterModal.value = true;
+};
+
+const closeFilterModal = () => {
+    showFilterModal.value = false;
+};
+
+const applyFilterModal = () => {
+    healthFilter.value = [...draftHealthFilter.value];
+    growthFilter.value = [...draftGrowthFilter.value];
+    showFilterModal.value = false;
+    applySearch();
+};
+
+const clearFilterModal = () => {
+    draftHealthFilter.value = [];
+    draftGrowthFilter.value = [];
 };
 
 const onSearchInput = () => {
@@ -96,6 +142,22 @@ const pmOptions = props.accountDepartmentEmployees.map((employee) => ({ id: empl
 const platformMeta = {
     instagram: { label: 'IG', color: '#e1306c' },
     tiktok: { label: 'TT', color: '#010101' },
+};
+
+// Growth Rate labels are user-editable text (Settings → Buckets → Accounts
+// Table — Growth Rate), so match case-insensitively against the default
+// wording rather than hardcoding exact casing; anything unrecognized falls
+// back to a neutral tone rather than breaking.
+const growthLabelTones = {
+    sip: { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
+    good: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
+    cukup: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
+    'need attention': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
+};
+
+const growthLabelTone = (label) => {
+    const tone = growthLabelTones[label?.toLowerCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' };
+    return `background-color: ${tone.bg}; color: ${tone.ink}`;
 };
 
 // Create/Edit modal
@@ -287,6 +349,25 @@ const closeInstagram = () => {
                 class="w-48"
                 @change="onPmFilterChange"
             />
+
+            <button
+                type="button"
+                class="relative inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                style="border-color: var(--border); color: var(--ink)"
+                @click="openFilterModal"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                    <path d="M4 4h16l-6.5 8v6l-3 2v-8L4 4z" />
+                </svg>
+                Filter
+                <span
+                    v-if="activeFilterCount > 0"
+                    class="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold"
+                    style="background-color: var(--accent); color: var(--accent-ink)"
+                >
+                    {{ activeFilterCount }}
+                </span>
+            </button>
         </div>
 
         <div
@@ -314,6 +395,9 @@ const closeInstagram = () => {
                         >
                             Health
                             <span v-if="sort === 'health'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                            Growth Rate
                         </th>
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
@@ -365,6 +449,20 @@ const closeInstagram = () => {
                             <StatusBadge v-if="account.health_label" :status="account.health_label" />
                             <span v-else style="color: var(--ink-faint)">No data</span>
                         </td>
+                        <td class="px-4 py-3.5 text-sm">
+                            <span v-if="account.growth_label" class="inline-flex items-center gap-1.5">
+                                <span
+                                    class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                    :style="growthLabelTone(account.growth_label)"
+                                >
+                                    {{ account.growth_label }}
+                                </span>
+                                <span class="tabular-nums" style="color: var(--ink-faint)">
+                                    ({{ account.growth_rate > 0 ? '+' : '' }}{{ account.growth_rate }}%)
+                                </span>
+                            </span>
+                            <span v-else style="color: var(--ink-faint)">No data</span>
+                        </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">
                             {{ account.project_manager?.name ?? '—' }}
                         </td>
@@ -386,7 +484,7 @@ const closeInstagram = () => {
                         </td>
                     </tr>
                     <tr v-if="accounts.data.length === 0">
-                        <td colspan="6" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td colspan="7" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             <template v-if="search">No accounts match "{{ search }}".</template>
                             <template v-else>No accounts yet. Add one to start tracking cycles.</template>
                         </td>
@@ -524,4 +622,83 @@ const closeInstagram = () => {
             @confirm="destroy"
             @cancel="cancelDestroy"
         />
+
+        <div
+            v-if="showFilterModal"
+            class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+        >
+            <div
+                class="flex max-h-full w-full max-w-sm flex-col rounded-lg border shadow-2xl"
+                style="background-color: var(--surface-raised); border-color: var(--border)"
+            >
+                <div class="flex shrink-0 items-start justify-between gap-4 p-6 pb-0">
+                    <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Filter</h2>
+                    <button
+                        type="button"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                        style="color: var(--ink-muted)"
+                        aria-label="Close"
+                        @click="closeFilterModal"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Health Status</label>
+                        <MultiSelectDropdown
+                            v-model="draftHealthFilter"
+                            :options="healthLabels"
+                            placeholder="All health statuses"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Growth Rate</label>
+                        <MultiSelectDropdown
+                            v-model="draftGrowthFilter"
+                            :options="growthLabels"
+                            placeholder="All growth rates"
+                            class="mt-1"
+                        />
+                        <p class="mt-1.5 text-xs" style="color: var(--ink-faint)">
+                            Both filters use each account's latest cycle.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex shrink-0 items-center justify-between border-t p-6 pt-4" style="border-color: var(--border)">
+                    <button
+                        type="button"
+                        class="text-sm font-medium transition-colors hover:opacity-70"
+                        style="color: var(--ink-muted)"
+                        @click="clearFilterModal"
+                    >
+                        Reset
+                    </button>
+                    <div class="flex gap-3">
+                        <button
+                            type="button"
+                            class="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                            style="border-color: var(--border); color: var(--ink-muted)"
+                            @click="closeFilterModal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                            style="background-color: var(--accent); color: var(--accent-ink)"
+                            @click="applyFilterModal"
+                        >
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 </template>

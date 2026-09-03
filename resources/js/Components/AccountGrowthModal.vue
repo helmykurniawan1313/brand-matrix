@@ -162,6 +162,21 @@ const palette = () => [
 
 const formatValue = (value, suffix) => (suffix ? `${value}${suffix}` : new Intl.NumberFormat('en-US').format(value));
 
+// Growth Rate labels are user-editable text (Settings → Buckets → Accounts
+// Table — Growth Rate) — match case-insensitively against the default
+// wording; anything unrecognized falls back to a neutral tone.
+const growthLabelTones = {
+    sip: { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
+    good: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
+    cukup: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
+    'need attention': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
+};
+
+const growthLabelTone = (label) => {
+    const tone = growthLabelTones[label?.toLowerCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' };
+    return `background-color: ${tone.bg}; color: ${tone.ink}`;
+};
+
 const setCanvasRef = (key, el) => {
     canvasRefs[key] = el;
 };
@@ -625,7 +640,14 @@ onBeforeUnmount(() => {
                             <p class="mt-1 font-display text-2xl font-bold" :style="latestCycle?.growth_rate >= 0 ? 'color: var(--ink)' : 'color: var(--status-parah-ink)'">
                                 {{ latestCycle?.growth_rate }}%
                             </p>
-                            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">latest cycle</p>
+                            <span
+                                v-if="latestCycle?.growth_rate_label"
+                                class="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                                :style="growthLabelTone(latestCycle.growth_rate_label)"
+                            >
+                                {{ latestCycle.growth_rate_label }}
+                            </span>
+                            <p v-else class="mt-0.5 text-xs" style="color: var(--ink-muted)">latest cycle</p>
                         </div>
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                             <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Avg Views</p>
