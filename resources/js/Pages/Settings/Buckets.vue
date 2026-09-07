@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 
@@ -152,6 +152,23 @@ const initScoreForm = (bucket) => {
 };
 props.scoreBuckets.forEach(initScoreForm);
 
+// Inertia reloads props (not the whole page) after add/delete — scoreForms
+// must gain an entry for any newly-added bucket and lose one for any deleted
+// bucket, or the template's scoreForms[bucket.id] access throws on the next
+// render (this was crashing to a white screen on every "Add tier" click).
+watch(
+    () => props.scoreBuckets,
+    (buckets) => {
+        const currentIds = new Set(buckets.map((b) => b.id));
+        buckets.forEach((bucket) => {
+            if (!scoreForms[bucket.id]) initScoreForm(bucket);
+        });
+        Object.keys(scoreForms).forEach((id) => {
+            if (!currentIds.has(Number(id))) delete scoreForms[id];
+        });
+    },
+);
+
 const dirtyTiers = reactive({}); // bucket.id -> bool, drives the "unsaved" affordance
 const markDirty = (id) => { dirtyTiers[id] = true; };
 
@@ -195,6 +212,21 @@ const initLabelForm = (bucket) => {
     labelForms[bucket.id] = useForm({ min_score: bucket.min_score, label: bucket.label });
 };
 props.labelBuckets.forEach(initLabelForm);
+
+// Same reasoning as scoreForms above — keep labelForms in sync with whatever
+// bucket list Inertia hands back after add/delete.
+watch(
+    () => props.labelBuckets,
+    (buckets) => {
+        const currentIds = new Set(buckets.map((b) => b.id));
+        buckets.forEach((bucket) => {
+            if (!labelForms[bucket.id]) initLabelForm(bucket);
+        });
+        Object.keys(labelForms).forEach((id) => {
+            if (!currentIds.has(Number(id))) delete labelForms[id];
+        });
+    },
+);
 
 const saveLabelBucket = (bucket) => {
     labelForms[bucket.id].put(`/label-buckets/${bucket.id}`, {
