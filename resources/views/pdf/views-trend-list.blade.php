@@ -34,8 +34,8 @@
                 <th>Account</th>
                 <th>Platform</th>
                 <th>Trend</th>
-                <th class="num">Last Cycle Avg Views</th>
-                <th class="num">Prior Cycle Avg</th>
+                <th class="num">Last Cycle Median Views</th>
+                <th class="num">Prior Cycle Median</th>
                 <th class="num">Last Cycle Total Views</th>
                 <th class="num">Prior Cycle Total</th>
                 <th class="num">Delta %</th>

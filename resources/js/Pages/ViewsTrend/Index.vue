@@ -445,7 +445,7 @@ const showRankingModal = ref(false);
                             style="color: var(--ink-faint)"
                             @click="sortBy('last_avg_views')"
                         >
-                            Last cycle avg views
+                            Last cycle median views
                             <span v-if="sort === 'last_avg_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
                         </th>
                         <th

@@ -21,12 +21,12 @@ use Maatwebsite\Excel\Facades\Excel;
 class ViewsTrendController extends Controller
 {
     /**
-     * A drop of 15%+ in avg views vs the previous cycle.
+     * A drop of 15%+ in median views vs the previous cycle.
      */
     private const SETBACK_THRESHOLD = -0.15;
 
     /**
-     * A rise of 15%+ in avg views vs the previous cycle.
+     * A rise of 15%+ in median views vs the previous cycle.
      */
     private const GROWTH_THRESHOLD = 0.15;
 
@@ -219,8 +219,8 @@ class ViewsTrendController extends Controller
 
         $sortLabels = [
             'account' => 'Account',
-            'last_avg_views' => 'Last Cycle Avg Views',
-            'prior_avg_views' => 'Prior Cycle Avg Views',
+            'last_avg_views' => 'Last Cycle Median Views',
+            'prior_avg_views' => 'Prior Cycle Median Views',
             'last_total_views' => 'Total Views (Last)',
             'prior_total_views' => 'Total Views (Prior)',
             'delta_pct' => 'Delta %',
@@ -261,7 +261,7 @@ class ViewsTrendController extends Controller
                 })
                 ->filter(fn ($views) => $views !== null);
 
-            return $views->isEmpty() ? null : (float) $views->avg();
+            return $this->median($views);
         });
 
         $postCountsByCycle = $performances->map(fn (Collection $cyclePerformances) => $cyclePerformances->count());
@@ -379,7 +379,7 @@ class ViewsTrendController extends Controller
                 return [
                     'month' => $month,
                     'label' => Carbon::createFromFormat('Y-m-d', "{$month}-01")->format('M Y'),
-                    'avg_views' => (int) round($views->avg()),
+                    'avg_views' => (int) round($this->median($views)),
                     'total_views' => (int) $views->sum(),
                     'post_count' => $group->count(),
                 ];
@@ -435,7 +435,7 @@ class ViewsTrendController extends Controller
                     'employee_id' => (int) $employeeId,
                     'employee_name' => $employeeNames->get($employeeId, 'Unknown'),
                     'post_count' => $group->count(),
-                    'avg_views' => (int) round($views->avg()),
+                    'avg_views' => (int) round($this->median($views)),
                     'total_views' => (int) $views->sum(),
                 ];
             })
@@ -445,21 +445,23 @@ class ViewsTrendController extends Controller
     }
 
     /**
-     * Average Views H+7 per cycle, across all accounts/platforms, keyed by cycle_id.
+     * Median Views H+7 per cycle, across all accounts/platforms, keyed by cycle_id.
      * Same view-source precedence as AccountController::viewsFor() (Instagram
      * snapshot overrides the manually-typed column when a post is linked).
+     * Median rather than mean so a single viral post doesn't drag the whole
+     * cycle's "typical" views figure upward.
      */
     private function avgViewsByCycle(): Collection
     {
         return $this->viewsByCyclePerformances()
-            ->map(fn (Collection $views) => $views->isEmpty() ? null : (float) $views->avg())
-            ->filter(fn ($avg) => $avg !== null);
+            ->map(fn (Collection $views) => $this->median($views))
+            ->filter(fn ($median) => $median !== null);
     }
 
     /**
      * Total (summed) Views H+7 per cycle — the volume number, alongside the
      * average shown elsewhere on this page. Same source/precedence as
-     * avgViewsByCycle(), just summed instead of averaged.
+     * avgViewsByCycle(), just summed instead of medianed.
      */
     private function totalViewsByCycle(): Collection
     {
@@ -551,6 +553,31 @@ class ViewsTrendController extends Controller
             'stagnant_streak' => $stagnantStreak,
             'last_cycle_label' => $last['label'],
         ];
+    }
+
+    /**
+     * Median of a collection of numeric values — the middle value when sorted,
+     * or the average of the two middle values for an even count. Used instead
+     * of the arithmetic mean everywhere this page reports "views per post,"
+     * since a handful of viral outlier posts would otherwise pull the mean far
+     * above what a typical post actually earned.
+     */
+    private function median(Collection $values): ?float
+    {
+        $sorted = $values->sort()->values();
+        $count = $sorted->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $middle = intdiv($count, 2);
+
+        if ($count % 2 === 1) {
+            return (float) $sorted[$middle];
+        }
+
+        return (float) (($sorted[$middle - 1] + $sorted[$middle]) / 2);
     }
 
     /**

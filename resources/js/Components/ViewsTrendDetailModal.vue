@@ -71,7 +71,7 @@ const renderChart = async () => {
             labels: seriesWithData.value.map((point) => point.label),
             datasets: [
                 {
-                    label: 'Avg views per post',
+                    label: 'Median views per post',
                     data: seriesWithData.value.map((point) => point.avg_views),
                     borderColor: accentColor,
                     backgroundColor: `${accentColor}1a`,
@@ -92,7 +92,7 @@ const renderChart = async () => {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `Avg views: ${new Intl.NumberFormat('en-US').format(ctx.parsed.y)}`,
+                        label: (ctx) => `Median views: ${new Intl.NumberFormat('en-US').format(ctx.parsed.y)}`,
                     },
                 },
             },
@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
                     <!-- Views-only headline stats -->
                     <div class="grid grid-cols-3 gap-3">
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                            <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Latest cycle avg views</p>
+                            <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Latest cycle median views</p>
                             <p class="mt-1.5 font-display text-2xl font-bold" style="color: var(--ink)">{{ formatNumber(latest?.avg_views) }}</p>
                             <p class="mt-0.5 text-xs font-semibold" :style="`color: ${deltaColor(overallDeltaPct)}`">
                                 {{ formatDelta(overallDeltaPct) }} vs prior cycle
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 
                     <!-- The chart: the whole point of this modal -->
                     <div class="mt-5 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                        <h3 class="text-sm font-semibold" style="color: var(--ink)">Average views per post, by cycle</h3>
+                        <h3 class="text-sm font-semibold" style="color: var(--ink)">Median views per post, by cycle</h3>
                         <div class="mt-3 h-64">
                             <canvas ref="chartCanvas"></canvas>
                         </div>
@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
                             <thead>
                                 <tr style="border-bottom: 1px solid var(--border)">
                                     <th class="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Cycle</th>
-                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Avg views</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Median views</th>
                                     <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Δ vs prior</th>
                                     <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Posts</th>
                                 </tr>

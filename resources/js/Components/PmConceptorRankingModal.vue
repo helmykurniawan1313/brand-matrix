@@ -169,7 +169,7 @@ const renderPersonChart = (series) => {
             labels: series.map((s) => s.label),
             datasets: [
                 {
-                    label: 'Avg Views',
+                    label: 'Median Views',
                     data: series.map((s) => s.avg_views),
                     borderColor: accent,
                     backgroundColor: accent,
@@ -193,7 +193,7 @@ const renderPersonChart = (series) => {
                         label: (context) => {
                             const point = series[context.dataIndex];
                             return [
-                                `Avg Views: ${formatNumber(point.avg_views)}`,
+                                `Median Views: ${formatNumber(point.avg_views)}`,
                                 `Total Views: ${formatNumber(point.total_views)}`,
                                 `Posts: ${point.post_count}`,
                             ];
@@ -228,7 +228,7 @@ onBeforeUnmount(destroyChart);
             <div class="flex shrink-0 items-start justify-between gap-4 border-b p-6" style="border-color: var(--border)">
                 <div>
                     <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Best PM &amp; Conceptor</h2>
-                    <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">Ranked by average views per post</p>
+                    <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">Ranked by median views per post</p>
                 </div>
                 <button
                     type="button"
@@ -310,7 +310,7 @@ onBeforeUnmount(destroyChart);
                                     style="color: var(--ink-faint)"
                                     @click="sortBy('avg_views')"
                                 >
-                                    Avg Views
+                                    Median Views
                                     <span v-if="sortKey === 'avg_views'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
                                 </th>
                                 <th
@@ -345,7 +345,7 @@ onBeforeUnmount(destroyChart);
                                         v-if="sortKey === 'avg_views' && sortDir === 'desc' && index === 0"
                                         class="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs"
                                         style="background-color: var(--status-sip-bg); color: var(--status-sip-ink)"
-                                        title="Best average views"
+                                        title="Best median views"
                                     >
                                         ★
                                     </span>
