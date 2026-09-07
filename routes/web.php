@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function () {
     Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
 
     Route::resource('accounts', AccountController::class)->only(['index']);
+    Route::get('accounts-excel', [AccountController::class, 'exportExcel'])->name('accounts.excel');
     Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');
     Route::post('accounts/{account}/pdf', [AccountController::class, 'pdf'])->name('accounts.pdf');
     Route::post('accounts/{account}/summarize', [AccountController::class, 'summarize'])->name('accounts.summarize');

@@ -33,6 +33,9 @@ const metricTitles = {
     views: 'Views (H+7) Status',
     followers: 'Follower Category',
     account_growth: 'Accounts Table — Growth Rate',
+    views_change: 'Growth Analysis — Views Change',
+    reach_change: 'Growth Analysis — Reach Change',
+    engagement_change: 'Growth Analysis — Engagement Change',
 };
 
 const metricHints = {
@@ -47,6 +50,9 @@ const metricHints = {
     views: 'raw Views H+7 count, from Performance records',
     followers: 'raw follower count, from Performance records',
     account_growth: "latest cycle's growth rate — shown on the Accounts table and Growth modal",
+    views_change: '% change in Views between the two picked months, Growth Analysis panel',
+    reach_change: '% change in Reach between the two picked months, Growth Analysis panel',
+    engagement_change: '% change in Engagement between the two picked months, Growth Analysis panel',
 };
 
 const componentLabels = {

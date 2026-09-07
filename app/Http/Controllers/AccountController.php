@@ -33,6 +33,9 @@ class AccountController extends Controller
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
         $healthFilter = $this->parseLabelFilter($request, 'health_label');
         $growthFilter = $this->parseLabelFilter($request, 'growth_label');
+        $reachFilter = $this->parseLabelFilter($request, 'reach_status');
+        $viewsFilter = $this->parseLabelFilter($request, 'views_status');
+        $engagementFilter = $this->parseLabelFilter($request, 'engagement_status');
 
         $allAccountIds = Account::pluck('id');
 
@@ -46,17 +49,19 @@ class AccountController extends Controller
         // unfiltered pass regardless of which one narrowed it.
         $healthForSummary = null;
 
-        // A health/growth filter can only be applied after scores are computed
-        // (they're not real DB columns), so it forces the same PHP-side compute-
-        // then-filter-then-paginate path that sort=health already uses — even if
-        // the user is sorting by name/PM/cycles instead.
-        $needsScorePath = $sortKey === 'health' || $healthFilter || $growthFilter;
+        // A status filter, or a sort by any computed column (health, growth,
+        // reach, views, engagement — none are real DB columns), can only be
+        // resolved after scores are computed, so it forces the same PHP-side
+        // compute-then-filter-then-paginate path — even if the user is sorting
+        // by name/PM/cycles instead.
+        $hasStatusFilter = $healthFilter || $growthFilter || $reachFilter || $viewsFilter || $engagementFilter;
+        $needsScorePath = in_array($sortKey, ['health', 'growth', 'reach', 'views', 'engagement'], true) || $hasStatusFilter;
 
         $accounts = $needsScorePath
-            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthFilter, $growthFilter, $sortKey, $healthForSummary)
+            ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthFilter, $growthFilter, $reachFilter, $viewsFilter, $engagementFilter, $sortKey, $healthForSummary)
             : $this->paginateSortedBySqlColumn($request, $search, $pmId, $sortKey, $direction);
 
-        $allHealth = ($healthForSummary !== null && ! $search && ! $pmId && ! $healthFilter && ! $growthFilter)
+        $allHealth = ($healthForSummary !== null && ! $search && ! $pmId && ! $hasStatusFilter)
             ? $healthForSummary
             : $this->latestCycleHealthByAccount($allAccountIds, $calculator);
 
@@ -74,6 +79,9 @@ class AccountController extends Controller
                 'direction' => $direction,
                 'health_label' => $healthFilter,
                 'growth_label' => $growthFilter,
+                'reach_status' => $reachFilter,
+                'views_status' => $viewsFilter,
+                'engagement_status' => $engagementFilter,
             ],
             'accountDepartmentEmployees' => Employee::whereHas(
                 'department',
@@ -85,8 +93,31 @@ class AccountController extends Controller
             'growthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH)
                 ->orderByDesc('min_score')
                 ->pluck('label'),
+            'reachStatusLabels' => LabelBucket::where('metric', LabelBucket::METRIC_REACH_CHANGE)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'viewsStatusLabels' => LabelBucket::where('metric', LabelBucket::METRIC_VIEWS_CHANGE)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
+            'engagementStatusLabels' => LabelBucket::where('metric', LabelBucket::METRIC_ENGAGEMENT_CHANGE)
+                ->orderByDesc('min_score')
+                ->pluck('label'),
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
         ]);
+    }
+
+    /**
+     * Percent change from one value to another — null when the base is 0/missing
+     * (no prior cycle, or a zero baseline), since "change from zero" has no
+     * meaningful percentage. Mirrors AccountGrowthModal.vue's percentChange().
+     */
+    private function percentChange(?float $from, ?float $to): ?float
+    {
+        if ($from === null || $to === null || $from == 0.0) {
+            return null;
+        }
+
+        return (($to - $from) / $from) * 100;
     }
 
     /**
@@ -103,6 +134,127 @@ class AccountController extends Controller
         }
 
         return array_values(array_filter(array_map('trim', explode(',', $raw))));
+    }
+
+    /**
+     * One row per cycle (not per account) — respects the same
+     * search/PM/Health/Growth filters as index(). Health/Growth still filter
+     * by each account's *latest* cycle (same semantics as the accounts list),
+     * but once an account passes that filter, every one of its cycles is
+     * exported as its own row, each carrying that cycle's own rates/statuses.
+     * The Cycle Period column shows the cycle's exact date range (e.g. "1 Feb
+     * 2026 - 28 Feb 2026"), not just a month label — cycles don't always align
+     * to calendar months (e.g. "20 Jul 2026 - 19 Aug 2026").
+     */
+    public function exportExcel(Request $request, MetricCalculator $calculator): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $search = $request->string('search')->trim()->toString() ?: null;
+        $pmId = $request->integer('project_manager_id') ?: null;
+        $healthFilter = $this->parseLabelFilter($request, 'health_label');
+        $growthFilter = $this->parseLabelFilter($request, 'growth_label');
+        $reachFilter = $this->parseLabelFilter($request, 'reach_status');
+        $viewsFilter = $this->parseLabelFilter($request, 'views_status');
+        $engagementFilter = $this->parseLabelFilter($request, 'engagement_status');
+
+        $accounts = Account::query()
+            ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
+            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        if ($healthFilter || $growthFilter || $reachFilter || $viewsFilter || $engagementFilter) {
+            $latest = $this->latestCycleHealthByAccount($accounts->pluck('id'), $calculator);
+            $accounts = $accounts->filter(function (Account $account) use ($latest, $healthFilter, $growthFilter, $reachFilter, $viewsFilter, $engagementFilter) {
+                $row = $latest->get($account->id);
+                if (! $row) {
+                    return false;
+                }
+                if ($healthFilter && ! in_array($row['health_label'], $healthFilter, true)) {
+                    return false;
+                }
+                if ($growthFilter && ! in_array($row['growth_label'], $growthFilter, true)) {
+                    return false;
+                }
+                if ($reachFilter && ! in_array($row['reach_status'] ?? null, $reachFilter, true)) {
+                    return false;
+                }
+                if ($viewsFilter && ! in_array($row['views_status'] ?? null, $viewsFilter, true)) {
+                    return false;
+                }
+                if ($engagementFilter && ! in_array($row['engagement_status'] ?? null, $engagementFilter, true)) {
+                    return false;
+                }
+
+                return true;
+            })->values();
+        }
+
+        $scoreBuckets = ScoreBucket::all();
+        $labelBuckets = LabelBucket::all();
+        $formulaWeights = FormulaWeight::all();
+        $accountGrowthBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH);
+        $viewsChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_VIEWS_CHANGE);
+        $reachChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_REACH_CHANGE);
+        $engagementChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ENGAGEMENT_CHANGE);
+        $resolver = new ScoreBucketResolver();
+
+        $rows = Cycle::whereIn('account_id', $accounts->pluck('id'))
+            ->orderBy('cycle_start_date')
+            ->get()
+            ->groupBy('account_id')
+            ->flatMap(function (Collection $accountCycles, $accountId) use ($accounts, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $viewsChangeBuckets, $reachChangeBuckets, $engagementChangeBuckets, $resolver) {
+                $accountName = $accounts->firstWhere('id', $accountId)?->name ?? '—';
+
+                // "Previous cycle" must be the previous cycle of the SAME
+                // platform — an account with interleaved Instagram/TikTok cycles
+                // would otherwise compare one platform's views/reach against the
+                // other platform's, producing a meaningless % change. Group by
+                // platform first, compute previous within each group, then
+                // re-flatten (order within the export doesn't matter here).
+                return $accountCycles
+                    ->groupBy(fn (Cycle $cycle) => $cycle->platform ?? 'instagram')
+                    ->flatMap(function (Collection $cycles) use ($accountName, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $viewsChangeBuckets, $reachChangeBuckets, $engagementChangeBuckets, $resolver) {
+                        $ordered = $cycles->values();
+
+                        return $ordered->map(function (Cycle $cycle, int $index) use ($accountName, $ordered, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $viewsChangeBuckets, $reachChangeBuckets, $engagementChangeBuckets, $resolver) {
+                            $scores = $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights);
+                            $previous = $index > 0 ? $ordered->get($index - 1) : null;
+
+                            // Views/Reach/Engagement % here are cycle-over-previous-cycle
+                            // change (same "vs last cycle" comparison shown in the Growth
+                            // modal's Volume panel) — not the absolute view_rate/reach_rate
+                            // from MetricCalculator, which is a different (rate-vs-followers)
+                            // figure.
+                            $viewsChangeRate = $this->percentChange($previous?->views, $cycle->views);
+                            $reachChangeRate = $this->percentChange($previous?->reach, $cycle->reach);
+                            $engagementChangeRate = $this->percentChange($previous?->engagement, $cycle->engagement);
+
+                            return [
+                                'account_name' => $accountName,
+                                'cycle_label' => sprintf(
+                                    '%s - %s',
+                                    $cycle->cycle_start_date->format('j M Y'),
+                                    $cycle->cycle_end_date->format('j M Y'),
+                                ),
+                                'platform' => $cycle->platform,
+                                'growth_rate' => round($scores['growth_rate'], 2),
+                                'growth_status' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
+                                'view_rate' => $viewsChangeRate !== null ? round($viewsChangeRate, 2) : null,
+                                'view_status' => $viewsChangeRate !== null ? $resolver->resolve($viewsChangeBuckets, $viewsChangeRate, 'min_score', 'label') : null,
+                                'reach_rate' => $reachChangeRate !== null ? round($reachChangeRate, 2) : null,
+                                'reach_status' => $reachChangeRate !== null ? $resolver->resolve($reachChangeBuckets, $reachChangeRate, 'min_score', 'label') : null,
+                                'engagement_rate' => $engagementChangeRate !== null ? round($engagementChangeRate, 2) : null,
+                                'engagement_status' => $engagementChangeRate !== null ? $resolver->resolve($engagementChangeBuckets, $engagementChangeRate, 'min_score', 'label') : null,
+                            ];
+                        });
+                    });
+            })
+            ->values();
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\AccountsExport($rows),
+            'accounts-'.now()->format('Y-m-d').'.xlsx',
+        );
     }
 
     /**
@@ -145,7 +297,7 @@ class AccountController extends Controller
      * health/growth filter), then paginates the PHP collection manually —
      * same pattern CycleController uses for its own score-based filtering.
      */
-    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?array $healthFilter, ?array $growthFilter, string $sortKey, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
+    private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?array $healthFilter, ?array $growthFilter, ?array $reachFilter, ?array $viewsFilter, ?array $engagementFilter, string $sortKey, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
     {
         $matching = Account::with('projectManager:id,name')
             ->withCount('cycles')
@@ -169,14 +321,29 @@ class AccountController extends Controller
                 'health_label' => $healthByAccount->get($account->id)['health_label'] ?? null,
                 'growth_rate' => $healthByAccount->get($account->id)['growth_rate'] ?? null,
                 'growth_label' => $healthByAccount->get($account->id)['growth_label'] ?? null,
+                'scores' => $healthByAccount->get($account->id),
                 'platforms' => $platformsByAccount->get($account->id, []),
             ])
             ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
             ->when($growthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['growth_label'], $growthFilter, true)))
+            ->when($reachFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['scores']['reach_status'] ?? null, $reachFilter, true)))
+            ->when($viewsFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['scores']['views_status'] ?? null, $viewsFilter, true)))
+            ->when($engagementFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['scores']['engagement_status'] ?? null, $engagementFilter, true)))
             ->values();
 
-        $sorted = $sortKey === 'health'
-            ? $rows->sort(function ($a, $b) use ($severityRank, $direction) {
+        // Numeric field each sort key ranks by — growth/reach/views/engagement
+        // sort by their actual rate (finer-grained than the status label alone),
+        // so two accounts both labeled "Sip" still order sensibly against each
+        // other instead of tying.
+        $numericField = [
+            'growth' => 'growth_rate',
+            'reach' => 'reach_change_rate',
+            'views' => 'views_change_rate',
+            'engagement' => 'engagement_change_rate',
+        ][$sortKey] ?? null;
+
+        if ($sortKey === 'health') {
+            $sorted = $rows->sort(function ($a, $b) use ($severityRank, $direction) {
                 $rankA = $severityRank[$a['health_label']] ?? PHP_INT_MAX;
                 $rankB = $severityRank[$b['health_label']] ?? PHP_INT_MAX;
 
@@ -188,8 +355,27 @@ class AccountController extends Controller
                 }
 
                 return $direction === 'desc' ? $rankB <=> $rankA : $rankA <=> $rankB;
-            })->values()
-            : $rows;
+            })->values();
+        } elseif ($numericField) {
+            // Accounts with no value (no cycles, or no prior cycle to compare
+            // against) sort last regardless of direction — same "no data isn't
+            // better or worse than a real value" rule as the health sort above.
+            $sorted = $rows->sort(function ($a, $b) use ($numericField, $direction) {
+                $valueA = $a['scores'][$numericField] ?? null;
+                $valueB = $b['scores'][$numericField] ?? null;
+
+                if ($valueA === null && $valueB === null) {
+                    return 0;
+                }
+                if ($valueA === null || $valueB === null) {
+                    return $valueA === null ? 1 : -1;
+                }
+
+                return $direction === 'desc' ? $valueB <=> $valueA : $valueA <=> $valueB;
+            })->values();
+        } else {
+            $sorted = $rows;
+        }
 
         $page = $request->integer('page', 1);
         $perPage = 15;
@@ -202,13 +388,7 @@ class AccountController extends Controller
             ['path' => $request->url(), 'query' => $request->query()],
         );
 
-        $paginator->through(fn ($row) => $this->presentAccount(
-            $row['account'],
-            $row['health_label'],
-            $row['platforms'],
-            $row['growth_rate'],
-            $row['growth_label'],
-        ));
+        $paginator->through(fn ($row) => $this->presentAccount($row['account'], $row['scores'], $row['platforms']));
 
         return $paginator;
     }
@@ -225,14 +405,15 @@ class AccountController extends Controller
 
         $accounts->through(fn (Account $account) => $this->presentAccount(
             $account,
-            $healthByAccount->get($account->id)['health_label'] ?? null,
+            $healthByAccount->get($account->id),
             $platformsByAccount->get($account->id, []),
-            $healthByAccount->get($account->id)['growth_rate'] ?? null,
-            $healthByAccount->get($account->id)['growth_label'] ?? null,
         ));
     }
 
-    private function presentAccount(Account $account, ?string $healthLabel, array $platforms, ?float $growthRate = null, ?string $growthLabel = null): array
+    /**
+     * @param  array{health_label?: ?string, growth_rate?: ?float, growth_label?: ?string, views_status?: ?string, reach_status?: ?string, engagement_status?: ?string}|null  $scores
+     */
+    private function presentAccount(Account $account, ?array $scores, array $platforms): array
     {
         return [
             'id' => $account->id,
@@ -243,20 +424,39 @@ class AccountController extends Controller
             'ig_business_id' => $account->ig_business_id,
             'ig_username' => $account->ig_username,
             'ig_connected_at' => $account->ig_connected_at?->toIso8601String(),
-            'health_label' => $healthLabel,
-            'growth_rate' => $growthRate !== null ? round($growthRate, 2) : null,
-            'growth_label' => $growthLabel,
+            'health_label' => $scores['health_label'] ?? null,
+            'growth_rate' => isset($scores['growth_rate']) ? round($scores['growth_rate'], 2) : null,
+            'growth_label' => $scores['growth_label'] ?? null,
+            'views_status' => $scores['views_status'] ?? null,
+            'reach_status' => $scores['reach_status'] ?? null,
+            'engagement_status' => $scores['engagement_status'] ?? null,
+            'by_platform' => $scores['by_platform'] ?? [],
             'platforms' => $platforms,
         ];
     }
 
     /**
-     * Health label + Growth Rate label of each account's most recently-started
-     * cycle, keyed by account_id — the same "latest cycle" convention used by
-     * the Account Growth modal's headline stat. Growth Rate uses its own
-     * LabelBucket metric (METRIC_ACCOUNT_GROWTH), separate from the Cycles-page
-     * growth label, so its thresholds can be tuned independently in Settings.
-     * Accounts with no cycles simply have no entry (row shows "No data").
+     * Health/Growth/Reach/Views/Engagement status of each account's most
+     * recently-started cycle, keyed by account_id — the same "latest cycle"
+     * convention used by the Account Growth modal's headline stat. Growth Rate
+     * uses its own LabelBucket metric (METRIC_ACCOUNT_GROWTH), separate from
+     * the Cycles-page growth label, so its thresholds can be tuned
+     * independently in Settings. Accounts with no cycles simply have no entry
+     * (row shows "No data").
+     *
+     * Computed PER PLATFORM (grouped by account_id, then by platform) rather
+     * than across an account's cycles regardless of platform — an account
+     * with both Instagram and TikTok cycles interleaved by date previously had
+     * its "latest cycle" and "previous cycle" picked purely by date, which
+     * could silently compare one platform's cycle against the OTHER platform's
+     * cycle (e.g. TikTok's July reach vs Instagram's July reach), producing a
+     * meaningless delta. Each returned row now carries a `by_platform` map
+     * (one status set per platform actually tracked) plus top-level fields
+     * mirroring whichever platform is "primary" (Instagram preferred, since
+     * it's this app's primary tracked platform; falls back to whatever
+     * platform the account does have) — the top-level fields exist only for
+     * callers that need a single value (sort/filter/summary KPI), so nothing
+     * is silently dropped for multi-platform accounts.
      */
     private function latestCycleHealthByAccount(Collection $accountIds, MetricCalculator $calculator): Collection
     {
@@ -268,21 +468,47 @@ class AccountController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
         $accountGrowthBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH);
+        $viewsChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_VIEWS_CHANGE);
+        $reachChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_REACH_CHANGE);
+        $engagementChangeBuckets = $labelBuckets->where('metric', LabelBucket::METRIC_ENGAGEMENT_CHANGE);
         $resolver = new ScoreBucketResolver();
 
         return Cycle::whereIn('account_id', $accountIds)
             ->orderBy('cycle_start_date')
             ->get()
             ->groupBy('account_id')
-            ->map(function (Collection $cycles) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $resolver) {
-                $latest = $cycles->last();
-                $scores = $calculator->calculate($latest, $scoreBuckets, $labelBuckets, $formulaWeights);
+            ->map(function (Collection $accountCycles) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $viewsChangeBuckets, $reachChangeBuckets, $engagementChangeBuckets, $resolver) {
+                $byPlatform = $accountCycles
+                    ->groupBy(fn (Cycle $cycle) => $cycle->platform ?? 'instagram')
+                    ->map(function (Collection $cycles) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $accountGrowthBuckets, $viewsChangeBuckets, $reachChangeBuckets, $engagementChangeBuckets, $resolver) {
+                        $latest = $cycles->last();
+                        $previous = $cycles->count() > 1 ? $cycles->slice(-2, 1)->first() : null;
+                        $scores = $calculator->calculate($latest, $scoreBuckets, $labelBuckets, $formulaWeights);
 
-                return [
-                    'health_label' => $scores['health_label'],
-                    'growth_rate' => $scores['growth_rate'],
-                    'growth_label' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
-                ];
+                        // Views/Reach/Engagement status here mirror the Growth Analysis
+                        // panel's "latest cycle vs the one before it" comparison — not an
+                        // absolute rate — same buckets already used there and in the
+                        // Excel export. Both cycles are now guaranteed the same platform.
+                        $viewsChangeRate = $this->percentChange($previous?->views, $latest->views);
+                        $reachChangeRate = $this->percentChange($previous?->reach, $latest->reach);
+                        $engagementChangeRate = $this->percentChange($previous?->engagement, $latest->engagement);
+
+                        return [
+                            'health_label' => $scores['health_label'],
+                            'growth_rate' => $scores['growth_rate'],
+                            'growth_label' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
+                            'views_change_rate' => $viewsChangeRate,
+                            'views_status' => $viewsChangeRate !== null ? $resolver->resolve($viewsChangeBuckets, $viewsChangeRate, 'min_score', 'label') : null,
+                            'reach_change_rate' => $reachChangeRate,
+                            'reach_status' => $reachChangeRate !== null ? $resolver->resolve($reachChangeBuckets, $reachChangeRate, 'min_score', 'label') : null,
+                            'engagement_change_rate' => $engagementChangeRate,
+                            'engagement_status' => $engagementChangeRate !== null ? $resolver->resolve($engagementChangeBuckets, $engagementChangeRate, 'min_score', 'label') : null,
+                        ];
+                    });
+
+                $primary = $byPlatform->get('instagram') ?? $byPlatform->first();
+
+                return array_merge($primary, ['by_platform' => $byPlatform->all()]);
             });
     }
 
@@ -354,6 +580,17 @@ class AccountController extends Controller
             'postSummary' => $this->postSummaryByPlatform($performances),
             'ai_summary' => $account->ai_summary,
             'ai_summary_generated_at' => $account->ai_summary_generated_at?->toIso8601String(),
+            // Change-labeling buckets for the Growth Analysis panel — resolved
+            // client-side against the two picked cycles' raw values, since that
+            // comparison is computed in the browser (same reasoning growth_rate_label
+            // above is precomputed per-cycle: identical "highest min <= rate wins"
+            // rule, just applied to a period-over-period % change instead of a
+            // single cycle's own rate).
+            'changeLabelBuckets' => [
+                'views' => $labelBuckets->where('metric', LabelBucket::METRIC_VIEWS_CHANGE)->values(),
+                'reach' => $labelBuckets->where('metric', LabelBucket::METRIC_REACH_CHANGE)->values(),
+                'engagement' => $labelBuckets->where('metric', LabelBucket::METRIC_ENGAGEMENT_CHANGE)->values(),
+            ],
         ]);
     }
 

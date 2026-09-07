@@ -68,12 +68,30 @@ class LabelBucketSeeder extends Seeder
         }
 
         if (! LabelBucket::query()->where('metric', LabelBucket::METRIC_ACCOUNT_GROWTH)->exists()) {
+            // Same wording as the Views/Reach/Engagement change buckets below
+            // (Sip/Bagus/Cukup/Perlu Perhatian) — kept consistent so the Accounts
+            // table's four status columns read as one system, not two.
             $this->seedMetric(LabelBucket::METRIC_ACCOUNT_GROWTH, [
                 [15.0, 'Sip'],
-                [5.0, 'Good'],
+                [5.0, 'Bagus'],
                 [0.0, 'Cukup'],
-                [null, 'Need attention'],
+                [null, 'Perlu Perhatian'],
             ]);
+        }
+
+        // Period-over-period % change labels for the Growth Analysis panel —
+        // same thresholds/wording as Account Growth Rate, per explicit request:
+        // >15% Sip, >5% Bagus, >0% Cukup, <0% Perlu Perhatian. Applied to Views,
+        // Reach, and Engagement change between two picked months.
+        foreach ([LabelBucket::METRIC_VIEWS_CHANGE, LabelBucket::METRIC_REACH_CHANGE, LabelBucket::METRIC_ENGAGEMENT_CHANGE] as $metric) {
+            if (! LabelBucket::query()->where('metric', $metric)->exists()) {
+                $this->seedMetric($metric, [
+                    [15.0, 'Sip'],
+                    [5.0, 'Bagus'],
+                    [0.0, 'Cukup'],
+                    [null, 'Perlu Perhatian'],
+                ]);
+            }
         }
     }
 

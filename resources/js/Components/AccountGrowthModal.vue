@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from '../chartSetup';
 import StatusBadge from './StatusBadge.vue';
+import MonthRangePicker from './MonthRangePicker.vue';
 
 const props = defineProps({
     account: {
@@ -32,6 +33,7 @@ const emptySummary = () => ({
     without_cycle: emptyCountAndViews(),
 });
 const postSummary = ref({ instagram: emptySummary(), tiktok: emptySummary() });
+const changeLabelBuckets = ref({ views: [], reach: [], engagement: [] });
 
 const tabs = [
     { key: 'instagram', label: 'Instagram' },
@@ -43,10 +45,11 @@ const activeTab = ref(props.initialPlatform === 'tiktok' ? 'tiktok' : 'instagram
 
 const platformCycles = (platform) => cycles.value.filter((c) => (c.platform ?? 'instagram') === platform);
 
-// Range filter for the CHARTS only — scopes every chart together (one control, above
-// everything it affects, never silently truncated). The KPI headline/delta always
-// reads the true latest cycle regardless of this filter, since "vs last cycle" means
-// the actual last cycle, not whatever the chart window happens to include.
+// Range filter — one control that now scopes EVERYTHING below it (KPI headline,
+// Volume tiles, and every chart), so a picked window is never partially applied.
+// Two modes: a quick "last N cycles" dropdown (chart-window only, KPI/Volume
+// still reflect the true latest cycle), or a specific From/To month pick, which
+// takes over as the single source of truth for the whole modal once set.
 const rangeOptions = [
     { value: 6, label: 'Last 6 cycles' },
     { value: 12, label: 'Last 12 cycles' },
@@ -55,12 +58,120 @@ const rangeOptions = [
 const range = ref(12);
 
 const allActiveCycles = computed(() => platformCycles(activeTab.value));
+
+// Month-range pick — each endpoint resolves to the cycle whose start-month is
+// at-or-before the chosen month ("highest match <= target", same convention as
+// ScoreBucketResolver and every month-range filter elsewhere in this app), so
+// picking a month with no cycle in it still lands on the last real data point
+// up to that point rather than showing nothing.
+const growthFromMonth = ref('');
+const growthToMonth = ref('');
+const showGrowthPicker = ref(false);
+const hasMonthRange = computed(() => !!growthFromMonth.value && !!growthToMonth.value);
+
+const cycleForMonth = (monthKey) => {
+    if (!monthKey) return null;
+    let best = null;
+    for (const cycle of allActiveCycles.value) {
+        const cycleMonth = cycle.cycle_start_date.slice(0, 7); // 'YYYY-MM'
+        if (cycleMonth <= monthKey && (!best || cycleMonth > best.cycle_start_date.slice(0, 7))) {
+            best = cycle;
+        }
+    }
+    return best;
+};
+
+const growthFromCycle = computed(() => cycleForMonth(growthFromMonth.value));
+const growthToCycle = computed(() => cycleForMonth(growthToMonth.value));
+
+// activeCycles drives every chart. With a month range picked, it's windowed to
+// the cycles between (and including) the two resolved endpoints; otherwise it
+// falls back to the "last N cycles" dropdown, same as before.
 const activeCycles = computed(() => {
+    if (hasMonthRange.value && growthFromCycle.value && growthToCycle.value) {
+        const fromIndex = allActiveCycles.value.indexOf(growthFromCycle.value);
+        const toIndex = allActiveCycles.value.indexOf(growthToCycle.value);
+        const [start, end] = fromIndex <= toIndex ? [fromIndex, toIndex] : [toIndex, fromIndex];
+        return allActiveCycles.value.slice(start, end + 1);
+    }
     if (range.value === 'all') return allActiveCycles.value;
     return allActiveCycles.value.slice(-range.value);
 });
-const latestCycle = computed(() => allActiveCycles.value.at(-1) ?? null);
-const previousCycle = computed(() => allActiveCycles.value.at(-2) ?? null);
+
+// KPI headline + Volume tiles: with a month range picked, "latest"/"previous"
+// become the range's To/From cycles, so the whole modal reflects the same
+// window instead of the headline silently staying pinned to the true latest
+// cycle while everything else moves. With no range picked, these stay the
+// true latest/previous cycle, unchanged from before.
+const latestCycle = computed(() => {
+    if (hasMonthRange.value && growthToCycle.value) return growthToCycle.value;
+    return allActiveCycles.value.at(-1) ?? null;
+});
+const previousCycle = computed(() => {
+    if (hasMonthRange.value && growthFromCycle.value) return growthFromCycle.value;
+    return allActiveCycles.value.at(-2) ?? null;
+});
+
+// Resolves a rate to the highest-min-<=-rate tier's label — same rule as the
+// backend's ScoreBucketResolver, mirrored here since this comparison (between
+// two client-picked cycles) is computed in the browser.
+const resolveChangeLabel = (buckets, rate) => {
+    let winner = null;
+    let winnerMin = -Infinity;
+    for (const bucket of buckets ?? []) {
+        const min = bucket.min_score === null ? -Infinity : Number(bucket.min_score);
+        if (min > rate) continue;
+        if (winner === null || min > winnerMin) {
+            winner = bucket;
+            winnerMin = min;
+        }
+    }
+    return winner?.label ?? null;
+};
+
+// Percent change between two values — null when the base is 0/missing, since
+// "change from zero" has no meaningful percentage.
+const percentChange = (from, to) => {
+    if (from === null || from === undefined || to === null || to === undefined || from === 0) return null;
+    return ((to - from) / from) * 100;
+};
+
+const growthAnalysis = computed(() => {
+    const from = previousCycle.value;
+    const to = latestCycle.value;
+    if (!from || !to || from.end_follower === null || to.end_follower === null || from === to) return null;
+
+    const followerChange = to.end_follower - from.end_follower;
+    const followerChangeRate = from.end_follower !== 0 ? (followerChange / from.end_follower) * 100 : null;
+
+    const viewsChangeRate = percentChange(from.views, to.views);
+    const reachChangeRate = percentChange(from.reach, to.reach);
+    const engagementChangeRate = percentChange(from.engagement, to.engagement);
+
+    return {
+        from,
+        to,
+        followerChange,
+        followerChangeRate,
+        viewsChange: (to.views ?? 0) - (from.views ?? 0),
+        reachChange: (to.reach ?? 0) - (from.reach ?? 0),
+        engagementChange: (to.engagement ?? 0) - (from.engagement ?? 0),
+        viewsChangeRate,
+        reachChangeRate,
+        engagementChangeRate,
+        viewsChangeLabel: viewsChangeRate === null ? null : resolveChangeLabel(changeLabelBuckets.value.views, viewsChangeRate),
+        reachChangeLabel: reachChangeRate === null ? null : resolveChangeLabel(changeLabelBuckets.value.reach, reachChangeRate),
+        engagementChangeLabel: engagementChangeRate === null ? null : resolveChangeLabel(changeLabelBuckets.value.engagement, engagementChangeRate),
+    };
+});
+
+const clearGrowthAnalysis = () => {
+    growthFromMonth.value = '';
+    growthToMonth.value = '';
+    showGrowthPicker.value = false;
+};
+
+watch(activeTab, clearGrowthAnalysis);
 
 const activePlatformSummary = () => postSummary.value[activeTab.value] ?? emptySummary();
 
@@ -168,13 +279,22 @@ const formatValue = (value, suffix) => (suffix ? `${value}${suffix}` : new Intl.
 const growthLabelTones = {
     sip: { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
     good: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
+    bagus: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
     cukup: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
     'need attention': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
+    'perlu perhatian': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
 };
 
 const growthLabelTone = (label) => {
     const tone = growthLabelTones[label?.toLowerCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' };
     return `background-color: ${tone.bg}; color: ${tone.ink}`;
+};
+
+// Maps a Volume tile's key to its resolved change label from growthAnalysis —
+// only Reach/Views/Engagement have change buckets (Story Performance doesn't).
+const changeLabelFor = (tileKey) => {
+    const field = { reach: 'reachChangeLabel', views: 'viewsChangeLabel', engagement: 'engagementChangeLabel' }[tileKey];
+    return field ? (growthAnalysis.value?.[field] ?? null) : null;
 };
 
 const setCanvasRef = (key, el) => {
@@ -254,6 +374,7 @@ const renderAllCharts = async () => {
 
 watch(activeTab, renderAllCharts);
 watch(range, renderAllCharts);
+watch([growthFromMonth, growthToMonth], renderAllCharts);
 
 // AI Summary tab
 
@@ -472,6 +593,7 @@ const load = async () => {
 
         cycles.value = data.cycles;
         postSummary.value = data.postSummary ?? postSummary.value;
+        changeLabelBuckets.value = data.changeLabelBuckets ?? changeLabelBuckets.value;
 
         if (data.ai_summary) {
             summaryResult.value = {
@@ -617,15 +739,87 @@ onBeforeUnmount(() => {
                 </p>
 
                 <div v-else>
-                    <!-- Headline: the numbers this modal exists to answer, stated plainly. -->
-                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <!-- Filter bar: one control that now scopes EVERYTHING below it (headline,
+                         Volume tiles, and every chart). Pick a From/To month for a specific
+                         window, or fall back to the quick "last N cycles" dropdown. -->
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <p v-if="hasMonthRange && growthAnalysis" class="text-xs" style="color: var(--ink-muted)">
+                            Viewing <strong style="color: var(--ink)">{{ growthAnalysis.from.label }}</strong> →
+                            <strong style="color: var(--ink)">{{ growthAnalysis.to.label }}</strong>
+                        </p>
+                        <p v-else-if="hasMonthRange" class="text-xs" style="color: var(--ink-faint)">
+                            No cycle data found at or before one of the selected months.
+                        </p>
+                        <span v-else />
+
+                        <div class="relative flex items-center gap-2">
+                            <select
+                                v-if="!hasMonthRange && allActiveCycles.length > 6"
+                                v-model="range"
+                                class="rounded-md border px-2.5 py-1.5 text-xs transition-colors focus:outline-none"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            >
+                                <option v-for="option in rangeOptions" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
+                                style="border-color: var(--border); color: var(--ink)"
+                                @click="showGrowthPicker = !showGrowthPicker"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                                    <path d="M3 10h18M8 2v4M16 2v4" />
+                                </svg>
+                                <template v-if="growthFromMonth || growthToMonth">
+                                    {{ growthFromMonth || '…' }} → {{ growthToMonth || '…' }}
+                                </template>
+                                <template v-else>Pick months</template>
+                            </button>
+                            <button
+                                v-if="growthFromMonth || growthToMonth"
+                                type="button"
+                                class="text-xs font-medium underline transition-opacity hover:opacity-70"
+                                style="color: var(--accent)"
+                                @click="clearGrowthAnalysis"
+                            >
+                                Clear
+                            </button>
+
+                            <div
+                                v-if="showGrowthPicker"
+                                class="absolute right-0 top-full z-10 mt-2 w-72 shadow-xl"
+                            >
+                                <MonthRangePicker
+                                    v-model:model-from="growthFromMonth"
+                                    v-model:model-to="growthToMonth"
+                                    class="!max-w-none"
+                                />
+                                <button
+                                    type="button"
+                                    class="mt-2 w-full rounded-md py-1.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                                    style="background-color: var(--accent); color: var(--accent-ink)"
+                                    @click="showGrowthPicker = false"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Headline: the numbers this modal exists to answer, plainly stated —
+                         reflects the picked month range when one is active, otherwise the
+                         true latest cycle. -->
+                    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                             <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Followers</p>
                             <p class="mt-1 font-display text-2xl font-bold" style="color: var(--ink)">
                                 {{ formatCompact(latestCycle?.end_follower) }}
                             </p>
                             <p v-if="deltaFor('end_follower') !== null" class="mt-0.5 text-xs font-medium" :style="deltaFor('end_follower') >= 0 ? 'color: var(--status-sip-ink)' : 'color: var(--status-parah-ink)'">
-                                {{ formatDelta(deltaFor('end_follower')) }} vs last cycle
+                                {{ formatDelta(deltaFor('end_follower')) }} {{ hasMonthRange ? 'in range' : 'vs last cycle' }}
                             </p>
                         </div>
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
@@ -647,7 +841,7 @@ onBeforeUnmount(() => {
                             >
                                 {{ latestCycle.growth_rate_label }}
                             </span>
-                            <p v-else class="mt-0.5 text-xs" style="color: var(--ink-muted)">latest cycle</p>
+                            <p v-else class="mt-0.5 text-xs" style="color: var(--ink-muted)">{{ hasMonthRange ? 'selected cycle' : 'latest cycle' }}</p>
                         </div>
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                             <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Avg Views</p>
@@ -658,21 +852,6 @@ onBeforeUnmount(() => {
                                 {{ formatCount(activePlatformSummary().total_posts) }} posts total
                             </p>
                         </div>
-                    </div>
-
-                    <!-- Range filter — one control, above every chart it scopes; the KPI row above
-                         stays fixed to the true latest cycle regardless of this selection. -->
-                    <div v-if="allActiveCycles.length > 6" class="mt-4 flex items-center justify-end gap-2">
-                        <label class="text-xs font-medium" style="color: var(--ink-muted)">Chart range</label>
-                        <select
-                            v-model="range"
-                            class="rounded-md border px-2.5 py-1.5 text-xs transition-colors focus:outline-none"
-                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                        >
-                            <option v-for="option in rangeOptions" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
                     </div>
 
                     <!-- The one real trend that matters at a glance: followers over time. -->
@@ -687,7 +866,9 @@ onBeforeUnmount(() => {
                     <!-- Volume: stat tiles with a delta arrow instead of three more mini line-charts. -->
                     <div class="mt-4 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                         <h3 class="font-display text-sm font-bold" style="color: var(--ink)">Volume</h3>
-                        <p class="text-xs" style="color: var(--ink-faint)">Latest cycle, compared to the one before it.</p>
+                        <p class="text-xs" style="color: var(--ink-faint)">
+                            {{ hasMonthRange ? 'Selected range, compared start to end.' : 'Latest cycle, compared to the one before it.' }}
+                        </p>
                         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                             <div v-for="tile in volumeTiles" :key="tile.key" class="rounded-md border p-3" style="border-color: var(--border); background-color: var(--bg)">
                                 <p class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--ink-faint)">{{ tile.label }}</p>
@@ -698,6 +879,13 @@ onBeforeUnmount(() => {
                                     {{ deltaFor(tile.key) >= 0 ? '▲' : '▼' }} {{ Math.abs(Math.round(deltaFor(tile.key) * 10) / 10) }}%
                                 </p>
                                 <p v-else class="mt-0.5 text-xs" style="color: var(--ink-faint)">—</p>
+                                <span
+                                    v-if="changeLabelFor(tile.key)"
+                                    class="mt-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                                    :style="growthLabelTone(changeLabelFor(tile.key))"
+                                >
+                                    {{ changeLabelFor(tile.key) }}
+                                </span>
                             </div>
                         </div>
                     </div>
