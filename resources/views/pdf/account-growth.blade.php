@@ -14,7 +14,7 @@
         .ai-summary h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #0f766e; margin: 0 0 6px; }
         .ai-summary p { margin: 0; line-height: 1.5; }
         .kpis { width: 100%; margin-top: 4px; }
-        .kpis td { width: 25%; padding: 8px; border: 1px solid #d8dedc; vertical-align: top; }
+        .kpis td { width: 20%; padding: 8px; border: 1px solid #d8dedc; vertical-align: top; }
         .kpis .label { font-size: 9px; text-transform: uppercase; color: #8b979b; display: block; }
         .kpis .value { font-size: 17px; font-weight: bold; margin-top: 3px; }
         .kpis .delta-up { font-size: 10px; font-weight: bold; color: #146c48; margin-top: 2px; }
@@ -78,6 +78,11 @@
                     <span class="label">Avg Views</span>
                     <span class="value">{{ $summary['avg_views'] !== null ? number_format($summary['avg_views']) : '—' }}</span>
                     <span class="hint">{{ $summary['total_posts'] !== null ? number_format($summary['total_posts']) : 0 }} posts total</span>
+                </td>
+                <td>
+                    <span class="label">Median Views</span>
+                    <span class="value">{{ ($summary['median_views'] ?? null) !== null ? number_format($summary['median_views']) : '—' }}</span>
+                    <span class="hint">typical post</span>
                 </td>
             </tr>
         </table>

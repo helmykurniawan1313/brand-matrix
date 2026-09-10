@@ -29,6 +29,7 @@ const emptySummary = () => ({
     total_posts: 0,
     total_views: 0,
     avg_views: null,
+    median_views: null,
     with_cycle: emptyCountAndViews(),
     without_cycle: emptyCountAndViews(),
 });
@@ -541,6 +542,7 @@ const downloadPdf = async () => {
                     health_rate: latestCycle.value?.health_rate ?? null,
                     growth_rate: latestCycle.value?.growth_rate ?? null,
                     avg_views: activePlatformSummary().avg_views ?? null,
+                    median_views: activePlatformSummary().median_views ?? null,
                     total_posts: activePlatformSummary().total_posts ?? null,
                     latest_cycle_label: latestCycle.value?.label ?? null,
                     volume: volumeTiles.value.map((tile) => ({
@@ -812,7 +814,7 @@ onBeforeUnmount(() => {
                     <!-- Headline: the numbers this modal exists to answer, plainly stated —
                          reflects the picked month range when one is active, otherwise the
                          true latest cycle. -->
-                    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                             <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Followers</p>
                             <p class="mt-1 font-display text-2xl font-bold" style="color: var(--ink)">
@@ -851,6 +853,13 @@ onBeforeUnmount(() => {
                             <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">
                                 {{ formatCount(activePlatformSummary().total_posts) }} posts total
                             </p>
+                        </div>
+                        <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
+                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Median Views</p>
+                            <p class="mt-1 font-display text-2xl font-bold" style="color: var(--ink)">
+                                {{ formatCountOrDash(activePlatformSummary().median_views) }}
+                            </p>
+                            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">typical post</p>
                         </div>
                     </div>
 

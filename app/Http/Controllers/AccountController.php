@@ -121,6 +121,31 @@ class AccountController extends Controller
     }
 
     /**
+     * Median of a collection of numeric values — the middle value when sorted,
+     * or the average of the two middle values for an even count. Used
+     * alongside the mean (avg_views) so a handful of viral outlier posts
+     * doesn't make the "typical" post look higher than it really is — same
+     * reasoning as ViewsTrendController's median().
+     */
+    private function median(Collection $values): ?float
+    {
+        $sorted = $values->sort()->values();
+        $count = $sorted->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $middle = intdiv($count, 2);
+
+        if ($count % 2 === 1) {
+            return (float) $sorted[$middle];
+        }
+
+        return (float) (($sorted[$middle - 1] + $sorted[$middle]) / 2);
+    }
+
+    /**
      * Parses a comma-separated multi-value filter param (e.g. "SIP,BAGUS") into
      * an array, or null if absent — same convention as CycleController's label
      * filters, reused here for Accounts' Health/Growth Rate filters.
@@ -635,9 +660,11 @@ class AccountController extends Controller
             return [
                 'total_posts' => $platformPerformances->count(),
                 'total_views' => (int) $viewsWithValue->sum(),
-                // Averaged over posts with a recorded view count, not every post — a post with
-                // no data yet shouldn't drag the average toward zero (matches avg_views elsewhere).
+                // Averaged/medianed over posts with a recorded view count, not every
+                // post — a post with no data yet shouldn't drag either figure toward
+                // zero (matches avg_views/median_views elsewhere).
                 'avg_views' => $viewsWithValue->isEmpty() ? null : (int) round($viewsWithValue->avg()),
+                'median_views' => $viewsWithValue->isEmpty() ? null : (int) round($this->median($viewsWithValue)),
                 'with_cycle' => $countAndViews($platformPerformances->filter(fn (Performance $performance) => $performance->cycle_id !== null)),
                 'without_cycle' => $countAndViews($platformPerformances->filter(fn (Performance $performance) => $performance->cycle_id === null)),
             ];
@@ -726,6 +753,7 @@ class AccountController extends Controller
             'summary.health_rate' => ['nullable', 'numeric'],
             'summary.growth_rate' => ['nullable', 'numeric'],
             'summary.avg_views' => ['nullable', 'numeric'],
+            'summary.median_views' => ['nullable', 'numeric'],
             'summary.total_posts' => ['nullable', 'numeric'],
             'summary.latest_cycle_label' => ['nullable', 'string'],
             'summary.volume' => ['nullable', 'array'],
