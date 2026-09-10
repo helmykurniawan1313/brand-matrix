@@ -481,7 +481,6 @@ const showRankingModal = ref(false);
                             <span v-if="sort === 'delta_pct'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
                         </th>
                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">As of</th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -519,10 +518,9 @@ const showRankingModal = ref(false);
                             {{ formatDelta(row.delta_pct) }}
                         </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ row.last_cycle_label }}</td>
-                        <td class="px-4 py-3.5 text-right text-sm" style="color: var(--ink-faint)">View →</td>
                     </tr>
                     <tr v-if="rows.data.length === 0">
-                        <td :colspan="platform === 'all' ? 10 : 9" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td :colspan="platform === 'all' ? 9 : 8" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             No accounts match this filter.
                         </td>
                     </tr>
