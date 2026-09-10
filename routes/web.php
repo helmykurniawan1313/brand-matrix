@@ -28,6 +28,8 @@ Route::middleware('auth')->group(function () {
     Route::get('views-trend-pdf', [ViewsTrendController::class, 'pdf'])->name('views-trend.pdf');
     Route::get('views-trend-excel', [ViewsTrendController::class, 'exportExcel'])->name('views-trend.excel');
     Route::get('views-trend-ranking', [ViewsTrendController::class, 'ranking'])->name('views-trend.ranking');
+    Route::get('views-trend-ranking-pdf', [ViewsTrendController::class, 'rankingPdf'])->name('views-trend.ranking.pdf');
+    Route::get('views-trend-ranking-excel', [ViewsTrendController::class, 'rankingExcel'])->name('views-trend.ranking.excel');
     Route::get('views-trend-ranking/{employee}', [ViewsTrendController::class, 'personSeries'])->name('views-trend.ranking.person');
     Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
 

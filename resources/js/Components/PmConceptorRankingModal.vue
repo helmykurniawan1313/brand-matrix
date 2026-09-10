@@ -84,6 +84,17 @@ const clearMonthFilter = () => {
     monthTo.value = '';
 };
 
+// Export URLs carry the same platform + month-range filter the modal is
+// currently showing, so a PDF/Excel download always matches what's on screen.
+const exportParams = () => {
+    const params = new URLSearchParams({ platform: props.platform });
+    if (monthFrom.value) params.set('month_from', monthFrom.value);
+    if (monthTo.value) params.set('month_to', monthTo.value || monthFrom.value);
+    return params.toString();
+};
+const pdfUrl = computed(() => `/views-trend-ranking-pdf?${exportParams()}`);
+const excelUrl = computed(() => `/views-trend-ranking-excel?${exportParams()}`);
+
 watch(() => props.platform, load);
 watch([monthFrom, monthTo], load);
 
@@ -230,17 +241,41 @@ onBeforeUnmount(destroyChart);
                     <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Best PM &amp; Conceptor</h2>
                     <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">Ranked by median views per post</p>
                 </div>
-                <button
-                    type="button"
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
-                    style="color: var(--ink-muted)"
-                    aria-label="Close"
-                    @click="emit('close')"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                    </svg>
-                </button>
+                <div class="flex shrink-0 items-center gap-2">
+                    <a
+                        :href="pdfUrl"
+                        class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
+                        style="border-color: var(--border); color: var(--ink-muted)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6" />
+                        </svg>
+                        PDF
+                    </a>
+                    <a
+                        :href="excelUrl"
+                        class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
+                        style="border-color: var(--border); color: var(--ink-muted)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6M8 13h8M8 17h5" />
+                        </svg>
+                        Excel
+                    </a>
+                    <button
+                        type="button"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                        style="color: var(--ink-muted)"
+                        aria-label="Close"
+                        @click="emit('close')"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-6 pt-3 pb-3" style="border-color: var(--border)">

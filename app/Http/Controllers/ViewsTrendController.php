@@ -316,6 +316,54 @@ class ViewsTrendController extends Controller
      */
     public function ranking(Request $request): JsonResponse
     {
+        ['filters' => $filters, 'projectManagers' => $pms, 'conceptors' => $conceptors] = $this->rankingData($request);
+
+        return response()->json([
+            'filters' => $filters,
+            'projectManagers' => $pms,
+            'conceptors' => $conceptors,
+        ]);
+    }
+
+    /**
+     * PM/Conceptor ranking as a PDF, respecting the same platform + month-range
+     * filters the modal shows. Both leaderboards on one document.
+     */
+    public function rankingPdf(Request $request): HttpResponse
+    {
+        ['filters' => $filters, 'projectManagers' => $pms, 'conceptors' => $conceptors] = $this->rankingData($request);
+
+        $pdf = Pdf::loadView('pdf.pm-conceptor-ranking', [
+            'projectManagers' => $pms,
+            'conceptors' => $conceptors,
+            'filterSummary' => $this->rankingFilterSummary($filters),
+            'generatedAt' => now()->format('M j, Y g:i A'),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download('best-pm-conceptor-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    /**
+     * Same ranking data as rankingPdf(), as an .xlsx — PM rows first, then a
+     * blank row, then Conceptor rows, each section with its own header.
+     */
+    public function rankingExcel(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        ['projectManagers' => $pms, 'conceptors' => $conceptors] = $this->rankingData($request);
+
+        return Excel::download(
+            new \App\Exports\PmConceptorRankingExport(collect($pms), collect($conceptors)),
+            'best-pm-conceptor-'.now()->format('Y-m-d').'.xlsx',
+        );
+    }
+
+    /**
+     * Shared filter parsing + performance fetch + ranking for ranking(),
+     * rankingPdf() and rankingExcel() — one place for the platform/month-range
+     * logic so the three stay in sync.
+     */
+    private function rankingData(Request $request): array
+    {
         $platform = $request->string('platform')->toString();
         $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
 
@@ -334,11 +382,36 @@ class ViewsTrendController extends Controller
             })
             ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
 
-        return response()->json([
+        return [
             'filters' => ['platform' => $platform, 'month_from' => $monthFrom, 'month_to' => $monthTo],
             'projectManagers' => $this->rankByEmployee($performances, 'project_manager_id'),
             'conceptors' => $this->rankByEmployee($performances, 'conceptor_id'),
-        ]);
+        ];
+    }
+
+    /**
+     * Human-readable one-liner for the ranking PDF header.
+     */
+    private function rankingFilterSummary(array $filters): string
+    {
+        $parts = [];
+
+        $parts[] = 'platform: '.match ($filters['platform']) {
+            'instagram' => 'Instagram',
+            'tiktok' => 'TikTok',
+            default => 'All',
+        };
+
+        if ($filters['month_from']) {
+            $to = $filters['month_to'] ?: $filters['month_from'];
+            $parts[] = $filters['month_from'] === $to
+                ? "month: {$filters['month_from']}"
+                : "months: {$filters['month_from']} to {$to}";
+        } else {
+            $parts[] = 'months: all time';
+        }
+
+        return implode(', ', $parts);
     }
 
     /**
