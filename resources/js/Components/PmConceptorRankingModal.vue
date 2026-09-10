@@ -19,10 +19,29 @@ const tabs = [
     { key: 'conceptor', label: 'Conceptors' },
 ];
 
-// Month range filter — native month inputs, applied on change. Both empty
-// means "all time" (no range param sent to the backend at all).
+// Range filter. Two modes:
+//  - 'month': bucket each post by its own post_date month (native month inputs).
+//  - 'cycle': only posts assigned to a cycle, bucketed by the month the cycle
+//    STARTS in (a 26 Jul–25 Aug cycle = "July"). The picker then offers only
+//    months a cycle actually starts in (`cycleMonths` from the API).
+// Both from/to empty = whole set (no range param sent to the backend).
+const rangeMode = ref('month');
 const monthFrom = ref('');
 const monthTo = ref('');
+const cycleMonths = ref([]);
+
+const setRangeMode = (mode) => {
+    if (rangeMode.value === mode) return;
+    rangeMode.value = mode;
+    monthFrom.value = '';
+    monthTo.value = '';
+};
+
+const formatMonthLabel = (ym) => {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
+};
 
 // Sort ties by average views (best-first by default); a click on any other
 // column re-sorts client-side over the already-loaded list — this endpoint
@@ -55,11 +74,7 @@ const load = async () => {
     error.value = null;
 
     try {
-        const params = new URLSearchParams({ platform: props.platform });
-        if (monthFrom.value) params.set('month_from', monthFrom.value);
-        if (monthTo.value) params.set('month_to', monthTo.value || monthFrom.value);
-
-        const response = await fetch(`/views-trend-ranking?${params.toString()}`, {
+        const response = await fetch(`/views-trend-ranking?${filterParams().toString()}`, {
             headers: { Accept: 'application/json' },
         });
 
@@ -68,9 +83,13 @@ const load = async () => {
         const data = await response.json();
         projectManagers.value = data.projectManagers ?? [];
         conceptors.value = data.conceptors ?? [];
+        cycleMonths.value = data.cycleMonths ?? [];
 
         if (projectManagers.value.length === 0 && conceptors.value.length === 0) {
-            error.value = 'No posts with recorded views yet to rank.';
+            error.value =
+                rangeMode.value === 'cycle'
+                    ? 'No cycle-assigned posts with recorded views for this range.'
+                    : 'No posts with recorded views for this range.';
         }
     } catch (e) {
         error.value = e.message;
@@ -84,19 +103,20 @@ const clearMonthFilter = () => {
     monthTo.value = '';
 };
 
-// Export URLs carry the same platform + month-range filter the modal is
-// currently showing, so a PDF/Excel download always matches what's on screen.
-const exportParams = () => {
-    const params = new URLSearchParams({ platform: props.platform });
+// Shared param builder — the JSON load, the PDF link and the Excel link all
+// carry exactly the same platform / range_mode / month range, so a download
+// always matches what's on screen.
+const filterParams = () => {
+    const params = new URLSearchParams({ platform: props.platform, range_mode: rangeMode.value });
     if (monthFrom.value) params.set('month_from', monthFrom.value);
     if (monthTo.value) params.set('month_to', monthTo.value || monthFrom.value);
-    return params.toString();
+    return params;
 };
-const pdfUrl = computed(() => `/views-trend-ranking-pdf?${exportParams()}`);
-const excelUrl = computed(() => `/views-trend-ranking-excel?${exportParams()}`);
+const pdfUrl = computed(() => `/views-trend-ranking-pdf?${filterParams().toString()}`);
+const excelUrl = computed(() => `/views-trend-ranking-excel?${filterParams().toString()}`);
 
 watch(() => props.platform, load);
-watch([monthFrom, monthTo], load);
+watch([rangeMode, monthFrom, monthTo], load);
 
 load();
 
@@ -135,12 +155,8 @@ const loadPersonSeries = async () => {
     chartError.value = null;
 
     try {
-        const params = new URLSearchParams({
-            platform: props.platform,
-            role: selectedPerson.value.role,
-        });
-        if (monthFrom.value) params.set('month_from', monthFrom.value);
-        if (monthTo.value) params.set('month_to', monthTo.value || monthFrom.value);
+        const params = filterParams();
+        params.set('role', selectedPerson.value.role);
 
         const response = await fetch(`/views-trend-ranking/${selectedPerson.value.employee_id}?${params.toString()}`, {
             headers: { Accept: 'application/json' },
@@ -239,7 +255,10 @@ onBeforeUnmount(destroyChart);
             <div class="flex shrink-0 items-start justify-between gap-4 border-b p-6" style="border-color: var(--border)">
                 <div>
                     <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Best PM &amp; Conceptor</h2>
-                    <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">Ranked by median views per post</p>
+                    <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">
+                        Ranked by median views per post ·
+                        {{ rangeMode === 'cycle' ? 'grouped by cycle start month' : 'grouped by post month' }}
+                    </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
                     <a
@@ -296,26 +315,90 @@ onBeforeUnmount(destroyChart);
                     </button>
                 </div>
 
-                <div class="flex items-center gap-2 text-sm" style="color: var(--ink-muted)">
-                    <label class="flex items-center gap-1.5">
-                        From
-                        <input
-                            v-model="monthFrom"
-                            type="month"
-                            class="rounded-md border px-2 py-1 text-sm"
-                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                        />
-                    </label>
-                    <label class="flex items-center gap-1.5">
-                        To
-                        <input
-                            v-model="monthTo"
-                            type="month"
-                            :disabled="!monthFrom"
-                            class="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                        />
-                    </label>
+                <div class="flex flex-wrap items-center gap-2 text-sm" style="color: var(--ink-muted)">
+                    <div class="inline-flex overflow-hidden rounded-md border" style="border-color: var(--border)">
+                        <button
+                            type="button"
+                            class="px-2.5 py-1 text-xs font-medium transition-colors"
+                            :style="
+                                rangeMode === 'month'
+                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                    : 'background-color: var(--surface); color: var(--ink-muted)'
+                            "
+                            @click="setRangeMode('month')"
+                        >
+                            By Month
+                        </button>
+                        <button
+                            type="button"
+                            class="px-2.5 py-1 text-xs font-medium transition-colors"
+                            :style="
+                                rangeMode === 'cycle'
+                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                    : 'background-color: var(--surface); color: var(--ink-muted)'
+                            "
+                            @click="setRangeMode('cycle')"
+                        >
+                            By Cycle
+                        </button>
+                    </div>
+
+                    <!-- Month mode: free native month inputs -->
+                    <template v-if="rangeMode === 'month'">
+                        <label class="flex items-center gap-1.5">
+                            From
+                            <input
+                                v-model="monthFrom"
+                                type="month"
+                                class="rounded-md border px-2 py-1 text-sm"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            />
+                        </label>
+                        <label class="flex items-center gap-1.5">
+                            To
+                            <input
+                                v-model="monthTo"
+                                type="month"
+                                :disabled="!monthFrom"
+                                class="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            />
+                        </label>
+                    </template>
+
+                    <!-- Cycle mode: pick from months a cycle actually starts in -->
+                    <template v-else>
+                        <label class="flex items-center gap-1.5">
+                            From
+                            <select
+                                v-model="monthFrom"
+                                class="rounded-md border px-2 py-1 text-sm"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            >
+                                <option value="">Earliest</option>
+                                <option v-for="ym in cycleMonths" :key="ym" :value="ym">{{ formatMonthLabel(ym) }}</option>
+                            </select>
+                        </label>
+                        <label class="flex items-center gap-1.5">
+                            To
+                            <select
+                                v-model="monthTo"
+                                :disabled="!monthFrom"
+                                class="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            >
+                                <option value="">Same as From</option>
+                                <option
+                                    v-for="ym in cycleMonths.filter((m) => !monthFrom || m >= monthFrom)"
+                                    :key="ym"
+                                    :value="ym"
+                                >
+                                    {{ formatMonthLabel(ym) }}
+                                </option>
+                            </select>
+                        </label>
+                    </template>
+
                     <button
                         v-if="monthFrom || monthTo"
                         type="button"

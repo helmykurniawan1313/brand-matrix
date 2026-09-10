@@ -322,6 +322,19 @@ class ViewsTrendController extends Controller
             'filters' => $filters,
             'projectManagers' => $pms,
             'conceptors' => $conceptors,
+            // Distinct months a cycle actually starts in — so the "By Cycle"
+            // picker can offer only real cycle months rather than an open-ended
+            // date input. Sorted oldest-first.
+            'cycleMonths' => Cycle::query()
+                ->when(
+                    in_array($filters['platform'], ['instagram', 'tiktok'], true),
+                    fn ($query) => $query->where('platform', $filters['platform']),
+                )
+                ->get(['cycle_start_date'])
+                ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+                ->unique()
+                ->sort()
+                ->values(),
         ]);
     }
 
@@ -367,13 +380,28 @@ class ViewsTrendController extends Controller
         $platform = $request->string('platform')->toString();
         $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
 
+        // 'month' (default) buckets each post by its own post_date month.
+        // 'cycle' first restricts to posts assigned to a cycle, then buckets by
+        // the month of that cycle's start date — so a cycle running 26 Jul–25 Aug
+        // (or 31 Jul–30 Aug) both count as "July", regardless of when in the
+        // cycle each individual post went out.
+        $rangeMode = $request->string('range_mode')->toString();
+        $rangeMode = $rangeMode === 'cycle' ? 'cycle' : 'month';
+
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
-        $performances = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
-            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
-            ->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo))
-            ->get()
+        $query = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform));
+
+        if ($rangeMode === 'cycle') {
+            $query->whereNotNull('cycle_id')
+                ->when($monthFrom, fn ($query) => $query->whereHas('cycle', fn ($q) => $this->applyMonthRange($q, $monthFrom, $monthTo, 'cycle_start_date')));
+        } else {
+            $query->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo));
+        }
+
+        $performances = $query->get()
             ->map(function (Performance $performance) {
                 $snapshot = $performance->igSnapshots->first();
                 $performance->resolved_views = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
@@ -383,7 +411,7 @@ class ViewsTrendController extends Controller
             ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
 
         return [
-            'filters' => ['platform' => $platform, 'month_from' => $monthFrom, 'month_to' => $monthTo],
+            'filters' => ['platform' => $platform, 'range_mode' => $rangeMode, 'month_from' => $monthFrom, 'month_to' => $monthTo],
             'projectManagers' => $this->rankByEmployee($performances, 'project_manager_id'),
             'conceptors' => $this->rankByEmployee($performances, 'conceptor_id'),
         ];
@@ -402,13 +430,17 @@ class ViewsTrendController extends Controller
             default => 'All',
         };
 
+        $unit = ($filters['range_mode'] ?? 'month') === 'cycle' ? 'cycle month' : 'month';
+
         if ($filters['month_from']) {
             $to = $filters['month_to'] ?: $filters['month_from'];
             $parts[] = $filters['month_from'] === $to
-                ? "month: {$filters['month_from']}"
-                : "months: {$filters['month_from']} to {$to}";
+                ? "{$unit}: {$filters['month_from']}"
+                : "{$unit}s: {$filters['month_from']} to {$to}";
         } else {
-            $parts[] = 'months: all time';
+            $parts[] = ($filters['range_mode'] ?? 'month') === 'cycle'
+                ? 'cycles: all (posts assigned to a cycle)'
+                : 'months: all time';
         }
 
         return implode(', ', $parts);
@@ -416,9 +448,9 @@ class ViewsTrendController extends Controller
 
     /**
      * Monthly views trend for one employee (as PM and/or Conceptor), used by the
-     * ranking modal's per-person drill-down chart. Buckets by the month of
-     * post_date (SQLite-portable whereBetween, matching the rest of this app's
-     * month-range filtering — see CycleController).
+     * ranking modal's per-person drill-down chart. Always buckets the series by
+     * post_date month; the range filter honours the modal's range_mode (posts'
+     * own month, or the start month of the cycle they belong to).
      */
     public function personSeries(Request $request, Employee $employee): JsonResponse
     {
@@ -427,13 +459,24 @@ class ViewsTrendController extends Controller
         $role = $request->string('role')->toString();
         $role = in_array($role, ['project_manager_id', 'conceptor_id'], true) ? $role : 'project_manager_id';
 
+        $rangeMode = $request->string('range_mode')->toString();
+        $rangeMode = $rangeMode === 'cycle' ? 'cycle' : 'month';
+
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
-        $performances = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
+        $query = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
             ->where($role, $employee->id)
-            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
-            ->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo))
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform));
+
+        if ($rangeMode === 'cycle') {
+            $query->whereNotNull('cycle_id')
+                ->when($monthFrom, fn ($query) => $query->whereHas('cycle', fn ($q) => $this->applyMonthRange($q, $monthFrom, $monthTo, 'cycle_start_date')));
+        } else {
+            $query->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo));
+        }
+
+        $performances = $query
             ->orderBy('post_date')
             ->get()
             ->map(function (Performance $performance) {
@@ -469,18 +512,18 @@ class ViewsTrendController extends Controller
     }
 
     /**
-     * Applies a month_from/month_to range (Y-m format, inclusive) to a
-     * Performance query's post_date column. Same semantics as CycleController's
+     * Applies a month_from/month_to range (Y-m format, inclusive) to a date
+     * column (default post_date). Same semantics as CycleController's
      * month-range filter: a single month if month_to is omitted.
      */
-    private function applyMonthRange($query, string $monthFrom, ?string $monthTo)
+    private function applyMonthRange($query, string $monthFrom, ?string $monthTo, string $column = 'post_date')
     {
         $start = Carbon::createFromFormat('Y-m-d', "{$monthFrom}-01")->startOfMonth();
         $end = $monthTo
             ? Carbon::createFromFormat('Y-m-d', "{$monthTo}-01")->endOfMonth()
             : $start->copy()->endOfMonth();
 
-        return $query->whereBetween('post_date', [$start->toDateString(), $end->toDateString()]);
+        return $query->whereBetween($column, [$start->toDateString(), $end->toDateString()]);
     }
 
     /**
