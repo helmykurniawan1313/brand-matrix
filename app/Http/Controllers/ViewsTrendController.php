@@ -350,6 +350,7 @@ class ViewsTrendController extends Controller
             'projectManagers' => $pms,
             'conceptors' => $conceptors,
             'filterSummary' => $this->rankingFilterSummary($filters),
+            'groupedBy' => $this->rankingGroupedByLabel($filters),
             'generatedAt' => now()->format('M j, Y g:i A'),
         ])->setPaper('a4', 'portrait');
 
@@ -362,12 +363,26 @@ class ViewsTrendController extends Controller
      */
     public function rankingExcel(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
-        ['projectManagers' => $pms, 'conceptors' => $conceptors] = $this->rankingData($request);
+        ['filters' => $filters, 'projectManagers' => $pms, 'conceptors' => $conceptors] = $this->rankingData($request);
 
         return Excel::download(
-            new \App\Exports\PmConceptorRankingExport(collect($pms), collect($conceptors)),
+            new \App\Exports\PmConceptorRankingExport(
+                collect($pms),
+                collect($conceptors),
+                $this->rankingFilterSummary($filters),
+                $this->rankingGroupedByLabel($filters),
+            ),
             'best-pm-conceptor-'.now()->format('Y-m-d').'.xlsx',
         );
+    }
+
+    /**
+     * "post month" / "cycle start month" — the bucketing rule the ranking used,
+     * for the export headers.
+     */
+    private function rankingGroupedByLabel(array $filters): string
+    {
+        return ($filters['range_mode'] ?? 'month') === 'cycle' ? 'cycle start month' : 'post month';
     }
 
     /**

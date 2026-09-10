@@ -23,6 +23,9 @@
         <p class="meta">
             Generated {{ $generatedAt }} &middot; {{ $filterSummary }} &middot; Ranked by median views per post
         </p>
+        <p class="meta">
+            Grouped by: {{ $groupedBy }}
+        </p>
     </div>
 
     <h2>Project Managers</h2>

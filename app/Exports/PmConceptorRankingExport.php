@@ -5,34 +5,42 @@ namespace App\Exports;
 use App\Exports\Concerns\SanitizesForSpreadsheet;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
  * Best PM & Best Conceptor leaderboards on one sheet — the same data the
- * ranking modal shows, respecting its platform + month-range filters.
- * PM rows first, a blank spacer, then a "CONCEPTORS" header row, then
- * Conceptor rows. Each person ranked best-to-worst by median views per post.
+ * ranking modal shows, respecting its platform + month/cycle range filters.
+ *
+ * Layout:
+ *   1. "Filters: …" context row
+ *   2. "Grouped by: post month | cycle start month" context row
+ *   3. blank
+ *   4. column header (Rank / Name / Median Views / Total Views / Posts)
+ *   5. "PROJECT MANAGERS" section, then a blank, then "CONCEPTORS" section
+ *
+ * Each person ranked best-to-worst by median views per post.
  */
-class PmConceptorRankingExport implements FromCollection, WithHeadings, WithStyles
+class PmConceptorRankingExport implements FromCollection, WithStyles
 {
     use SanitizesForSpreadsheet;
 
     public function __construct(
         private Collection $projectManagers,
         private Collection $conceptors,
+        private string $filterSummary = '',
+        private string $groupedBy = 'post month',
     ) {
-    }
-
-    public function headings(): array
-    {
-        return ['Rank', 'Name', 'Median Views', 'Total Views', 'Posts'];
     }
 
     public function collection(): Collection
     {
         $rows = collect();
+
+        $rows->push(['Filters: '.$this->filterSummary, '', '', '', '']);
+        $rows->push(['Grouped by: '.$this->groupedBy, '', '', '', '']);
+        $rows->push(['', '', '', '', '']);
+        $rows->push(['Rank', 'Name', 'Median Views', 'Total Views', 'Posts']);
 
         $rows->push(['PROJECT MANAGERS', '', '', '', '']);
         $this->appendPeople($rows, $this->projectManagers);
@@ -65,14 +73,18 @@ class PmConceptorRankingExport implements FromCollection, WithHeadings, WithStyl
 
     public function styles(Worksheet $sheet): array
     {
-        // Row 1 is the column header. The two section-title rows ("PROJECT
-        // MANAGERS" / "CONCEPTORS") are found and bolded by value rather than a
-        // fixed index, since the PM list length isn't known up front.
-        $styles = [1 => ['font' => ['bold' => true]]];
+        // Bold anything that's a header/section title, found by cell value
+        // (row positions shift with the PM list length and the two context rows).
+        $styles = [];
 
         foreach ($sheet->getRowIterator() as $row) {
-            $cell = $sheet->getCell('A'.$row->getRowIndex())->getValue();
-            if (in_array($cell, ['PROJECT MANAGERS', 'CONCEPTORS'], true)) {
+            $value = (string) $sheet->getCell('A'.$row->getRowIndex())->getValue();
+
+            if ($value === 'Rank'
+                || $value === 'PROJECT MANAGERS'
+                || $value === 'CONCEPTORS'
+                || str_starts_with($value, 'Filters:')
+                || str_starts_with($value, 'Grouped by:')) {
                 $styles[$row->getRowIndex()] = ['font' => ['bold' => true]];
             }
         }
