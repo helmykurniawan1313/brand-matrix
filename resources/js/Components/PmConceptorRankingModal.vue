@@ -43,6 +43,14 @@ const formatMonthLabel = (ym) => {
     return new Date(Number(y), Number(m) - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
 };
 
+const hasRange = computed(() => !!monthFrom.value || !!monthTo.value);
+const rangeSummary = computed(() => {
+    if (!hasRange.value) return rangeMode.value === 'cycle' ? 'All cycles' : 'All time';
+    const from = formatMonthLabel(monthFrom.value) || 'earliest';
+    const to = formatMonthLabel(monthTo.value || monthFrom.value);
+    return from === to ? from : `${from} – ${to}`;
+});
+
 // Sort ties by average views (best-first by default); a click on any other
 // column re-sorts client-side over the already-loaded list — this endpoint
 // returns everyone in one shot, so there's no reload needed per sort.
@@ -66,6 +74,10 @@ const sortedList = (list) => {
 };
 
 const activeList = computed(() => sortedList(activeTab.value === 'pm' ? projectManagers.value : conceptors.value));
+
+// The leaderboard is only meaningful when sorted by the ranking metric,
+// descending — that's when "#1" / medals actually mean "best".
+const isRanked = computed(() => sortKey.value === 'avg_views' && sortDir.value === 'desc');
 
 const formatNumber = (value) => new Intl.NumberFormat('en-US').format(value ?? 0);
 
@@ -199,14 +211,14 @@ const renderPersonChart = (series) => {
                     label: 'Median Views',
                     data: series.map((s) => s.avg_views),
                     borderColor: accent,
-                    backgroundColor: accent,
+                    backgroundColor: `${accent}1a`,
                     pointBackgroundColor: accent,
                     pointBorderColor: getCssVar('--surface') || '#ffffff',
                     pointBorderWidth: 2,
                     pointRadius: 4,
                     borderWidth: 2,
                     tension: 0.3,
-                    fill: false,
+                    fill: true,
                 },
             ],
         },
@@ -233,6 +245,7 @@ const renderPersonChart = (series) => {
                 y: {
                     ticks: { color: inkFaint, callback: (value) => formatNumber(value) },
                     grid: { color: border },
+                    beginAtZero: true,
                 },
             },
         },
@@ -249,43 +262,49 @@ onBeforeUnmount(destroyChart);
 <template>
     <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm" @click.self="emit('close')">
         <div
-            class="flex h-[80vh] w-full max-w-3xl flex-col rounded-lg border shadow-2xl"
+            class="flex h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
-            <div class="flex shrink-0 items-start justify-between gap-4 border-b p-6" style="border-color: var(--border)">
-                <div>
-                    <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Best PM &amp; Conceptor</h2>
-                    <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">
-                        Ranked by median views per post ·
-                        {{ rangeMode === 'cycle' ? 'grouped by cycle start month' : 'grouped by post month' }}
+            <!-- Header: title + subtle icon actions, no divider (the tab bar below is the first real boundary) -->
+            <div class="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-3">
+                <div class="min-w-0">
+                    <h2 class="font-display text-lg font-bold leading-tight" style="color: var(--ink)">Best PM &amp; Conceptor</h2>
+                    <p class="mt-1 text-sm" style="color: var(--ink-muted)">
+                        By median views per post ·
+                        {{ rangeMode === 'cycle' ? 'grouped by cycle month' : 'grouped by post month' }}
                     </p>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
+                <div class="flex shrink-0 items-center gap-1">
                     <a
                         :href="pdfUrl"
-                        class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
-                        style="border-color: var(--border); color: var(--ink-muted)"
+                        title="Download PDF"
+                        aria-label="Download PDF"
+                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        style="color: var(--ink-muted)"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-4 w-4">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                             <path d="M14 2v6h6" />
+                            <text x="7.5" y="17.5" font-size="6" font-weight="700" fill="currentColor" stroke="none">PDF</text>
                         </svg>
-                        PDF
                     </a>
                     <a
                         :href="excelUrl"
-                        class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-70"
-                        style="border-color: var(--border); color: var(--ink-muted)"
+                        title="Download Excel"
+                        aria-label="Download Excel"
+                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        style="color: var(--ink-muted)"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-4 w-4">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <path d="M14 2v6h6M8 13h8M8 17h5" />
+                            <path d="M14 2v6h6" />
+                            <path d="m9 13 2 3 M13 13l-2 3" />
                         </svg>
-                        Excel
                     </a>
+                    <div class="mx-1 h-5 w-px" style="background-color: var(--border)" />
                     <button
                         type="button"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
                         style="color: var(--ink-muted)"
                         aria-label="Close"
                         @click="emit('close')"
@@ -297,228 +316,233 @@ onBeforeUnmount(destroyChart);
                 </div>
             </div>
 
-            <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-6 pt-3 pb-3" style="border-color: var(--border)">
-                <div class="flex gap-1">
-                    <button
-                        v-for="tab in tabs"
-                        :key="tab.key"
-                        type="button"
-                        class="border-b-2 px-3 py-2 text-sm font-medium transition-colors"
-                        :style="
-                            activeTab === tab.key
-                                ? 'border-color: var(--accent); color: var(--accent)'
-                                : 'border-color: transparent; color: var(--ink-muted)'
-                        "
-                        @click="activeTab = tab.key"
-                    >
-                        {{ tab.label }}
-                    </button>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-2 text-sm" style="color: var(--ink-muted)">
-                    <div class="inline-flex overflow-hidden rounded-md border" style="border-color: var(--border)">
-                        <button
-                            type="button"
-                            class="px-2.5 py-1 text-xs font-medium transition-colors"
-                            :style="
-                                rangeMode === 'month'
-                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                    : 'background-color: var(--surface); color: var(--ink-muted)'
-                            "
-                            @click="setRangeMode('month')"
-                        >
-                            By Month
-                        </button>
-                        <button
-                            type="button"
-                            class="px-2.5 py-1 text-xs font-medium transition-colors"
-                            :style="
-                                rangeMode === 'cycle'
-                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                    : 'background-color: var(--surface); color: var(--ink-muted)'
-                            "
-                            @click="setRangeMode('cycle')"
-                        >
-                            By Cycle
-                        </button>
-                    </div>
-
-                    <!-- Month mode: free native month inputs -->
-                    <template v-if="rangeMode === 'month'">
-                        <label class="flex items-center gap-1.5">
-                            From
-                            <input
-                                v-model="monthFrom"
-                                type="month"
-                                class="rounded-md border px-2 py-1 text-sm"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            />
-                        </label>
-                        <label class="flex items-center gap-1.5">
-                            To
-                            <input
-                                v-model="monthTo"
-                                type="month"
-                                :disabled="!monthFrom"
-                                class="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            />
-                        </label>
-                    </template>
-
-                    <!-- Cycle mode: pick from months a cycle actually starts in -->
-                    <template v-else>
-                        <label class="flex items-center gap-1.5">
-                            From
-                            <select
-                                v-model="monthFrom"
-                                class="rounded-md border px-2 py-1 text-sm"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            >
-                                <option value="">Earliest</option>
-                                <option v-for="ym in cycleMonths" :key="ym" :value="ym">{{ formatMonthLabel(ym) }}</option>
-                            </select>
-                        </label>
-                        <label class="flex items-center gap-1.5">
-                            To
-                            <select
-                                v-model="monthTo"
-                                :disabled="!monthFrom"
-                                class="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            >
-                                <option value="">Same as From</option>
-                                <option
-                                    v-for="ym in cycleMonths.filter((m) => !monthFrom || m >= monthFrom)"
-                                    :key="ym"
-                                    :value="ym"
-                                >
-                                    {{ formatMonthLabel(ym) }}
-                                </option>
-                            </select>
-                        </label>
-                    </template>
-
-                    <button
-                        v-if="monthFrom || monthTo"
-                        type="button"
-                        class="text-xs font-medium underline transition-opacity hover:opacity-70"
-                        style="color: var(--accent)"
-                        @click="clearMonthFilter"
-                    >
-                        Clear
-                    </button>
-                </div>
+            <!-- Tab bar — the only real dividing line at the top -->
+            <div class="flex shrink-0 gap-6 border-b px-6" style="border-color: var(--border)">
+                <button
+                    v-for="tab in tabs"
+                    :key="tab.key"
+                    type="button"
+                    class="relative -mb-px border-b-2 pb-2.5 pt-1 text-sm font-semibold transition-colors"
+                    :style="
+                        activeTab === tab.key
+                            ? 'border-color: var(--accent); color: var(--ink)'
+                            : 'border-color: transparent; color: var(--ink-faint)'
+                    "
+                    @click="activeTab = tab.key"
+                >
+                    {{ tab.label }}
+                </button>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto p-6">
-                <p v-if="loading" class="py-12 text-center text-sm" style="color: var(--ink-faint)">Loading…</p>
-                <p v-else-if="error" class="py-12 text-center text-sm" style="color: var(--ink-faint)">{{ error }}</p>
-
-                <div v-else class="overflow-hidden rounded-lg border" style="border-color: var(--border)">
-                    <table class="min-w-full">
-                        <thead>
-                            <tr style="border-bottom: 1px solid var(--border)">
-                                <th class="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">#</th>
-                                <th class="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                                    {{ activeTab === 'pm' ? 'Project Manager' : 'Conceptor' }}
-                                </th>
-                                <th
-                                    class="cursor-pointer select-none px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                                    style="color: var(--ink-faint)"
-                                    @click="sortBy('avg_views')"
-                                >
-                                    Median Views
-                                    <span v-if="sortKey === 'avg_views'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
-                                </th>
-                                <th
-                                    class="cursor-pointer select-none px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                                    style="color: var(--ink-faint)"
-                                    @click="sortBy('total_views')"
-                                >
-                                    Total Views
-                                    <span v-if="sortKey === 'total_views'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
-                                </th>
-                                <th
-                                    class="cursor-pointer select-none px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                                    style="color: var(--ink-faint)"
-                                    @click="sortBy('post_count')"
-                                >
-                                    Posts
-                                    <span v-if="sortKey === 'post_count'">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
-                                </th>
-                                <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="(person, index) in activeList"
-                                :key="person.employee_id"
-                                class="cursor-pointer transition-colors hover:opacity-80"
-                                style="border-bottom: 1px solid var(--border)"
-                                @click="openPerson(person)"
-                            >
-                                <td class="px-4 py-3 text-sm tabular-nums" style="color: var(--ink-faint)">
-                                    <span
-                                        v-if="sortKey === 'avg_views' && sortDir === 'desc' && index === 0"
-                                        class="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs"
-                                        style="background-color: var(--status-sip-bg); color: var(--status-sip-ink)"
-                                        title="Best median views"
-                                    >
-                                        ★
-                                    </span>
-                                    <span v-else>{{ index + 1 }}</span>
-                                </td>
-                                <td class="px-4 py-3 text-sm font-medium" style="color: var(--ink)">{{ person.employee_name }}</td>
-                                <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums" style="color: var(--ink)">
-                                    {{ formatNumber(person.avg_views) }}
-                                </td>
-                                <td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
-                                    {{ formatNumber(person.total_views) }}
-                                </td>
-                                <td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
-                                    {{ person.post_count }}
-                                </td>
-                                <td class="px-4 py-3 text-right text-sm" style="color: var(--ink-faint)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ml-auto h-4 w-4">
-                                        <path d="M3 3v18h18" />
-                                        <path d="m19 9-5 5-4-4-3 3" />
-                                    </svg>
-                                </td>
-                            </tr>
-                            <tr v-if="activeList.length === 0">
-                                <td colspan="6" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
-                                    No {{ activeTab === 'pm' ? 'project managers' : 'conceptors' }} with recorded views yet.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- Filter row — lightweight, on the raised surface, no hard border -->
+            <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
+                <!-- Segmented mode toggle -->
+                <div
+                    class="inline-flex rounded-lg p-0.5"
+                    style="background-color: var(--surface)"
+                >
+                    <button
+                        v-for="mode in ['month', 'cycle']"
+                        :key="mode"
+                        type="button"
+                        class="rounded-md px-2.5 py-1 text-xs font-semibold capitalize transition-all"
+                        :style="
+                            rangeMode === mode
+                                ? 'background-color: var(--surface-raised); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06)'
+                                : 'background-color: transparent; color: var(--ink-faint)'
+                        "
+                        @click="setRangeMode(mode)"
+                    >
+                        {{ mode === 'month' ? 'By month' : 'By cycle' }}
+                    </button>
                 </div>
+
+                <!-- From / To in a single pill so it reads as one control -->
+                <div
+                    class="flex items-center gap-1.5 rounded-lg px-2.5 py-1"
+                    style="background-color: var(--surface)"
+                >
+                    <template v-if="rangeMode === 'month'">
+                        <input
+                            v-model="monthFrom"
+                            type="month"
+                            aria-label="From month"
+                            class="w-[8.5rem] bg-transparent text-xs focus:outline-none"
+                            style="color: var(--ink); color-scheme: normal"
+                        />
+                        <span class="text-xs" style="color: var(--ink-faint)">→</span>
+                        <input
+                            v-model="monthTo"
+                            type="month"
+                            :disabled="!monthFrom"
+                            aria-label="To month"
+                            class="w-[8.5rem] bg-transparent text-xs focus:outline-none disabled:opacity-40"
+                            style="color: var(--ink); color-scheme: normal"
+                        />
+                    </template>
+                    <template v-else>
+                        <select
+                            v-model="monthFrom"
+                            aria-label="From cycle month"
+                            class="bg-transparent text-xs focus:outline-none"
+                            style="color: var(--ink)"
+                        >
+                            <option value="">Earliest</option>
+                            <option v-for="ym in cycleMonths" :key="ym" :value="ym">{{ formatMonthLabel(ym) }}</option>
+                        </select>
+                        <span class="text-xs" style="color: var(--ink-faint)">→</span>
+                        <select
+                            v-model="monthTo"
+                            :disabled="!monthFrom"
+                            aria-label="To cycle month"
+                            class="bg-transparent text-xs focus:outline-none disabled:opacity-40"
+                            style="color: var(--ink)"
+                        >
+                            <option value="">Latest in range</option>
+                            <option
+                                v-for="ym in cycleMonths.filter((m) => !monthFrom || m >= monthFrom)"
+                                :key="ym"
+                                :value="ym"
+                            >
+                                {{ formatMonthLabel(ym) }}
+                            </option>
+                        </select>
+                    </template>
+                </div>
+
+                <button
+                    v-if="hasRange"
+                    type="button"
+                    class="text-xs font-medium transition-opacity hover:opacity-70"
+                    style="color: var(--accent)"
+                    @click="clearMonthFilter"
+                >
+                    Reset
+                </button>
+
+                <span class="ml-auto text-xs" style="color: var(--ink-faint)">{{ rangeSummary }}</span>
+            </div>
+
+            <!-- Body -->
+            <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-6" style="background-color: var(--surface-raised)">
+                <div v-if="loading" class="flex h-40 items-center justify-center">
+                    <span class="text-sm" style="color: var(--ink-faint)">Loading…</span>
+                </div>
+
+                <div v-else-if="error" class="flex h-40 flex-col items-center justify-center gap-1 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-8 w-8" style="color: var(--ink-faint)">
+                        <path d="M3 3v18h18" />
+                        <path d="m19 9-5 5-4-4-3 3" />
+                    </svg>
+                    <p class="text-sm" style="color: var(--ink-faint)">{{ error }}</p>
+                </div>
+
+                <table v-else class="min-w-full">
+                    <thead class="sticky top-0" style="background-color: var(--surface-raised)">
+                        <tr style="border-bottom: 1px solid var(--border)">
+                            <th class="w-12 py-2.5 pr-2 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)"></th>
+                            <th class="py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                {{ activeTab === 'pm' ? 'Project Manager' : 'Conceptor' }}
+                            </th>
+                            <th
+                                class="cursor-pointer select-none py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('avg_views')"
+                            >
+                                Median<span v-if="sortKey === 'avg_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </th>
+                            <th
+                                class="cursor-pointer select-none py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('total_views')"
+                            >
+                                Total<span v-if="sortKey === 'total_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </th>
+                            <th
+                                class="cursor-pointer select-none py-2.5 pr-1 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('post_count')"
+                            >
+                                Posts<span v-if="sortKey === 'post_count'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="(person, index) in activeList"
+                            :key="person.employee_id"
+                            class="group cursor-pointer transition-colors"
+                            :class="{ 'hover:bg-[var(--surface)]': true }"
+                            :style="
+                                isRanked && index === 0
+                                    ? `border-bottom: 1px solid var(--border); background-color: var(--accent-soft)`
+                                    : 'border-bottom: 1px solid var(--border)'
+                            "
+                            @click="openPerson(person)"
+                        >
+                            <td class="py-3 pr-2">
+                                <span
+                                    v-if="isRanked && index < 3"
+                                    class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+                                    :style="[
+                                        index === 0
+                                            ? 'background-color: var(--status-cukup-bg); color: var(--status-cukup-ink)'
+                                            : index === 1
+                                            ? 'background-color: var(--surface); color: var(--ink-muted)'
+                                            : 'background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)',
+                                    ]"
+                                >
+                                    {{ index + 1 }}
+                                </span>
+                                <span v-else class="pl-1.5 text-sm tabular-nums" style="color: var(--ink-faint)">
+                                    {{ index + 1 }}
+                                </span>
+                            </td>
+                            <td class="py-3 text-sm font-medium" style="color: var(--ink)">
+                                {{ person.employee_name }}
+                            </td>
+                            <td class="py-3 text-right text-sm font-semibold tabular-nums" style="color: var(--ink)">
+                                {{ formatNumber(person.avg_views) }}
+                            </td>
+                            <td class="py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
+                                {{ formatNumber(person.total_views) }}
+                            </td>
+                            <td class="py-3 pr-1 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
+                                {{ person.post_count }}
+                            </td>
+                        </tr>
+                        <tr v-if="activeList.length === 0">
+                            <td colspan="5" class="py-12 text-center text-sm" style="color: var(--ink-faint)">
+                                No {{ activeTab === 'pm' ? 'project managers' : 'conceptors' }} to rank for this range.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <!-- Per-person drill-down chart -->
+        <!-- Per-person drill-down — a lighter overlay that visually belongs to the same surface -->
         <div
             v-if="selectedPerson"
-            class="fixed inset-0 z-20 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+            class="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm"
             @click.self="closePerson"
         >
             <div
-                class="flex h-[60vh] w-full max-w-2xl flex-col rounded-lg border shadow-2xl"
+                class="flex h-[58vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border shadow-2xl"
                 style="background-color: var(--surface-raised); border-color: var(--border)"
             >
-                <div class="flex shrink-0 items-start justify-between gap-4 border-b p-6" style="border-color: var(--border)">
-                    <div>
-                        <h2 class="font-display text-lg font-bold" style="color: var(--ink)">{{ selectedPerson.employee_name }}</h2>
-                        <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">
-                            Monthly views trend — {{ selectedPerson.role === 'project_manager_id' ? 'Project Manager' : 'Conceptor' }}
+                <div class="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-4 border-b" style="border-color: var(--border)">
+                    <div class="min-w-0">
+                        <h2 class="font-display text-lg font-bold leading-tight" style="color: var(--ink)">{{ selectedPerson.employee_name }}</h2>
+                        <p class="mt-1 text-sm" style="color: var(--ink-muted)">
+                            Monthly median views · {{ selectedPerson.role === 'project_manager_id' ? 'as Project Manager' : 'as Conceptor' }}
                         </p>
                     </div>
                     <button
                         type="button"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
                         style="color: var(--ink-muted)"
-                        aria-label="Close"
+                        aria-label="Back to leaderboard"
                         @click="closePerson"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
@@ -528,8 +552,12 @@ onBeforeUnmount(destroyChart);
                 </div>
 
                 <div class="min-h-0 flex-1 p-6">
-                    <p v-if="chartLoading" class="py-12 text-center text-sm" style="color: var(--ink-faint)">Loading…</p>
-                    <p v-else-if="chartError" class="py-12 text-center text-sm" style="color: var(--ink-faint)">{{ chartError }}</p>
+                    <div v-if="chartLoading" class="flex h-full items-center justify-center">
+                        <span class="text-sm" style="color: var(--ink-faint)">Loading…</span>
+                    </div>
+                    <div v-else-if="chartError" class="flex h-full items-center justify-center">
+                        <span class="text-sm" style="color: var(--ink-faint)">{{ chartError }}</span>
+                    </div>
                     <div v-show="!chartLoading && !chartError" class="h-full w-full">
                         <canvas ref="chartCanvas"></canvas>
                     </div>
