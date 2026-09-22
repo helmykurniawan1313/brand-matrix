@@ -11,6 +11,14 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    // Optional whitelist of selectable 'YYYY-MM' keys (e.g. only months a real
+    // cycle starts in). When set, months outside it render disabled instead of
+    // clickable — everything else about the picker behaves the same. Omit for
+    // the default "any calendar month" behavior.
+    allowedMonths: {
+        type: Array,
+        default: null,
+    },
 });
 
 const emit = defineEmits(['update:modelFrom', 'update:modelTo']);
@@ -19,7 +27,17 @@ const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 
 const initialYear = () => {
     const [year] = (props.modelFrom || props.modelTo || '').split('-');
-    return year ? Number(year) : new Date().getFullYear();
+    if (year) return Number(year);
+
+    // No selection yet — with a whitelist, open on the most recent allowed
+    // year rather than the current calendar year (which may have no allowed
+    // months at all, e.g. cycles that only ever started in past years).
+    if (props.allowedMonths?.length) {
+        const [latestYear] = [...props.allowedMonths].sort().at(-1).split('-');
+        return Number(latestYear);
+    }
+
+    return new Date().getFullYear();
 };
 
 const viewYear = ref(initialYear());
@@ -61,7 +79,11 @@ const isInRange = (month) => {
     return value > from && value < to;
 };
 
+const isAllowed = (month) => !props.allowedMonths || props.allowedMonths.includes(keyFor(month));
+
 const selectMonth = (month) => {
+    if (!isAllowed(month)) return;
+
     const key = keyFor(month);
 
     if (!props.modelFrom || (props.modelFrom && props.modelTo)) {
@@ -124,6 +146,8 @@ const selectMonth = (month) => {
                 :key="name"
                 type="button"
                 class="rounded-md px-2 py-2 text-sm font-medium transition-colors"
+                :class="{ 'cursor-not-allowed opacity-30': !isAllowed(index + 1) }"
+                :disabled="!isAllowed(index + 1)"
                 :style="
                     isSelected(index + 1)
                         ? 'background-color: var(--accent); color: var(--accent-ink)'

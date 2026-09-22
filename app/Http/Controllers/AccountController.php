@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\ContentInsight;
 use App\Models\Cycle;
 use App\Models\Performance;
 use App\Services\MetricCalculator;
@@ -570,17 +571,27 @@ class AccountController extends Controller
 
         $postCountsByCycle = $this->postCountsByCycle($performances);
 
+        // Manually-entered Instagram Insights "Overview" numbers (Viewers /
+        // Interactions, each split Posts / Reels / Story), keyed by cycle.
+        $contentInsightsByCycle = ContentInsight::where('account_id', $account->id)
+            ->get()
+            ->keyBy('cycle_id');
+
         $cycles = $account->cycles()
+            ->with('projectManager:id,name')
             ->orderBy('cycle_start_date')
             ->get()
-            ->map(function ($cycle) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $postCountsByCycle, $accountGrowthBuckets, $resolver) {
+            ->map(function ($cycle) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $postCountsByCycle, $accountGrowthBuckets, $resolver, $contentInsightsByCycle) {
                 $scores = $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights);
                 $postCounts = $postCountsByCycle->get($cycle->id, ['post_count' => 0, 'view_count' => 0]);
+                $insight = $contentInsightsByCycle->get($cycle->id);
 
                 return [
                     'label' => $cycle->cycle_start_date->format('M Y'),
                     'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
+                    'cycle_end_date' => $cycle->cycle_end_date?->toDateString(),
                     'platform' => $cycle->platform,
+                    'project_manager_name' => $cycle->projectManager?->name,
                     'growth_rate' => round($scores['growth_rate'], 2),
                     'growth_rate_label' => $resolver->resolve($accountGrowthBuckets, $scores['growth_rate'], 'min_score', 'label'),
                     'end_follower' => $cycle->end_follower,
@@ -596,6 +607,16 @@ class AccountController extends Controller
                     'er_follower_rate' => round($scores['er_follower_rate'], 2),
                     'post_count' => $postCounts['post_count'],
                     'view_count' => $postCounts['view_count'],
+                    // null when no Content Insight was entered for this cycle —
+                    // the chart skips (spanGaps) those points.
+                    'content_insight' => $insight ? [
+                        'viewers_posts' => $insight->viewers_posts,
+                        'viewers_reels' => $insight->viewers_reels,
+                        'viewers_story' => $insight->viewers_story,
+                        'interactions_posts' => $insight->interactions_posts,
+                        'interactions_reels' => $insight->interactions_reels,
+                        'interactions_story' => $insight->interactions_story,
+                    ] : null,
                 ];
             });
 

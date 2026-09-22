@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from '../chartSetup';
+import MonthRangePicker from './MonthRangePicker.vue';
 
 const props = defineProps({
     platform: { type: String, default: 'all' },
@@ -30,11 +31,22 @@ const monthFrom = ref('');
 const monthTo = ref('');
 const cycleMonths = ref([]);
 
+// Ads content checklist — 'all' (default), 'yes' (ads only), 'no' (organic only).
+const ads = ref('all');
+const adsOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'yes', label: 'Ads' },
+    { value: 'no', label: 'No ads' },
+];
+
+const showMonthPicker = ref(false);
+
 const setRangeMode = (mode) => {
     if (rangeMode.value === mode) return;
     rangeMode.value = mode;
     monthFrom.value = '';
     monthTo.value = '';
+    showMonthPicker.value = false;
 };
 
 const formatMonthLabel = (ym) => {
@@ -113,6 +125,7 @@ const load = async () => {
 const clearMonthFilter = () => {
     monthFrom.value = '';
     monthTo.value = '';
+    showMonthPicker.value = false;
 };
 
 // Shared param builder — the JSON load, the PDF link and the Excel link all
@@ -122,13 +135,14 @@ const filterParams = () => {
     const params = new URLSearchParams({ platform: props.platform, range_mode: rangeMode.value });
     if (monthFrom.value) params.set('month_from', monthFrom.value);
     if (monthTo.value) params.set('month_to', monthTo.value || monthFrom.value);
+    if (ads.value !== 'all') params.set('ads', ads.value);
     return params;
 };
 const pdfUrl = computed(() => `/views-trend-ranking-pdf?${filterParams().toString()}`);
 const excelUrl = computed(() => `/views-trend-ranking-excel?${filterParams().toString()}`);
 
 watch(() => props.platform, load);
-watch([rangeMode, monthFrom, monthTo], load);
+watch([rangeMode, monthFrom, monthTo, ads], load);
 
 load();
 
@@ -260,9 +274,9 @@ onBeforeUnmount(destroyChart);
 </script>
 
 <template>
-    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm" @click.self="emit('close')">
+    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
         <div
-            class="flex h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border shadow-2xl"
+            class="flex h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
             <!-- Header: title + subtle icon actions, no divider (the tab bar below is the first real boundary) -->
@@ -279,7 +293,7 @@ onBeforeUnmount(destroyChart);
                         :href="pdfUrl"
                         title="Download PDF"
                         aria-label="Download PDF"
-                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"
                         style="color: var(--ink-muted)"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-4 w-4">
@@ -292,7 +306,7 @@ onBeforeUnmount(destroyChart);
                         :href="excelUrl"
                         title="Download Excel"
                         aria-label="Download Excel"
-                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"
                         style="color: var(--ink-muted)"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-4 w-4">
@@ -304,7 +318,7 @@ onBeforeUnmount(destroyChart);
                     <div class="mx-1 h-5 w-px" style="background-color: var(--border)" />
                     <button
                         type="button"
-                        class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:opacity-70"
                         style="color: var(--ink-muted)"
                         aria-label="Close"
                         @click="emit('close')"
@@ -334,22 +348,28 @@ onBeforeUnmount(destroyChart);
                 </button>
             </div>
 
-            <!-- Filter row — lightweight, on the raised surface, no hard border -->
-            <div class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
-                <!-- Segmented mode toggle -->
+            <!-- Filter panel — one enclosed card holding both filter rows, so the
+                 range controls and the Ads checklist read as one control instead of
+                 two disconnected floating rows. -->
+            <div class="shrink-0 px-6 pt-3">
+                <div class="flex flex-col gap-2.5 rounded-lg border p-3" style="border-color: var(--border); background-color: var(--bg)">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <!-- Segmented mode toggle — a visible border on the whole group plus a
+                     resting background on every option, so it reads as a pair of
+                     buttons at rest, not just once one is active. -->
                 <div
-                    class="inline-flex rounded-lg p-0.5"
-                    style="background-color: var(--surface)"
+                    class="inline-flex rounded-lg border p-0.5"
+                    style="border-color: var(--border); background-color: var(--surface)"
                 >
                     <button
                         v-for="mode in ['month', 'cycle']"
                         :key="mode"
                         type="button"
-                        class="rounded-md px-2.5 py-1 text-xs font-semibold capitalize transition-all"
+                        class="rounded-md px-2.5 py-1 text-xs font-semibold capitalize transition-all hover:opacity-80"
                         :style="
                             rangeMode === mode
-                                ? 'background-color: var(--surface-raised); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06)'
-                                : 'background-color: transparent; color: var(--ink-faint)'
+                                ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                : 'background-color: var(--surface-raised); color: var(--ink-muted)'
                         "
                         @click="setRangeMode(mode)"
                     >
@@ -357,57 +377,47 @@ onBeforeUnmount(destroyChart);
                     </button>
                 </div>
 
-                <!-- From / To in a single pill so it reads as one control -->
-                <div
-                    class="flex items-center gap-1.5 rounded-lg px-2.5 py-1"
-                    style="background-color: var(--surface)"
-                >
-                    <template v-if="rangeMode === 'month'">
-                        <input
-                            v-model="monthFrom"
-                            type="month"
-                            aria-label="From month"
-                            class="w-[8.5rem] bg-transparent text-xs focus:outline-none"
-                            style="color: var(--ink); color-scheme: normal"
+                <!-- Same trigger-button + calendar popover as the Account detail
+                     modal's month-range picker, in both modes. "By cycle" passes
+                     cycleMonths as a whitelist so only real cycle-start months
+                     are selectable — everything else about the picker matches. -->
+                <div class="relative">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                        :style="
+                            hasRange
+                                ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
+                                : 'border-color: var(--border); background-color: var(--surface); color: var(--ink-muted)'
+                        "
+                        @click="showMonthPicker = !showMonthPicker"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                            <path d="M3 10h18M8 2v4M16 2v4" />
+                        </svg>
+                        <template v-if="hasRange">
+                            {{ formatMonthLabel(monthFrom) || '…' }} → {{ formatMonthLabel(monthTo || monthFrom) }}
+                        </template>
+                        <template v-else>{{ rangeMode === 'cycle' ? 'Pick cycle months' : 'Pick months' }}</template>
+                    </button>
+
+                    <div v-if="showMonthPicker" class="absolute left-0 top-full z-10 mt-2 w-72 shadow-xl">
+                        <MonthRangePicker
+                            v-model:model-from="monthFrom"
+                            v-model:model-to="monthTo"
+                            :allowed-months="rangeMode === 'cycle' ? cycleMonths : null"
+                            class="!max-w-none"
                         />
-                        <span class="text-xs" style="color: var(--ink-faint)">→</span>
-                        <input
-                            v-model="monthTo"
-                            type="month"
-                            :disabled="!monthFrom"
-                            aria-label="To month"
-                            class="w-[8.5rem] bg-transparent text-xs focus:outline-none disabled:opacity-40"
-                            style="color: var(--ink); color-scheme: normal"
-                        />
-                    </template>
-                    <template v-else>
-                        <select
-                            v-model="monthFrom"
-                            aria-label="From cycle month"
-                            class="bg-transparent text-xs focus:outline-none"
-                            style="color: var(--ink)"
+                        <button
+                            type="button"
+                            class="mt-2 w-full rounded-md py-1.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                            style="background-color: var(--accent); color: var(--accent-ink)"
+                            @click="showMonthPicker = false"
                         >
-                            <option value="">Earliest</option>
-                            <option v-for="ym in cycleMonths" :key="ym" :value="ym">{{ formatMonthLabel(ym) }}</option>
-                        </select>
-                        <span class="text-xs" style="color: var(--ink-faint)">→</span>
-                        <select
-                            v-model="monthTo"
-                            :disabled="!monthFrom"
-                            aria-label="To cycle month"
-                            class="bg-transparent text-xs focus:outline-none disabled:opacity-40"
-                            style="color: var(--ink)"
-                        >
-                            <option value="">Latest in range</option>
-                            <option
-                                v-for="ym in cycleMonths.filter((m) => !monthFrom || m >= monthFrom)"
-                                :key="ym"
-                                :value="ym"
-                            >
-                                {{ formatMonthLabel(ym) }}
-                            </option>
-                        </select>
-                    </template>
+                            Done
+                        </button>
+                    </div>
                 </div>
 
                 <button
@@ -421,6 +431,31 @@ onBeforeUnmount(destroyChart);
                 </button>
 
                 <span class="ml-auto text-xs" style="color: var(--ink-faint)">{{ rangeSummary }}</span>
+                </div>
+
+                <!-- Ads content checklist — its own row below the range controls,
+                     label outside the button group so it reads as a caption, not a
+                     fourth (unclickable) option. -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-medium" style="color: var(--ink-faint)">Ads</span>
+                    <div class="inline-flex rounded-lg border p-0.5" style="border-color: var(--border); background-color: var(--surface)">
+                        <button
+                            v-for="option in adsOptions"
+                            :key="option.value"
+                            type="button"
+                            class="rounded-md px-2.5 py-1 text-xs font-semibold transition-all hover:opacity-80"
+                            :style="
+                                ads === option.value
+                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                    : 'background-color: var(--surface-raised); color: var(--ink-muted)'
+                            "
+                            @click="ads = option.value"
+                        >
+                            {{ option.label }}
+                        </button>
+                    </div>
+                </div>
+                </div>
             </div>
 
             <!-- Body -->
@@ -449,21 +484,21 @@ onBeforeUnmount(destroyChart);
                                 style="color: var(--ink-faint)"
                                 @click="sortBy('avg_views')"
                             >
-                                Median<span v-if="sortKey === 'avg_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                                Median Views<span v-if="sortKey === 'avg_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                             </th>
                             <th
                                 class="cursor-pointer select-none py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                                 style="color: var(--ink-faint)"
                                 @click="sortBy('total_views')"
                             >
-                                Total<span v-if="sortKey === 'total_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                                Total Views<span v-if="sortKey === 'total_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                             </th>
                             <th
                                 class="cursor-pointer select-none py-2.5 pr-1 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                                 style="color: var(--ink-faint)"
                                 @click="sortBy('post_count')"
                             >
-                                Posts<span v-if="sortKey === 'post_count'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                                Total Reels<span v-if="sortKey === 'post_count'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                             </th>
                         </tr>
                     </thead>
@@ -471,8 +506,7 @@ onBeforeUnmount(destroyChart);
                         <tr
                             v-for="(person, index) in activeList"
                             :key="person.employee_id"
-                            class="group cursor-pointer transition-colors"
-                            :class="{ 'hover:bg-[var(--surface)]': true }"
+                            class="cursor-pointer transition-colors hover:opacity-80"
                             :style="
                                 isRanked && index === 0
                                     ? `border-bottom: 1px solid var(--border); background-color: var(--accent-soft)`
@@ -525,10 +559,9 @@ onBeforeUnmount(destroyChart);
         <div
             v-if="selectedPerson"
             class="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm"
-            @click.self="closePerson"
         >
             <div
-                class="flex h-[58vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border shadow-2xl"
+                class="flex h-[58vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-2xl"
                 style="background-color: var(--surface-raised); border-color: var(--border)"
             >
                 <div class="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-4 border-b" style="border-color: var(--border)">
@@ -540,7 +573,7 @@ onBeforeUnmount(destroyChart);
                     </div>
                     <button
                         type="button"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)]"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
                         style="color: var(--ink-muted)"
                         aria-label="Back to leaderboard"
                         @click="closePerson"

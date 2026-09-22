@@ -26,5 +26,6 @@ class DatabaseSeeder extends Seeder
         $this->call(LabelBucketSeeder::class);
         $this->call(FormulaWeightSeeder::class);
         $this->call(DemoCycleSeeder::class);
+        $this->call(ContentInsightSeeder::class);
     }
 }

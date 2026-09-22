@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ContentInsightController;
 use App\Http\Controllers\CycleController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
@@ -52,6 +53,9 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('score-buckets', ScoreBucketController::class)->only(['index']);
 
+    Route::get('content-insights', [ContentInsightController::class, 'index'])->name('content-insights.index');
+    Route::get('accounts/{account}/insight-cycles', [ContentInsightController::class, 'cycles'])->name('content-insights.cycles');
+
     Route::resource('departments', DepartmentController::class)->only(['index']);
 
     Route::resource('employees', EmployeeController::class)->only(['index']);
@@ -76,6 +80,10 @@ Route::middleware('auth')->group(function () {
         Route::resource('cycles', CycleController::class)->only(['store', 'update', 'destroy']);
 
         Route::resource('score-buckets', ScoreBucketController::class)->only(['store', 'update', 'destroy']);
+
+        Route::post('content-insights', [ContentInsightController::class, 'store'])->name('content-insights.store');
+        Route::put('content-insights/{contentInsight}', [ContentInsightController::class, 'update'])->name('content-insights.update');
+        Route::delete('content-insights/{contentInsight}', [ContentInsightController::class, 'destroy'])->name('content-insights.destroy');
 
         Route::resource('label-buckets', LabelBucketController::class)->only(['store', 'update', 'destroy']);
 

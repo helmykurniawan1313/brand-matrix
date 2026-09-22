@@ -406,8 +406,14 @@ class ViewsTrendController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
+        // Ads checklist: 'all' (default) counts every post, 'yes' only ads
+        // content, 'no' only organic (non-ads) posts.
+        $ads = $request->string('ads')->toString();
+        $ads = in_array($ads, ['yes', 'no'], true) ? $ads : 'all';
+
         $query = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
-            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform));
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
+            ->when($ads !== 'all', fn ($query) => $query->where('ads', $ads === 'yes'));
 
         if ($rangeMode === 'cycle') {
             $query->whereNotNull('cycle_id')
@@ -426,7 +432,7 @@ class ViewsTrendController extends Controller
             ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
 
         return [
-            'filters' => ['platform' => $platform, 'range_mode' => $rangeMode, 'month_from' => $monthFrom, 'month_to' => $monthTo],
+            'filters' => ['platform' => $platform, 'range_mode' => $rangeMode, 'month_from' => $monthFrom, 'month_to' => $monthTo, 'ads' => $ads],
             'projectManagers' => $this->rankByEmployee($performances, 'project_manager_id'),
             'conceptors' => $this->rankByEmployee($performances, 'conceptor_id'),
         ];
@@ -458,6 +464,10 @@ class ViewsTrendController extends Controller
                 : 'months: all time';
         }
 
+        if (($filters['ads'] ?? 'all') !== 'all') {
+            $parts[] = 'ads content: '.($filters['ads'] === 'yes' ? 'Yes only' : 'No only');
+        }
+
         return implode(', ', $parts);
     }
 
@@ -480,9 +490,13 @@ class ViewsTrendController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
 
+        $ads = $request->string('ads')->toString();
+        $ads = in_array($ads, ['yes', 'no'], true) ? $ads : 'all';
+
         $query = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
             ->where($role, $employee->id)
-            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform));
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
+            ->when($ads !== 'all', fn ($query) => $query->where('ads', $ads === 'yes'));
 
         if ($rangeMode === 'cycle') {
             $query->whereNotNull('cycle_id')

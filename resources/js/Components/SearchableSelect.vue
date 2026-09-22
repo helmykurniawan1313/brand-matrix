@@ -82,8 +82,17 @@ watch(() => props.modelValue, () => {
             style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
             @click="toggleOpen"
         >
-            <span :style="selectedOption ? '' : 'color: var(--ink-faint)'">
-                {{ selectedOption ? selectedOption.name : clearable ? clearLabel : placeholder }}
+            <span class="flex min-w-0 items-center gap-1.5" :style="selectedOption ? '' : 'color: var(--ink-faint)'">
+                <span
+                    v-if="selectedOption?.badge"
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style="background-color: var(--accent-soft); color: var(--accent)"
+                >
+                    {{ selectedOption.badge }}
+                </span>
+                <span class="truncate">
+                    {{ selectedOption ? selectedOption.name : clearable ? clearLabel : placeholder }}
+                </span>
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0" style="color: var(--ink-faint)">
                 <path d="m6 9 6 6 6-6" />
@@ -118,7 +127,7 @@ watch(() => props.modelValue, () => {
                 <li
                     v-for="option in filteredOptions"
                     :key="option.id"
-                    class="cursor-pointer px-3 py-2 text-sm transition-colors hover:opacity-80"
+                    class="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:opacity-80"
                     :style="
                         option.id === modelValue
                             ? 'background-color: var(--accent-soft); color: var(--accent)'
@@ -126,7 +135,14 @@ watch(() => props.modelValue, () => {
                     "
                     @click="select(option)"
                 >
-                    {{ option.name }}
+                    <span
+                        v-if="option.badge"
+                        class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        style="background-color: var(--accent); color: var(--accent-ink)"
+                    >
+                        {{ option.badge }}
+                    </span>
+                    <span class="truncate">{{ option.name }}</span>
                 </li>
                 <li v-if="filteredOptions.length === 0" class="px-3 py-2 text-sm" style="color: var(--ink-faint)">
                     No matches.
