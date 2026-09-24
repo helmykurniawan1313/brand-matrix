@@ -21,12 +21,12 @@ use Maatwebsite\Excel\Facades\Excel;
 class ViewsTrendController extends Controller
 {
     /**
-     * A drop of 15%+ in median views vs the previous cycle.
+     * A drop of 15%+ in total views vs the previous cycle.
      */
     private const SETBACK_THRESHOLD = -0.15;
 
     /**
-     * A rise of 15%+ in median views vs the previous cycle.
+     * A rise of 15%+ in total views vs the previous cycle.
      */
     private const GROWTH_THRESHOLD = 0.15;
 
@@ -66,6 +66,18 @@ class ViewsTrendController extends Controller
             'rows' => $paginator,
             'chartRows' => $chartRows->values(),
             'counts' => $counts,
+            // Distinct months a cycle actually starts in, for the month picker —
+            // same convention used by the PM/Conceptor ranking's cycle picker.
+            'months' => Cycle::query()
+                ->when(
+                    in_array($filters['platform'], ['instagram', 'tiktok'], true),
+                    fn ($query) => $query->where('platform', $filters['platform']),
+                )
+                ->get(['cycle_start_date'])
+                ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+                ->unique()
+                ->sort()
+                ->values(),
         ]);
     }
 
@@ -109,6 +121,16 @@ class ViewsTrendController extends Controller
             ? $trendFilter
             : null;
 
+        // From/To month picker — an explicit comparison, not just "whatever
+        // cycle happens to precede the picked month". "Last cycle" becomes
+        // each account's cycle at-or-before month_to, "Prior cycle" becomes
+        // its cycle at-or-before month_from (so picking Jun -> Aug compares
+        // June against August specifically, even if the account also has a
+        // July cycle in between). With only month_to set (or neither), falls
+        // back to today's default: latest cycle vs. the one right before it.
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
+
         $sortKey = $request->string('sort')->toString();
         $sortKey = in_array($sortKey, ['account', 'last_avg_views', 'prior_avg_views', 'last_total_views', 'prior_total_views', 'delta_pct'], true) ? $sortKey : 'trend';
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
@@ -134,20 +156,30 @@ class ViewsTrendController extends Controller
         // per page load. Memoizing the underlying scan collapses that back to 1.
 
         $rows = $accounts
-            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle, $platform) {
+            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle, $platform, $monthFrom, $monthTo) {
                 $platforms = $platform === 'all' ? ['instagram', 'tiktok'] : [$platform];
 
-                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle) {
+                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle, $monthFrom, $monthTo) {
                     $cycles = $cyclesByAccountPlatform->get("{$account->id}:{$accountPlatform}", collect());
 
                     $series = $cycles->map(fn (Cycle $cycle) => [
                         'cycle_id' => $cycle->id,
                         'label' => $cycle->cycle_start_date->format('M Y'),
+                        'month' => $cycle->cycle_start_date->format('Y-m'),
                         'avg_views' => $viewsByCycle->get($cycle->id),
                         'total_views' => $totalViewsByCycle->get($cycle->id),
                     ])->filter(fn ($point) => $point['avg_views'] !== null)->values();
 
-                    return $this->buildRow($account, $accountPlatform, $series);
+                    // month_to trims the series so "last" is this account's cycle
+                    // at-or-before month_to (the whole "as of a past month" behavior
+                    // from before) — the untrimmed series is kept separately so an
+                    // explicit month_from can still look further back than month_to
+                    // - 1 cycle for "prior".
+                    $trimmedSeries = $monthTo
+                        ? $series->filter(fn ($point) => $point['month'] <= $monthTo)->values()
+                        : $series;
+
+                    return $this->buildRow($account, $accountPlatform, $trimmedSeries, $monthFrom);
                 });
             })
             ->filter(fn ($row) => $row !== null)
@@ -195,7 +227,7 @@ class ViewsTrendController extends Controller
         return [
             'rows' => $sorted,
             'counts' => $counts,
-            'filters' => ['search' => $search, 'platform' => $platform, 'trend' => $trendFilter, 'sort' => $sortKey, 'direction' => $direction],
+            'filters' => ['search' => $search, 'platform' => $platform, 'trend' => $trendFilter, 'month_from' => $monthFrom, 'month_to' => $monthTo, 'sort' => $sortKey, 'direction' => $direction],
         ];
     }
 
@@ -215,6 +247,11 @@ class ViewsTrendController extends Controller
         }
         if ($filters['trend']) {
             $parts[] = 'trend: '.$filters['trend'];
+        }
+        if (!empty($filters['month_from']) && !empty($filters['month_to'])) {
+            $parts[] = 'compared: '.$filters['month_from'].' vs '.$filters['month_to'];
+        } elseif (!empty($filters['month_to'])) {
+            $parts[] = 'as of: '.$filters['month_to'];
         }
 
         $sortLabels = [
@@ -252,6 +289,8 @@ class ViewsTrendController extends Controller
             ->get()
             ->groupBy('cycle_id');
 
+        // Real (summed) total views per cycle — not the median — so this modal
+        // reports the actual view volume rather than a "typical post" estimate.
         $viewsByCycle = $performances->map(function (Collection $cyclePerformances) {
             $views = $cyclePerformances
                 ->map(function (Performance $performance) {
@@ -261,7 +300,7 @@ class ViewsTrendController extends Controller
                 })
                 ->filter(fn ($views) => $views !== null);
 
-            return $this->median($views);
+            return $views->isEmpty() ? null : (int) $views->sum();
         });
 
         $postCountsByCycle = $performances->map(fn (Collection $cyclePerformances) => $cyclePerformances->count());
@@ -272,14 +311,14 @@ class ViewsTrendController extends Controller
             ->get();
 
         $series = $cycles->map(function (Cycle $cycle) use ($viewsByCycle, $postCountsByCycle) {
-            $avgViews = $viewsByCycle->get($cycle->id);
+            $totalViews = $viewsByCycle->get($cycle->id);
 
             return [
                 'cycle_id' => $cycle->id,
                 'label' => $cycle->cycle_start_date->format('M Y'),
                 'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
                 'cycle_end_date' => $cycle->cycle_end_date->toDateString(),
-                'avg_views' => $avgViews === null ? null : (int) round($avgViews),
+                'total_views' => $totalViews,
                 'post_count' => $postCountsByCycle->get($cycle->id, 0),
             ];
         })->values();
@@ -287,16 +326,16 @@ class ViewsTrendController extends Controller
         // Delta vs the immediately preceding cycle, per point — drives the sparkline
         // of ups/downs in the table without repeating the page's aggregate classification.
         $seriesWithDelta = $series->values()->map(function ($point, $index) use ($series) {
-            if ($index === 0 || $point['avg_views'] === null) {
+            if ($index === 0 || $point['total_views'] === null) {
                 return [...$point, 'delta_pct' => null];
             }
 
             $previous = $series[$index - 1];
-            if ($previous['avg_views'] === null || $previous['avg_views'] <= 0) {
+            if ($previous['total_views'] === null || $previous['total_views'] <= 0) {
                 return [...$point, 'delta_pct' => null];
             }
 
-            return [...$point, 'delta_pct' => round((($point['avg_views'] - $previous['avg_views']) / $previous['avg_views']) * 100, 1)];
+            return [...$point, 'delta_pct' => round((($point['total_views'] - $previous['total_views']) / $previous['total_views']) * 100, 1)];
         });
 
         return response()->json([
@@ -641,16 +680,25 @@ class ViewsTrendController extends Controller
     }
 
     /**
-     * Classify one account+platform's cycle-ordered avg-views series into a
-     * trend row. Returns null when there's no cycle data at all for this
-     * account on this platform (nothing to show), as opposed to exactly one
-     * cycle's worth (shown as 'insufficient_data' so the account is still visible).
+     * Classify one account+platform's cycle-ordered series into a trend row.
+     * Delta/trend/streak are based on total views. Returns null when there's
+     * no cycle data at all for this account on this platform (nothing to
+     * show), as opposed to exactly one cycle's worth (shown as
+     * 'insufficient_data' so the account is still visible).
      */
-    private function buildRow(Account $account, string $platform, Collection $series): ?array
+    private function buildRow(Account $account, string $platform, Collection $series, ?string $explicitPriorMonth = null): ?array
     {
         $rowId = "{$account->id}:{$platform}";
 
-        if ($series->count() < 2) {
+        // Explicit From-month pick: "prior" is this account's own cycle
+        // at-or-before that month specifically (e.g. always June, even if the
+        // account also has a July cycle in between it and "last") — not just
+        // whichever cycle happens to immediately precede "last" in $series.
+        $explicitPrior = $explicitPriorMonth
+            ? $series->filter(fn ($point) => $point['month'] <= $explicitPriorMonth)->last()
+            : null;
+
+        if ($series->count() < 2 && !$explicitPrior) {
             return $series->isEmpty() ? null : [
                 'row_id' => $rowId,
                 'account_id' => $account->id,
@@ -667,11 +715,58 @@ class ViewsTrendController extends Controller
             ];
         }
 
-        $last = $series->last();
-        $prior = $series->slice(-2, 1)->first();
+        if ($series->isEmpty()) {
+            return null;
+        }
 
-        $deltaPct = $prior['avg_views'] > 0
-            ? ($last['avg_views'] - $prior['avg_views']) / $prior['avg_views']
+        $last = $series->last();
+        $prior = $explicitPrior ?? $series->slice(-2, 1)->first();
+
+        // No cycle at or before the picked From-month for this account, and
+        // no fallback pair either — nothing to compare, but still show the
+        // account with its "last" figure and no delta (mirrors the < 2 branch
+        // above for the explicit-From-month case).
+        if ($prior === null) {
+            return [
+                'row_id' => $rowId,
+                'account_id' => $account->id,
+                'account_name' => $account->name,
+                'platform' => $platform,
+                'last_avg_views' => (int) round($last['avg_views']),
+                'prior_avg_views' => null,
+                'last_total_views' => (int) ($last['total_views'] ?? 0),
+                'prior_total_views' => null,
+                'delta_pct' => null,
+                'trend' => 'insufficient_data',
+                'stagnant_streak' => 0,
+                'last_cycle_label' => $last['label'],
+            ];
+        }
+
+        // From/To both resolved to the same cycle (e.g. picking the same
+        // month twice, or a From-month with no earlier cycle than "last") —
+        // there's nothing to compare against.
+        if ($prior['cycle_id'] === $last['cycle_id']) {
+            return [
+                'row_id' => $rowId,
+                'account_id' => $account->id,
+                'account_name' => $account->name,
+                'platform' => $platform,
+                'last_avg_views' => (int) round($last['avg_views']),
+                'prior_avg_views' => null,
+                'last_total_views' => (int) ($last['total_views'] ?? 0),
+                'prior_total_views' => null,
+                'delta_pct' => null,
+                'trend' => 'insufficient_data',
+                'stagnant_streak' => 0,
+                'last_cycle_label' => $last['label'],
+            ];
+        }
+
+        // Delta / trend classification is based on total views (not the median),
+        // matching the table's client-facing "Total Views" columns.
+        $deltaPct = ($prior['total_views'] ?? 0) > 0
+            ? (($last['total_views'] ?? 0) - $prior['total_views']) / $prior['total_views']
             : null;
 
         $stagnantStreak = $this->trailingFlatStreak($series);
@@ -729,11 +824,12 @@ class ViewsTrendController extends Controller
      * How many consecutive cycles, counting back from the most recent, stayed
      * within +/-STAGNANT_BAND of the cycle immediately before them. E.g. cycles
      * [100, 105, 98, 102] (latest last) -> compares 105->98 (flat), 98->102
-     * (flat), so streak = 2 flat transitions = 3 flat cycles.
+     * (flat), so streak = 2 flat transitions = 3 flat cycles. Based on total
+     * views, matching deltaPct above.
      */
     private function trailingFlatStreak(Collection $series): int
     {
-        $values = $series->pluck('avg_views')->values();
+        $values = $series->pluck('total_views')->values();
         $streak = 1; // the latest cycle itself always counts as 1
 
         for ($i = $values->count() - 1; $i > 0; $i--) {

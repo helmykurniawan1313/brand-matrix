@@ -22,19 +22,19 @@ const platformLabel = computed(() => (props.platform === 'tiktok' ? 'TikTok' : '
 const chartCanvas = ref(null);
 let chart = null;
 
-const seriesWithData = computed(() => series.value.filter((point) => point.avg_views !== null));
+const seriesWithData = computed(() => series.value.filter((point) => point.total_views !== null));
 
 const latest = computed(() => (seriesWithData.value.length ? seriesWithData.value[seriesWithData.value.length - 1] : null));
 const previous = computed(() => (seriesWithData.value.length > 1 ? seriesWithData.value[seriesWithData.value.length - 2] : null));
 
 const overallDeltaPct = computed(() => {
-    if (!latest.value || !previous.value || previous.value.avg_views <= 0) return null;
-    return Math.round(((latest.value.avg_views - previous.value.avg_views) / previous.value.avg_views) * 1000) / 10;
+    if (!latest.value || !previous.value || previous.value.total_views <= 0) return null;
+    return Math.round(((latest.value.total_views - previous.value.total_views) / previous.value.total_views) * 1000) / 10;
 });
 
 const peakPoint = computed(() => {
     if (!seriesWithData.value.length) return null;
-    return seriesWithData.value.reduce((max, point) => (point.avg_views > max.avg_views ? point : max), seriesWithData.value[0]);
+    return seriesWithData.value.reduce((max, point) => (point.total_views > max.total_views ? point : max), seriesWithData.value[0]);
 });
 
 const formatNumber = (value) => (value === null || value === undefined ? '—' : new Intl.NumberFormat('en-US').format(value));
@@ -71,8 +71,8 @@ const renderChart = async () => {
             labels: seriesWithData.value.map((point) => point.label),
             datasets: [
                 {
-                    label: 'Median views per post',
-                    data: seriesWithData.value.map((point) => point.avg_views),
+                    label: 'Total views',
+                    data: seriesWithData.value.map((point) => point.total_views),
                     borderColor: accentColor,
                     backgroundColor: `${accentColor}1a`,
                     pointBackgroundColor: accentColor,
@@ -92,7 +92,7 @@ const renderChart = async () => {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `Median views: ${new Intl.NumberFormat('en-US').format(ctx.parsed.y)}`,
+                        label: (ctx) => `Total views: ${new Intl.NumberFormat('en-US').format(ctx.parsed.y)}`,
                     },
                 },
             },
@@ -197,15 +197,15 @@ onBeforeUnmount(() => {
                     <!-- Views-only headline stats -->
                     <div class="grid grid-cols-3 gap-3">
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                            <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Latest cycle median views</p>
-                            <p class="mt-1.5 font-display text-2xl font-bold" style="color: var(--ink)">{{ formatNumber(latest?.avg_views) }}</p>
+                            <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Latest cycle total views</p>
+                            <p class="mt-1.5 font-display text-2xl font-bold" style="color: var(--ink)">{{ formatNumber(latest?.total_views) }}</p>
                             <p class="mt-0.5 text-xs font-semibold" :style="`color: ${deltaColor(overallDeltaPct)}`">
                                 {{ formatDelta(overallDeltaPct) }} vs prior cycle
                             </p>
                         </div>
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
                             <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Peak cycle</p>
-                            <p class="mt-1.5 font-display text-2xl font-bold" style="color: var(--ink)">{{ formatNumber(peakPoint?.avg_views) }}</p>
+                            <p class="mt-1.5 font-display text-2xl font-bold" style="color: var(--ink)">{{ formatNumber(peakPoint?.total_views) }}</p>
                             <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">{{ peakPoint?.label ?? '—' }}</p>
                         </div>
                         <div class="rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
 
                     <!-- The chart: the whole point of this modal -->
                     <div class="mt-5 rounded-lg border p-4" style="border-color: var(--border); background-color: var(--surface)">
-                        <h3 class="text-sm font-semibold" style="color: var(--ink)">Median views per post, by cycle</h3>
+                        <h3 class="text-sm font-semibold" style="color: var(--ink)">Total views, by cycle</h3>
                         <div class="mt-3 h-64">
                             <canvas ref="chartCanvas"></canvas>
                         </div>
@@ -229,15 +229,15 @@ onBeforeUnmount(() => {
                             <thead>
                                 <tr style="border-bottom: 1px solid var(--border)">
                                     <th class="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Cycle</th>
-                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Median views</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Total views</th>
                                     <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Δ vs prior</th>
-                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Posts</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Reels</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="point in [...series].reverse()" :key="point.cycle_id" style="border-bottom: 1px solid var(--border)">
                                     <td class="px-4 py-2.5 text-sm font-medium" style="color: var(--ink)">{{ point.label }}</td>
-                                    <td class="px-4 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(point.avg_views) }}</td>
+                                    <td class="px-4 py-2.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(point.total_views) }}</td>
                                     <td class="px-4 py-2.5 text-right text-sm font-semibold tabular-nums" :style="`color: ${deltaColor(point.delta_pct)}`">
                                         {{ formatDelta(point.delta_pct) }}
                                     </td>

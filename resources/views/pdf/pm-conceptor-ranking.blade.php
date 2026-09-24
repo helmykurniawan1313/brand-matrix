@@ -36,7 +36,7 @@
                 <th>Name</th>
                 <th class="num">Median Views</th>
                 <th class="num">Total Views</th>
-                <th class="num">Posts</th>
+                <th class="num">Total Reels</th>
             </tr>
         </thead>
         <tbody>
@@ -62,7 +62,7 @@
                 <th>Name</th>
                 <th class="num">Median Views</th>
                 <th class="num">Total Views</th>
-                <th class="num">Posts</th>
+                <th class="num">Total Reels</th>
             </tr>
         </thead>
         <tbody>

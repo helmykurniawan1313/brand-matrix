@@ -16,7 +16,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  *   1. "Filters: …" context row
  *   2. "Grouped by: post month | cycle start month" context row
  *   3. blank
- *   4. column header (Rank / Name / Median Views / Total Views / Posts)
+ *   4. column header (Rank / Name / Median Views / Total Views / Total Reels)
  *   5. "PROJECT MANAGERS" section, then a blank, then "CONCEPTORS" section
  *
  * Each person ranked best-to-worst by median views per post.
@@ -40,7 +40,7 @@ class PmConceptorRankingExport implements FromCollection, WithStyles
         $rows->push(['Filters: '.$this->filterSummary, '', '', '', '']);
         $rows->push(['Grouped by: '.$this->groupedBy, '', '', '', '']);
         $rows->push(['', '', '', '', '']);
-        $rows->push(['Rank', 'Name', 'Median Views', 'Total Views', 'Posts']);
+        $rows->push(['Rank', 'Name', 'Median Views', 'Total Views', 'Total Reels']);
 
         $rows->push(['PROJECT MANAGERS', '', '', '', '']);
         $this->appendPeople($rows, $this->projectManagers);

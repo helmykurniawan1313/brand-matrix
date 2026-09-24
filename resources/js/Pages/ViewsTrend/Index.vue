@@ -1,9 +1,10 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import ViewsTrendDetailModal from '../../Components/ViewsTrendDetailModal.vue';
 import PmConceptorRankingModal from '../../Components/PmConceptorRankingModal.vue';
+import SingleMonthPicker from '../../Components/SingleMonthPicker.vue';
 
 defineOptions({ layout: AppLayout });
 
@@ -12,14 +13,29 @@ const props = defineProps({
     rows: { type: Object, required: true },
     chartRows: { type: Array, default: () => [] },
     counts: { type: Object, required: true },
+    months: { type: Array, default: () => [] },
 });
 
 const search = ref(props.filters.search ?? '');
 const platform = ref(props.filters.platform ?? 'all');
 const trendFilter = ref(props.filters.trend ?? 'all');
+// Explicit From -> To month comparison — "Last cycle" becomes each account's
+// cycle at-or-before monthTo, "Prior cycle" becomes its cycle at-or-before
+// monthFrom specifically (e.g. picking Jun -> Aug always compares June
+// against August, not just whatever immediately precedes August). Both empty
+// = today's default behavior (true latest cycle vs. the one right before it).
+const monthFrom = ref(props.filters.month_from ?? '');
+const monthTo = ref(props.filters.month_to ?? '');
+const hasMonthRange = computed(() => !!monthFrom.value || !!monthTo.value);
 const sort = ref(props.filters.sort ?? 'trend');
 const direction = ref(props.filters.direction ?? 'asc');
 let searchTimeout = null;
+
+const monthLabel = (ym) => {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
 
 const platformTabs = [
     { value: 'all', label: 'All Platforms' },
@@ -55,6 +71,8 @@ const applyFilters = () => {
             search: search.value || undefined,
             platform: platform.value,
             trend: trendFilter.value === 'all' ? undefined : trendFilter.value,
+            month_from: monthFrom.value || undefined,
+            month_to: monthTo.value || undefined,
             sort: sort.value === 'trend' ? undefined : sort.value,
             direction: direction.value === 'asc' ? undefined : direction.value,
         },
@@ -88,20 +106,49 @@ const setPlatform = (value) => {
 const showFilterModal = ref(false);
 const draftPlatform = ref('all');
 const draftTrend = ref('all');
+const draftMonthFrom = ref('');
+const draftMonthTo = ref('');
+
+// Two single-month popovers — "compare month A with month B" as two distinct
+// points, not a range calendar (a shaded span between the two picks would
+// wrongly imply every month in between is also included in the comparison).
+const monthAPickerOpen = ref(false);
+const monthAPickerRef = ref(null);
+const monthBPickerOpen = ref(false);
+const monthBPickerRef = ref(null);
+
+const onClickOutsideMonthPickers = (event) => {
+    if (monthAPickerRef.value && !monthAPickerRef.value.contains(event.target)) {
+        monthAPickerOpen.value = false;
+    }
+    if (monthBPickerRef.value && !monthBPickerRef.value.contains(event.target)) {
+        monthBPickerOpen.value = false;
+    }
+};
+onMounted(() => document.addEventListener('click', onClickOutsideMonthPickers));
+onBeforeUnmount(() => document.removeEventListener('click', onClickOutsideMonthPickers));
 
 const openFilterModal = () => {
     draftPlatform.value = platform.value;
     draftTrend.value = trendFilter.value;
+    draftMonthFrom.value = monthFrom.value;
+    draftMonthTo.value = monthTo.value;
+    monthAPickerOpen.value = false;
+    monthBPickerOpen.value = false;
     showFilterModal.value = true;
 };
 
 const closeFilterModal = () => {
     showFilterModal.value = false;
+    monthAPickerOpen.value = false;
+    monthBPickerOpen.value = false;
 };
 
 const applyFilterModal = () => {
     platform.value = draftPlatform.value;
     trendFilter.value = draftTrend.value;
+    monthFrom.value = draftMonthFrom.value;
+    monthTo.value = draftMonthTo.value;
     showFilterModal.value = false;
     applyFilters();
 };
@@ -109,12 +156,15 @@ const applyFilterModal = () => {
 const clearFilterModal = () => {
     draftPlatform.value = 'all';
     draftTrend.value = 'all';
+    draftMonthFrom.value = '';
+    draftMonthTo.value = '';
 };
 
 const activeFilterCount = computed(() => {
     let count = 0;
     if (platform.value !== 'all') count += 1;
     if (trendFilter.value !== 'all') count += 1;
+    if (hasMonthRange.value) count += 1;
     return count;
 });
 
@@ -183,6 +233,8 @@ const exportQuery = () => ({
     search: search.value || undefined,
     platform: platform.value,
     trend: trendFilter.value === 'all' ? undefined : trendFilter.value,
+    month_from: monthFrom.value || undefined,
+    month_to: monthTo.value || undefined,
     sort: sort.value === 'trend' ? undefined : sort.value,
     direction: direction.value === 'asc' ? undefined : direction.value,
 });
@@ -235,6 +287,11 @@ const showRankingModal = ref(false);
             <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Views Trend</h1>
             <p class="mt-1 text-sm" style="color: var(--ink-muted)">
                 Which accounts are dropping off, flat, or growing in post views — compared cycle over cycle.
+                <span v-if="hasMonthRange" class="ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style="background-color: var(--accent-soft); color: var(--accent)">
+                    <template v-if="monthFrom && monthTo">{{ monthLabel(monthFrom) }} vs {{ monthLabel(monthTo) }}</template>
+                    <template v-else-if="monthTo">As of {{ monthLabel(monthTo) }}</template>
+                    <template v-else>From {{ monthLabel(monthFrom) }}</template>
+                </span>
             </p>
         </div>
 
@@ -443,22 +500,6 @@ const showRankingModal = ref(false);
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                             style="color: var(--ink-faint)"
-                            @click="sortBy('last_avg_views')"
-                        >
-                            Last cycle median views
-                            <span v-if="sort === 'last_avg_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
-                            @click="sortBy('prior_avg_views')"
-                        >
-                            Prior cycle
-                            <span v-if="sort === 'prior_avg_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
                             @click="sortBy('last_total_views')"
                         >
                             Total views (last)
@@ -510,8 +551,6 @@ const showRankingModal = ref(false);
                                 <template v-if="row.trend === 'stagnant'">({{ row.stagnant_streak }} cycles)</template>
                             </span>
                         </td>
-                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_avg_views) }}</td>
-                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.prior_avg_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_total_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.prior_total_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm font-semibold tabular-nums" :style="`color: ${deltaColor(row.delta_pct)}`">
@@ -520,7 +559,7 @@ const showRankingModal = ref(false);
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ row.last_cycle_label }}</td>
                     </tr>
                     <tr v-if="rows.data.length === 0">
-                        <td :colspan="platform === 'all' ? 9 : 8" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td :colspan="platform === 'all' ? 7 : 6" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             No accounts match this filter.
                         </td>
                     </tr>
@@ -696,10 +735,11 @@ const showRankingModal = ref(false);
         class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
     >
         <div
-            class="w-full max-w-sm rounded-lg border p-6 shadow-2xl"
+            class="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-lg border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
-            <div class="flex items-start justify-between gap-4">
+            <!-- Header -->
+            <div class="flex shrink-0 items-start justify-between gap-4 border-b px-6 py-5" style="border-color: var(--border)">
                 <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Filter</h2>
                 <button
                     type="button"
@@ -714,15 +754,17 @@ const showRankingModal = ref(false);
                 </button>
             </div>
 
-            <div class="mt-5 space-y-4">
-                <div>
-                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Platform</label>
-                    <div class="mt-1.5 flex gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+            <!-- Scrollable body: each filter its own labeled section, divided by
+                 hairlines so three unrelated controls don't read as one run-on block. -->
+            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                <div class="pb-5">
+                    <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Platform</label>
+                    <div class="mt-2 flex gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
                         <button
                             v-for="tab in platformTabs"
                             :key="tab.value"
                             type="button"
-                            class="flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                            class="flex-1 rounded-md px-2 py-1.5 text-sm font-medium transition-colors"
                             :style="
                                 draftPlatform === tab.value
                                     ? 'background-color: var(--accent); color: var(--accent-ink)'
@@ -735,14 +777,14 @@ const showRankingModal = ref(false);
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Trend</label>
-                    <div class="mt-1.5 flex flex-wrap gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+                <div class="border-t py-5" style="border-color: var(--border)">
+                    <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Trend</label>
+                    <div class="mt-2 grid grid-cols-3 gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
                         <button
                             v-for="tab in trendTabs"
                             :key="tab.value"
                             type="button"
-                            class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                            class="rounded-md px-2 py-1.5 text-sm font-medium transition-colors"
                             :style="
                                 draftTrend === tab.value
                                     ? 'background-color: var(--accent); color: var(--accent-ink)'
@@ -754,9 +796,85 @@ const showRankingModal = ref(false);
                         </button>
                     </div>
                 </div>
+
+                <div class="border-t pt-5" style="border-color: var(--border)">
+                    <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Compare months</label>
+
+                    <!-- Two independent single-month pickers, not a range — each
+                         resolves to that account's own cycle at/before the picked
+                         month, compared as two specific points (e.g. "May" vs "Aug"),
+                         with nothing implied about the months between them. -->
+                    <div class="mt-2 flex items-center gap-2">
+                        <div ref="monthAPickerRef" class="relative w-full">
+                            <span class="text-[11px] font-medium" style="color: var(--ink-faint)">Compare</span>
+                            <button
+                                type="button"
+                                class="mt-1 inline-flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-80"
+                                :style="
+                                    draftMonthFrom
+                                        ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
+                                        : 'border-color: var(--border); background-color: var(--surface); color: var(--ink-muted)'
+                                "
+                                @click="monthAPickerOpen = !monthAPickerOpen"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5 shrink-0">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                                    <path d="M3 10h18M8 2v4M16 2v4" />
+                                </svg>
+                                <span class="truncate">{{ draftMonthFrom ? monthLabel(draftMonthFrom) : 'Prior' }}</span>
+                            </button>
+
+                            <div v-if="monthAPickerOpen" class="absolute bottom-full left-0 z-20 mb-2 w-64 shadow-xl">
+                                <SingleMonthPicker v-model="draftMonthFrom" :allowed-months="months" class="!max-w-none" />
+                            </div>
+                        </div>
+
+                        <span class="mt-4 shrink-0 text-xs font-semibold" style="color: var(--ink-faint)">with</span>
+
+                        <div ref="monthBPickerRef" class="relative w-full">
+                            <span class="text-[11px] font-medium" style="color: var(--ink-faint)">&nbsp;</span>
+                            <button
+                                type="button"
+                                class="mt-1 inline-flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-80"
+                                :style="
+                                    draftMonthTo
+                                        ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
+                                        : 'border-color: var(--border); background-color: var(--surface); color: var(--ink-muted)'
+                                "
+                                @click="monthBPickerOpen = !monthBPickerOpen"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5 shrink-0">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                                    <path d="M3 10h18M8 2v4M16 2v4" />
+                                </svg>
+                                <span class="truncate">{{ draftMonthTo ? monthLabel(draftMonthTo) : 'Latest' }}</span>
+                            </button>
+
+                            <div v-if="monthBPickerOpen" class="absolute bottom-full right-0 z-20 mb-2 w-64 shadow-xl">
+                                <SingleMonthPicker v-model="draftMonthTo" :allowed-months="months" class="!max-w-none" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 flex items-center justify-between">
+                        <p class="text-xs leading-relaxed" style="color: var(--ink-faint)">
+                            Leave both as default to compare the true latest cycle against the one right before it.
+                        </p>
+                        <button
+                            v-if="draftMonthFrom || draftMonthTo"
+                            type="button"
+                            class="shrink-0 pl-2 text-xs font-medium transition-opacity hover:opacity-70"
+                            style="color: var(--accent)"
+                            @click="draftMonthFrom = ''; draftMonthTo = ''"
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div class="mt-6 flex items-center justify-between">
+            <!-- Footer -->
+            <div class="flex shrink-0 items-center justify-between gap-3 border-t px-6 py-4" style="border-color: var(--border)">
                 <button
                     type="button"
                     class="text-sm font-medium transition-colors hover:opacity-70"
@@ -765,7 +883,7 @@ const showRankingModal = ref(false);
                 >
                     Reset
                 </button>
-                <div class="flex gap-3">
+                <div class="flex gap-2">
                     <button
                         type="button"
                         class="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:opacity-70"
