@@ -107,20 +107,21 @@ if (isEdit.value && form.account_id) {
 
 // Auto-fill Viewers/Interactions when a cycle with an existing insight is
 // picked — skips the record's own row in edit mode (nothing to "fill" from
-// itself) and skips cycles with no recorded insight (fields stay as typed).
+// itself). A cycle with no recorded insight resets the fields to 0 instead
+// of leaving stale values from whatever was typed for a previous pick.
 watch(
     () => form.cycle_id,
     (cycleId) => {
         const option = cycleOptions.value.find((c) => c.id === cycleId);
         const data = option?.insight;
-        if (!data || data.id === props.insight?.id) return;
+        if (data && data.id === props.insight?.id) return;
 
-        form.viewers_posts = data.viewers_posts;
-        form.viewers_reels = data.viewers_reels;
-        form.viewers_story = data.viewers_story;
-        form.interactions_posts = data.interactions_posts;
-        form.interactions_reels = data.interactions_reels;
-        form.interactions_story = data.interactions_story;
+        form.viewers_posts = data?.viewers_posts ?? 0;
+        form.viewers_reels = data?.viewers_reels ?? 0;
+        form.viewers_story = data?.viewers_story ?? 0;
+        form.interactions_posts = data?.interactions_posts ?? 0;
+        form.interactions_reels = data?.interactions_reels ?? 0;
+        form.interactions_story = data?.interactions_story ?? 0;
     },
 );
 
