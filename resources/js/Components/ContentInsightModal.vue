@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import SearchableSelect from './SearchableSelect.vue';
 import { useToast } from '../composables/useToast';
@@ -60,14 +60,19 @@ const selectedCycle = computed(
     () => cycleOptions.value.find((c) => c.id === form.cycle_id) ?? null,
 );
 
-const onAccountChange = async () => {
-    form.cycle_id = '';
-    cycleOptions.value = [];
-    if (!form.account_id) return;
+// Shared loader for the dependent cycle select — used both on account change
+// (which resets the picked cycle) and once on mount in edit mode (which must
+// NOT reset it, so the existing cycle stays selected while its sibling cycles
+// load in alongside it as real options to switch between).
+const loadCyclesFor = async (accountId) => {
+    if (!accountId) {
+        cycleOptions.value = [];
+        return;
+    }
 
     loadingCycles.value = true;
     try {
-        const res = await fetch(`/accounts/${form.account_id}/insight-cycles`, {
+        const res = await fetch(`/accounts/${accountId}/insight-cycles`, {
             headers: { Accept: 'application/json' },
         });
         const data = await res.json();
@@ -82,6 +87,7 @@ const onAccountChange = async () => {
             name: cycleLabelFromRow(c),
             platform: c.platform,
             badge: mixed && c.platform ? platformLabel(c.platform) : null,
+            insight: c.insight,
         }));
     } catch {
         toast.error('Failed to load cycles for that account.');
@@ -89,6 +95,34 @@ const onAccountChange = async () => {
         loadingCycles.value = false;
     }
 };
+
+const onAccountChange = () => {
+    form.cycle_id = '';
+    loadCyclesFor(form.account_id);
+};
+
+if (isEdit.value && form.account_id) {
+    loadCyclesFor(form.account_id);
+}
+
+// Auto-fill Viewers/Interactions when a cycle with an existing insight is
+// picked — skips the record's own row in edit mode (nothing to "fill" from
+// itself) and skips cycles with no recorded insight (fields stay as typed).
+watch(
+    () => form.cycle_id,
+    (cycleId) => {
+        const option = cycleOptions.value.find((c) => c.id === cycleId);
+        const data = option?.insight;
+        if (!data || data.id === props.insight?.id) return;
+
+        form.viewers_posts = data.viewers_posts;
+        form.viewers_reels = data.viewers_reels;
+        form.viewers_story = data.viewers_story;
+        form.interactions_posts = data.interactions_posts;
+        form.interactions_reels = data.interactions_reels;
+        form.interactions_story = data.interactions_story;
+    },
+);
 
 const cyclePlaceholder = computed(() => {
     if (!form.account_id) return 'Pick an account first';
@@ -153,7 +187,7 @@ const submit = () => {
 <template>
     <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
         <div
-            class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
+            class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
         >
             <!-- Sticky header -->
@@ -166,13 +200,7 @@ const submit = () => {
                         {{ isEdit ? 'Edit Content Insight' : 'Add Content Insight' }}
                     </h2>
                     <p class="mt-0.5 text-sm" style="color: var(--ink-muted)">
-                        <template v-if="isEdit">
-                            {{ insight.account?.name }}
-                            <span v-if="insight.cycle"> · {{ cycleLabelFromRow(insight.cycle) }}</span>
-                        </template>
-                        <template v-else>
-                            Type the numbers straight from the Instagram Insights "Overview" screen.
-                        </template>
+                        Type the numbers straight from the Instagram Insights "Overview" screen.
                     </p>
                 </div>
                 <button
@@ -190,9 +218,11 @@ const submit = () => {
 
             <!-- Scrollable body -->
             <form id="content-insight-form" class="flex-1 space-y-5 overflow-y-auto px-6 py-5" @submit.prevent="submit">
-                <!-- Context strip: account + cycle -->
+                <!-- Context strip: account + cycle — editable in both create
+                     and edit mode, since a record can be re-pointed at a
+                     different account/cycle after the fact (e.g. it was
+                     logged against the wrong cycle). -->
                 <div
-                    v-if="!isEdit"
                     class="rounded-xl border p-4"
                     style="border-color: var(--border); background-color: var(--surface)"
                 >
@@ -243,7 +273,10 @@ const submit = () => {
                     </p>
                 </div>
 
-                <!-- Section cards: Viewers + Interactions -->
+                <!-- Section cards: Viewers + Interactions, side by side once
+                     there's room — the modal is wide enough that stacking them
+                     just left half the width empty. -->
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div
                     v-for="section in sections"
                     :key="section.key"
@@ -295,6 +328,7 @@ const submit = () => {
                             </div>
                         </div>
                     </div>
+                </div>
                 </div>
             </form>
 

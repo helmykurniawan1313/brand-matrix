@@ -60,17 +60,37 @@ class ContentInsightController extends Controller
      */
     public function cycles(Account $account): JsonResponse
     {
+        // Existing insights for this account, keyed by cycle_id — so the
+        // create/edit form can auto-fill Viewers/Interactions the moment a
+        // cycle with recorded data is picked, without a second request.
+        $insightsByCycle = ContentInsight::where('account_id', $account->id)
+            ->get()
+            ->keyBy('cycle_id');
+
         return response()->json(
             $account->cycles()
                 ->orderByDesc('cycle_start_date')
                 ->get(['id', 'cycle_start_date', 'cycle_end_date', 'platform'])
-                ->map(fn (Cycle $cycle) => [
-                    'id' => $cycle->id,
-                    'platform' => $cycle->platform,
-                    'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
-                    'cycle_end_date' => $cycle->cycle_end_date->toDateString(),
-                    'label' => $this->cycleLabel($cycle),
-                ])
+                ->map(function (Cycle $cycle) use ($insightsByCycle) {
+                    $insight = $insightsByCycle->get($cycle->id);
+
+                    return [
+                        'id' => $cycle->id,
+                        'platform' => $cycle->platform,
+                        'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
+                        'cycle_end_date' => $cycle->cycle_end_date->toDateString(),
+                        'label' => $this->cycleLabel($cycle),
+                        'insight' => $insight ? [
+                            'id' => $insight->id,
+                            'viewers_posts' => $insight->viewers_posts,
+                            'viewers_reels' => $insight->viewers_reels,
+                            'viewers_story' => $insight->viewers_story,
+                            'interactions_posts' => $insight->interactions_posts,
+                            'interactions_reels' => $insight->interactions_reels,
+                            'interactions_story' => $insight->interactions_story,
+                        ] : null,
+                    ];
+                })
         );
     }
 
