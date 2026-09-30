@@ -54,6 +54,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('score-buckets', ScoreBucketController::class)->only(['index']);
 
     Route::get('content-insights', [ContentInsightController::class, 'index'])->name('content-insights.index');
+    Route::get('content-insights-pdf', [ContentInsightController::class, 'pdf'])->name('content-insights.pdf');
+    Route::get('content-insights-excel', [ContentInsightController::class, 'exportExcel'])->name('content-insights.excel');
     Route::get('accounts/{account}/insight-cycles', [ContentInsightController::class, 'cycles'])->name('content-insights.cycles');
 
     Route::resource('departments', DepartmentController::class)->only(['index']);
