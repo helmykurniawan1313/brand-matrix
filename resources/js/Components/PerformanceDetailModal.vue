@@ -42,6 +42,13 @@ const pdfUrl = computed(() => `/performances/${props.performance.id}/pdf`);
 
 const platformLabels = { instagram: 'Instagram', tiktok: 'TikTok' };
 
+// Same icon paths/brand colors used in the app nav (AppLayout.vue) — reused
+// here so a video link reads as its platform's logo instead of plain text.
+const platformIcons = {
+    instagram: { path: 'M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM17.5 6.5h.01', color: '#e1306c' },
+    tiktok: { path: 'M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5', color: '#010101' },
+};
+
 const showProofLightbox = ref(false);
 
 const tooltipMetric = ref(null);
@@ -365,10 +372,21 @@ onMounted(processEmbeds);
                                         style="border-color: var(--border); background-color: var(--bg)"
                                     >
                                         <div
-                                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold uppercase"
-                                            style="background-color: var(--surface); border: 1px solid var(--border); color: var(--ink-faint)"
+                                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md"
+                                            style="background-color: var(--surface); border: 1px solid var(--border)"
                                         >
-                                            {{ link.platform }}
+                                            <svg
+                                                v-if="platformIcons[link.platform]"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                :stroke="platformIcons[link.platform].color"
+                                                stroke-width="2"
+                                                class="h-6 w-6"
+                                            >
+                                                <path :d="platformIcons[link.platform].path" />
+                                            </svg>
+                                            <span v-else class="text-[10px] font-semibold uppercase" style="color: var(--ink-faint)">{{ link.platform }}</span>
                                         </div>
                                         <div class="min-w-0 flex-1">
                                             <p class="truncate text-sm" style="color: var(--ink-muted)">{{ link.url }}</p>
@@ -393,10 +411,21 @@ onMounted(processEmbeds);
                                         style="border-color: var(--border); background-color: var(--bg)"
                                     >
                                         <div
-                                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-[10px] uppercase"
-                                            style="background-color: var(--surface); border: 1px solid var(--border); color: var(--ink-faint)"
+                                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-md"
+                                            style="background-color: var(--surface); border: 1px solid var(--border)"
                                         >
-                                            {{ link.platform ?? '—' }}
+                                            <svg
+                                                v-if="platformIcons[link.platform]"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                :stroke="platformIcons[link.platform].color"
+                                                stroke-width="2"
+                                                class="h-6 w-6"
+                                            >
+                                                <path :d="platformIcons[link.platform].path" />
+                                            </svg>
+                                            <span v-else class="text-[10px] uppercase" style="color: var(--ink-faint)">{{ link.platform ?? '—' }}</span>
                                         </div>
                                         <span class="truncate text-sm" style="color: var(--accent)">{{ link.url }}</span>
                                     </a>
