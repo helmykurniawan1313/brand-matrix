@@ -13,6 +13,7 @@ import MonthRangePicker from '../../Components/MonthRangePicker.vue';
 import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
+import AdsRankingModal from '../../Components/AdsRankingModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -698,6 +699,8 @@ const editFromDetail = (cycle) => {
 
 const inputStyle =
     'mt-1 w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2';
+
+const showAdsRankingModal = ref(false);
 </script>
 
 <template>
@@ -710,15 +713,28 @@ const inputStyle =
                     Growth, visibility, and engagement scored per reporting cycle.
                 </p>
             </div>
-            <button
-                v-if="canEdit"
-                type="button"
-                class="shrink-0 rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
-                style="background-color: var(--accent); color: var(--accent-ink)"
-                @click="openCreate"
-            >
-                + Add Cycle
-            </button>
+            <div class="flex shrink-0 items-center gap-3">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                    style="border-color: var(--border); color: var(--ink)"
+                    @click="showAdsRankingModal = true"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M8 21h8M12 17v4M17 3H7v6a5 5 0 0 0 10 0V3ZM3 6v2a3 3 0 0 0 3 3M21 6v2a3 3 0 0 1-3 3" />
+                    </svg>
+                    Ads Nominal Ranking
+                </button>
+                <button
+                    v-if="canEdit"
+                    type="button"
+                    class="rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                    style="background-color: var(--accent); color: var(--accent-ink)"
+                    @click="openCreate"
+                >
+                    + Add Cycle
+                </button>
+            </div>
         </div>
 
         <div v-if="summary.total > 0" class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -1296,6 +1312,11 @@ const inputStyle =
             :score-buckets="scoreBuckets"
             @close="closeDetail"
             @edit="editFromDetail"
+        />
+
+        <AdsRankingModal
+            v-if="showAdsRankingModal"
+            @close="showAdsRankingModal = false"
         />
 
         <FilterSummaryModal

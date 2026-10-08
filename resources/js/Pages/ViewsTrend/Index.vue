@@ -500,18 +500,34 @@ const showRankingModal = ref(false);
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                             style="color: var(--ink-faint)"
-                            @click="sortBy('last_total_views')"
+                            @click="sortBy('last_avg_views')"
                         >
-                            Total views (last)
-                            <span v-if="sort === 'last_total_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            Median (last)
+                            <span v-if="sort === 'last_avg_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
                         </th>
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                             style="color: var(--ink-faint)"
-                            @click="sortBy('prior_total_views')"
+                            @click="sortBy('prior_avg_views')"
                         >
-                            Total views (prior)
-                            <span v-if="sort === 'prior_total_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                            Median (prior)
+                            <span v-if="sort === 'prior_avg_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                        </th>
+                        <th
+                            class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                            style="color: var(--ink-faint)"
+                            @click="sortBy('last_max_views')"
+                        >
+                            Max
+                            <span v-if="sort === 'last_max_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                        </th>
+                        <th
+                            class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                            style="color: var(--ink-faint)"
+                            @click="sortBy('last_min_views')"
+                        >
+                            Min
+                            <span v-if="sort === 'last_min_views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
                         </th>
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
@@ -551,15 +567,17 @@ const showRankingModal = ref(false);
                                 <template v-if="row.trend === 'stagnant'">({{ row.stagnant_streak }} cycles)</template>
                             </span>
                         </td>
-                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_total_views) }}</td>
-                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.prior_total_views) }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_avg_views) }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.prior_avg_views) }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_max_views) }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_min_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm font-semibold tabular-nums" :style="`color: ${deltaColor(row.delta_pct)}`">
                             {{ formatDelta(row.delta_pct) }}
                         </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ row.last_cycle_label }}</td>
                     </tr>
                     <tr v-if="rows.data.length === 0">
-                        <td :colspan="platform === 'all' ? 7 : 6" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td :colspan="platform === 'all' ? 9 : 8" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             No accounts match this filter.
                         </td>
                     </tr>

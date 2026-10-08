@@ -21,12 +21,12 @@ use Maatwebsite\Excel\Facades\Excel;
 class ViewsTrendController extends Controller
 {
     /**
-     * A drop of 15%+ in total views vs the previous cycle.
+     * A drop of 15%+ in median views vs the previous cycle.
      */
     private const SETBACK_THRESHOLD = -0.15;
 
     /**
-     * A rise of 15%+ in total views vs the previous cycle.
+     * A rise of 15%+ in median views vs the previous cycle.
      */
     private const GROWTH_THRESHOLD = 0.15;
 
@@ -132,7 +132,7 @@ class ViewsTrendController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
 
         $sortKey = $request->string('sort')->toString();
-        $sortKey = in_array($sortKey, ['account', 'last_avg_views', 'prior_avg_views', 'last_total_views', 'prior_total_views', 'delta_pct'], true) ? $sortKey : 'trend';
+        $sortKey = in_array($sortKey, ['account', 'last_avg_views', 'prior_avg_views', 'last_max_views', 'last_min_views', 'delta_pct'], true) ? $sortKey : 'trend';
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
         $accounts = Account::orderBy('name')
@@ -148,18 +148,19 @@ class ViewsTrendController extends Controller
             ->groupBy(fn (Cycle $cycle) => "{$cycle->account_id}:{$cycle->platform}");
 
         $viewsByCycle = $this->avgViewsByCycle();
-        $totalViewsByCycle = $this->totalViewsByCycle();
-        // Both derive from the same per-cycle performance scan (viewsByCyclePerformances(),
+        $maxViewsByCycle = $this->maxViewsByCycle();
+        $minViewsByCycle = $this->minViewsByCycle();
+        // All three derive from the same per-cycle performance scan (viewsByCyclePerformances(),
         // memoized below) — this used to independently re-run that full-table query, once
         // per method call. Since index() calls filteredSortedRows() twice (table + chart)
         // and pdf()/exportExcel() add a third, that meant up to 4 full scans of Performance
         // per page load. Memoizing the underlying scan collapses that back to 1.
 
         $rows = $accounts
-            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle, $platform, $monthFrom, $monthTo) {
+            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $platform, $monthFrom, $monthTo) {
                 $platforms = $platform === 'all' ? ['instagram', 'tiktok'] : [$platform];
 
-                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $totalViewsByCycle, $monthFrom, $monthTo) {
+                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $monthFrom, $monthTo) {
                     $cycles = $cyclesByAccountPlatform->get("{$account->id}:{$accountPlatform}", collect());
 
                     $series = $cycles->map(fn (Cycle $cycle) => [
@@ -167,7 +168,8 @@ class ViewsTrendController extends Controller
                         'label' => $cycle->cycle_start_date->format('M Y'),
                         'month' => $cycle->cycle_start_date->format('Y-m'),
                         'avg_views' => $viewsByCycle->get($cycle->id),
-                        'total_views' => $totalViewsByCycle->get($cycle->id),
+                        'max_views' => $maxViewsByCycle->get($cycle->id),
+                        'min_views' => $minViewsByCycle->get($cycle->id),
                     ])->filter(fn ($point) => $point['avg_views'] !== null)->values();
 
                     // month_to trims the series so "last" is this account's cycle
@@ -203,8 +205,8 @@ class ViewsTrendController extends Controller
             // nulls (insufficient data) always sort last, regardless of direction.
             'last_avg_views' => fn ($a, $b) => ($a['last_avg_views'] ?? -1) <=> ($b['last_avg_views'] ?? -1),
             'prior_avg_views' => fn ($a, $b) => ($a['prior_avg_views'] ?? -1) <=> ($b['prior_avg_views'] ?? -1),
-            'last_total_views' => fn ($a, $b) => ($a['last_total_views'] ?? -1) <=> ($b['last_total_views'] ?? -1),
-            'prior_total_views' => fn ($a, $b) => ($a['prior_total_views'] ?? -1) <=> ($b['prior_total_views'] ?? -1),
+            'last_max_views' => fn ($a, $b) => ($a['last_max_views'] ?? -1) <=> ($b['last_max_views'] ?? -1),
+            'last_min_views' => fn ($a, $b) => ($a['last_min_views'] ?? -1) <=> ($b['last_min_views'] ?? -1),
             'delta_pct' => fn ($a, $b) => ($a['delta_pct'] ?? -INF) <=> ($b['delta_pct'] ?? -INF),
             default => fn ($a, $b) => $trendRank[$a['trend']] <=> $trendRank[$b['trend']],
         };
@@ -258,8 +260,8 @@ class ViewsTrendController extends Controller
             'account' => 'Account',
             'last_avg_views' => 'Last Cycle Median Views',
             'prior_avg_views' => 'Prior Cycle Median Views',
-            'last_total_views' => 'Total Views (Last)',
-            'prior_total_views' => 'Total Views (Prior)',
+            'last_max_views' => 'Last Cycle Max Views',
+            'last_min_views' => 'Last Cycle Min Views',
             'delta_pct' => 'Delta %',
             'trend' => 'Trend (default)',
         ];
@@ -289,9 +291,9 @@ class ViewsTrendController extends Controller
             ->get()
             ->groupBy('cycle_id');
 
-        // Real (summed) total views per cycle — not the median — so this modal
-        // reports the actual view volume rather than a "typical post" estimate.
-        $viewsByCycle = $performances->map(function (Collection $cyclePerformances) {
+        // Median/max/min per cycle — median for the "typical post" trend line,
+        // max/min for the ceiling and floor each cycle actually reached.
+        $viewsPerCycle = $performances->map(function (Collection $cyclePerformances) {
             $views = $cyclePerformances
                 ->map(function (Performance $performance) {
                     $snapshot = $performance->igSnapshots->first();
@@ -300,8 +302,13 @@ class ViewsTrendController extends Controller
                 })
                 ->filter(fn ($views) => $views !== null);
 
-            return $views->isEmpty() ? null : (int) $views->sum();
+            return $views->isEmpty() ? null : $views;
         });
+
+        $medianByCycle = $viewsPerCycle->map(fn ($views) => $views === null ? null : (int) round($this->median($views)));
+        $maxByCycle = $viewsPerCycle->map(fn ($views) => $views === null ? null : (int) $views->max());
+        $minByCycle = $viewsPerCycle->map(fn ($views) => $views === null ? null : (int) $views->min());
+        $totalByCycle = $viewsPerCycle->map(fn ($views) => $views === null ? null : (int) $views->sum());
 
         $postCountsByCycle = $performances->map(fn (Collection $cyclePerformances) => $cyclePerformances->count());
 
@@ -310,38 +317,75 @@ class ViewsTrendController extends Controller
             ->orderBy('cycle_start_date')
             ->get();
 
-        $series = $cycles->map(function (Cycle $cycle) use ($viewsByCycle, $postCountsByCycle) {
-            $totalViews = $viewsByCycle->get($cycle->id);
-
+        $series = $cycles->map(function (Cycle $cycle) use ($medianByCycle, $maxByCycle, $minByCycle, $totalByCycle, $postCountsByCycle) {
             return [
                 'cycle_id' => $cycle->id,
                 'label' => $cycle->cycle_start_date->format('M Y'),
                 'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
                 'cycle_end_date' => $cycle->cycle_end_date->toDateString(),
-                'total_views' => $totalViews,
+                'avg_views' => $medianByCycle->get($cycle->id),
+                'max_views' => $maxByCycle->get($cycle->id),
+                'min_views' => $minByCycle->get($cycle->id),
+                'total_views' => $totalByCycle->get($cycle->id),
                 'post_count' => $postCountsByCycle->get($cycle->id, 0),
             ];
         })->values();
 
-        // Delta vs the immediately preceding cycle, per point — drives the sparkline
-        // of ups/downs in the table without repeating the page's aggregate classification.
+        // Delta vs the immediately preceding cycle, per point (based on median
+        // views) — drives the sparkline of ups/downs in the table without
+        // repeating the page's aggregate classification.
         $seriesWithDelta = $series->values()->map(function ($point, $index) use ($series) {
-            if ($index === 0 || $point['total_views'] === null) {
+            if ($index === 0 || $point['avg_views'] === null) {
                 return [...$point, 'delta_pct' => null];
             }
 
             $previous = $series[$index - 1];
-            if ($previous['total_views'] === null || $previous['total_views'] <= 0) {
+            if ($previous['avg_views'] === null || $previous['avg_views'] <= 0) {
                 return [...$point, 'delta_pct' => null];
             }
 
-            return [...$point, 'delta_pct' => round((($point['total_views'] - $previous['total_views']) / $previous['total_views']) * 100, 1)];
+            return [...$point, 'delta_pct' => round((($point['avg_views'] - $previous['avg_views']) / $previous['avg_views']) * 100, 1)];
         });
 
         return response()->json([
             'account' => ['id' => $account->id, 'name' => $account->name],
             'platform' => $platform,
             'series' => $seriesWithDelta,
+        ]);
+    }
+
+    /**
+     * The individual posts behind one cycle row in the detail modal's
+     * per-cycle table — lets a user drill from "this cycle's numbers" straight
+     * to "what did we actually post that cycle."
+     */
+    public function cyclePosts(Account $account, Cycle $cycle): JsonResponse
+    {
+        $posts = Performance::where('account_id', $account->id)
+            ->where('cycle_id', $cycle->id)
+            ->with(['videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)])
+            ->get()
+            ->map(function (Performance $performance) {
+                $snapshot = $performance->igSnapshots->first();
+                $resolvedViews = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
+
+                return [
+                    'id' => $performance->id,
+                    'platform' => $performance->platform,
+                    'post_date' => $performance->post_date?->toDateString(),
+                    'ads' => (bool) $performance->ads,
+                    'views' => $resolvedViews !== null ? (int) $resolvedViews : null,
+                    'link' => $performance->videoLinks->first()?->url,
+                    'media_product_type' => $performance->ig_media_product_type,
+                ];
+            })
+            ->sortByDesc('post_date')
+            ->values();
+
+        return response()->json([
+            'account' => ['id' => $account->id, 'name' => $account->name],
+            'cycle' => ['id' => $cycle->id, 'label' => $cycle->cycle_start_date->format('M Y')],
+            'posts' => $posts,
         ]);
     }
 
@@ -518,42 +562,8 @@ class ViewsTrendController extends Controller
      */
     public function personSeries(Request $request, Employee $employee): JsonResponse
     {
-        $platform = $request->string('platform')->toString();
-        $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
-        $role = $request->string('role')->toString();
-        $role = in_array($role, ['project_manager_id', 'conceptor_id'], true) ? $role : 'project_manager_id';
-
-        $rangeMode = $request->string('range_mode')->toString();
-        $rangeMode = $rangeMode === 'cycle' ? 'cycle' : 'month';
-
-        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
-        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
-
-        $ads = $request->string('ads')->toString();
-        $ads = in_array($ads, ['yes', 'no'], true) ? $ads : 'all';
-
-        $query = Performance::with(['igSnapshots' => fn ($query) => $query->limit(1)])
-            ->where($role, $employee->id)
-            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
-            ->when($ads !== 'all', fn ($query) => $query->where('ads', $ads === 'yes'));
-
-        if ($rangeMode === 'cycle') {
-            $query->whereNotNull('cycle_id')
-                ->when($monthFrom, fn ($query) => $query->whereHas('cycle', fn ($q) => $this->applyMonthRange($q, $monthFrom, $monthTo, 'cycle_start_date')));
-        } else {
-            $query->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo));
-        }
-
-        $performances = $query
-            ->orderBy('post_date')
-            ->get()
-            ->map(function (Performance $performance) {
-                $snapshot = $performance->igSnapshots->first();
-                $performance->resolved_views = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
-
-                return $performance;
-            })
-            ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
+        ['performances' => $performances, 'platform' => $platform, 'role' => $role, 'monthFrom' => $monthFrom, 'monthTo' => $monthTo]
+            = $this->personFilteredPerformances($request, $employee);
 
         $series = $performances
             ->groupBy(fn (Performance $performance) => $performance->post_date->format('Y-m'))
@@ -577,6 +587,93 @@ class ViewsTrendController extends Controller
             'filters' => ['platform' => $platform, 'role' => $role, 'month_from' => $monthFrom, 'month_to' => $monthTo],
             'series' => $series,
         ]);
+    }
+
+    /**
+     * The individual posts behind a person's ranking row — same filters as
+     * personSeries() (platform/range_mode/month range/ads), but returns each
+     * post rather than a monthly aggregate. Used by the ranking modal's
+     * "Content" tab, so clicking into a person shows exactly what they made,
+     * not just a views-over-time chart.
+     */
+    public function personPosts(Request $request, Employee $employee): JsonResponse
+    {
+        ['performances' => $performances, 'platform' => $platform, 'role' => $role, 'monthFrom' => $monthFrom, 'monthTo' => $monthTo]
+            = $this->personFilteredPerformances($request, $employee);
+
+        $posts = $performances
+            ->sortByDesc('post_date')
+            ->values()
+            ->map(fn (Performance $performance) => [
+                'id' => $performance->id,
+                'account_name' => $performance->account?->name,
+                'platform' => $performance->platform,
+                'post_date' => $performance->post_date?->toDateString(),
+                'ads' => (bool) $performance->ads,
+                'views' => (int) $performance->resolved_views,
+                'link' => $performance->videoLinks->first()?->url,
+                'media_product_type' => $performance->ig_media_product_type,
+            ]);
+
+        return response()->json([
+            'employee' => ['id' => $employee->id, 'name' => $employee->name],
+            'filters' => ['platform' => $platform, 'role' => $role, 'month_from' => $monthFrom, 'month_to' => $monthTo],
+            'posts' => $posts,
+        ]);
+    }
+
+    /**
+     * Shared query behind personSeries()/personPosts() — one employee's posts
+     * (as PM or Conceptor), filtered by platform/range_mode/month range/ads,
+     * each with resolved_views attached and only posts with a resolved view
+     * count included.
+     */
+    private function personFilteredPerformances(Request $request, Employee $employee): array
+    {
+        $platform = $request->string('platform')->toString();
+        $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
+        $role = $request->string('role')->toString();
+        $role = in_array($role, ['project_manager_id', 'conceptor_id'], true) ? $role : 'project_manager_id';
+
+        $rangeMode = $request->string('range_mode')->toString();
+        $rangeMode = $rangeMode === 'cycle' ? 'cycle' : 'month';
+
+        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+
+        $ads = $request->string('ads')->toString();
+        $ads = in_array($ads, ['yes', 'no'], true) ? $ads : 'all';
+
+        $query = Performance::with(['account:id,name', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)])
+            ->where($role, $employee->id)
+            ->when($platform !== 'all', fn ($query) => $query->where('platform', $platform))
+            ->when($ads !== 'all', fn ($query) => $query->where('ads', $ads === 'yes'));
+
+        if ($rangeMode === 'cycle') {
+            $query->whereNotNull('cycle_id')
+                ->when($monthFrom, fn ($query) => $query->whereHas('cycle', fn ($q) => $this->applyMonthRange($q, $monthFrom, $monthTo, 'cycle_start_date')));
+        } else {
+            $query->when($monthFrom, fn ($query) => $this->applyMonthRange($query, $monthFrom, $monthTo));
+        }
+
+        $performances = $query
+            ->orderBy('post_date')
+            ->get()
+            ->map(function (Performance $performance) {
+                $snapshot = $performance->igSnapshots->first();
+                $performance->resolved_views = $snapshot ? ($snapshot->views ?? $snapshot->total_interactions) : $performance->total_views_h7;
+
+                return $performance;
+            })
+            ->filter(fn (Performance $performance) => $performance->resolved_views !== null);
+
+        return [
+            'performances' => $performances,
+            'platform' => $platform,
+            'role' => $role,
+            'monthFrom' => $monthFrom,
+            'monthTo' => $monthTo,
+        ];
     }
 
     /**
@@ -621,6 +718,8 @@ class ViewsTrendController extends Controller
                     'post_count' => $group->count(),
                     'avg_views' => (int) round($this->median($views)),
                     'total_views' => (int) $views->sum(),
+                    'min_views' => (int) $views->min(),
+                    'max_views' => (int) $views->max(),
                 ];
             })
             ->sortByDesc('avg_views')
@@ -643,14 +742,26 @@ class ViewsTrendController extends Controller
     }
 
     /**
-     * Total (summed) Views H+7 per cycle — the volume number, alongside the
-     * average shown elsewhere on this page. Same source/precedence as
-     * avgViewsByCycle(), just summed instead of medianed.
+     * Highest single post's views per cycle — alongside the median, shows the
+     * ceiling a cycle's best post reached. Same source/precedence as
+     * avgViewsByCycle().
      */
-    private function totalViewsByCycle(): Collection
+    private function maxViewsByCycle(): Collection
     {
         return $this->viewsByCyclePerformances()
-            ->map(fn (Collection $views) => (int) $views->sum());
+            ->map(fn (Collection $views) => $views->isEmpty() ? null : (int) $views->max())
+            ->filter(fn ($max) => $max !== null);
+    }
+
+    /**
+     * Lowest single post's views per cycle — the floor, alongside the median
+     * and max. Same source/precedence as avgViewsByCycle().
+     */
+    private function minViewsByCycle(): Collection
+    {
+        return $this->viewsByCyclePerformances()
+            ->map(fn (Collection $views) => $views->isEmpty() ? null : (int) $views->min())
+            ->filter(fn ($min) => $min !== null);
     }
 
     /**
@@ -681,7 +792,7 @@ class ViewsTrendController extends Controller
 
     /**
      * Classify one account+platform's cycle-ordered series into a trend row.
-     * Delta/trend/streak are based on total views. Returns null when there's
+     * Delta/trend/streak are based on median views. Returns null when there's
      * no cycle data at all for this account on this platform (nothing to
      * show), as opposed to exactly one cycle's worth (shown as
      * 'insufficient_data' so the account is still visible).
@@ -706,8 +817,8 @@ class ViewsTrendController extends Controller
                 'platform' => $platform,
                 'last_avg_views' => (int) round($series->last()['avg_views']),
                 'prior_avg_views' => null,
-                'last_total_views' => (int) ($series->last()['total_views'] ?? 0),
-                'prior_total_views' => null,
+                'last_max_views' => (int) ($series->last()['max_views'] ?? 0),
+                'last_min_views' => (int) ($series->last()['min_views'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -734,8 +845,8 @@ class ViewsTrendController extends Controller
                 'platform' => $platform,
                 'last_avg_views' => (int) round($last['avg_views']),
                 'prior_avg_views' => null,
-                'last_total_views' => (int) ($last['total_views'] ?? 0),
-                'prior_total_views' => null,
+                'last_max_views' => (int) ($last['max_views'] ?? 0),
+                'last_min_views' => (int) ($last['min_views'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -754,8 +865,8 @@ class ViewsTrendController extends Controller
                 'platform' => $platform,
                 'last_avg_views' => (int) round($last['avg_views']),
                 'prior_avg_views' => null,
-                'last_total_views' => (int) ($last['total_views'] ?? 0),
-                'prior_total_views' => null,
+                'last_max_views' => (int) ($last['max_views'] ?? 0),
+                'last_min_views' => (int) ($last['min_views'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -763,10 +874,10 @@ class ViewsTrendController extends Controller
             ];
         }
 
-        // Delta / trend classification is based on total views (not the median),
-        // matching the table's client-facing "Total Views" columns.
-        $deltaPct = ($prior['total_views'] ?? 0) > 0
-            ? (($last['total_views'] ?? 0) - $prior['total_views']) / $prior['total_views']
+        // Delta / trend classification is based on median views per post
+        // (avg_views), matching the table's client-facing Median Views columns.
+        $deltaPct = ($prior['avg_views'] ?? 0) > 0
+            ? (($last['avg_views'] ?? 0) - $prior['avg_views']) / $prior['avg_views']
             : null;
 
         $stagnantStreak = $this->trailingFlatStreak($series);
@@ -786,8 +897,8 @@ class ViewsTrendController extends Controller
             'platform' => $platform,
             'last_avg_views' => (int) round($last['avg_views']),
             'prior_avg_views' => (int) round($prior['avg_views']),
-            'last_total_views' => (int) ($last['total_views'] ?? 0),
-            'prior_total_views' => (int) ($prior['total_views'] ?? 0),
+            'last_max_views' => (int) ($last['max_views'] ?? 0),
+            'last_min_views' => (int) ($last['min_views'] ?? 0),
             'delta_pct' => $deltaPct === null ? null : round($deltaPct * 100, 1),
             'trend' => $trend,
             'stagnant_streak' => $stagnantStreak,
@@ -824,12 +935,12 @@ class ViewsTrendController extends Controller
      * How many consecutive cycles, counting back from the most recent, stayed
      * within +/-STAGNANT_BAND of the cycle immediately before them. E.g. cycles
      * [100, 105, 98, 102] (latest last) -> compares 105->98 (flat), 98->102
-     * (flat), so streak = 2 flat transitions = 3 flat cycles. Based on total
-     * views, matching deltaPct above.
+     * (flat), so streak = 2 flat transitions = 3 flat cycles. Based on median
+     * views per post, matching deltaPct above.
      */
     private function trailingFlatStreak(Collection $series): int
     {
-        $values = $series->pluck('total_views')->values();
+        $values = $series->pluck('avg_views')->values();
         $streak = 1; // the latest cycle itself always counts as 1
 
         for ($i = $values->count() - 1; $i > 0; $i--) {

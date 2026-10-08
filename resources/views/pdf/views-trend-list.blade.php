@@ -34,10 +34,10 @@
                 <th>Account</th>
                 <th>Platform</th>
                 <th>Trend</th>
-                <th class="num">Last Cycle Median Views</th>
+                <th class="num">Last Cycle Median</th>
                 <th class="num">Prior Cycle Median</th>
-                <th class="num">Last Cycle Total Views</th>
-                <th class="num">Prior Cycle Total</th>
+                <th class="num">Max</th>
+                <th class="num">Min</th>
                 <th class="num">Delta %</th>
                 <th>As Of</th>
             </tr>
@@ -50,8 +50,8 @@
                     <td class="trend-{{ $row['trend'] }}">{{ ucfirst(str_replace('_', ' ', $row['trend'])) }}</td>
                     <td class="num">{{ $row['last_avg_views'] !== null ? number_format($row['last_avg_views']) : '—' }}</td>
                     <td class="num">{{ $row['prior_avg_views'] !== null ? number_format($row['prior_avg_views']) : '—' }}</td>
-                    <td class="num">{{ $row['last_total_views'] !== null ? number_format($row['last_total_views']) : '—' }}</td>
-                    <td class="num">{{ $row['prior_total_views'] !== null ? number_format($row['prior_total_views']) : '—' }}</td>
+                    <td class="num">{{ $row['last_max_views'] !== null ? number_format($row['last_max_views']) : '—' }}</td>
+                    <td class="num">{{ $row['last_min_views'] !== null ? number_format($row['last_min_views']) : '—' }}</td>
                     <td class="num">{{ $row['delta_pct'] !== null ? ($row['delta_pct'] > 0 ? '+' : '').$row['delta_pct'].'%' : '—' }}</td>
                     <td>{{ $row['last_cycle_label'] }}</td>
                 </tr>

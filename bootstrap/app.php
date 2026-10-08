@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'can-edit' => \App\Http\Middleware\EnsureUserCanEdit::class,
             'super-admin' => \App\Http\Middleware\EnsureUserIsSuperAdmin::class,
+            'can-access' => \App\Http\Middleware\EnsureUserCanAccessPage::class,
         ]);
 
         // Laravel's default middleware priority list reorders middleware that share

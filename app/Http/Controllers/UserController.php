@@ -16,6 +16,7 @@ class UserController extends Controller
         return Inertia::render('Users/Index', [
             'users' => User::orderBy('name')->paginate(15)->withQueryString(),
             'roles' => User::ROLES,
+            'pages' => User::PAGES,
         ]);
     }
 
@@ -26,11 +27,14 @@ class UserController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', 'string', 'in:'.implode(',', User::ROLES)],
+            'page_access' => ['nullable', 'array'],
+            'page_access.*' => ['string', 'in:'.implode(',', array_keys(User::PAGES))],
         ]);
 
         User::create([
             ...$data,
             'password' => Hash::make($data['password']),
+            'page_access' => $data['page_access'] ?? null,
         ]);
 
         return back();
@@ -40,13 +44,18 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'role' => ['required', 'string', 'in:'.implode(',', User::ROLES)],
+            'page_access' => ['nullable', 'array'],
+            'page_access.*' => ['string', 'in:'.implode(',', array_keys(User::PAGES))],
         ]);
 
         if ($user->id === $request->user()->id && $data['role'] !== User::ROLE_SUPER_ADMIN) {
             return back()->withErrors(['role' => 'You cannot change your own role away from Super Admin.']);
         }
 
-        $user->update($data);
+        $user->update([
+            'role' => $data['role'],
+            'page_access' => $data['page_access'] ?? null,
+        ]);
 
         return back();
     }

@@ -36,6 +36,8 @@
                 <th>Name</th>
                 <th class="num">Median Views</th>
                 <th class="num">Total Views</th>
+                <th class="num">Min Views</th>
+                <th class="num">Max Views</th>
                 <th class="num">Total Reels</th>
             </tr>
         </thead>
@@ -46,10 +48,12 @@
                     <td>{{ $person['employee_name'] }}</td>
                     <td class="num">{{ number_format($person['avg_views']) }}</td>
                     <td class="num">{{ number_format($person['total_views']) }}</td>
+                    <td class="num">{{ number_format($person['min_views']) }}</td>
+                    <td class="num">{{ number_format($person['max_views']) }}</td>
                     <td class="num">{{ number_format($person['post_count']) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="empty">No project managers with recorded views for these filters.</td></tr>
+                <tr><td colspan="7" class="empty">No project managers with recorded views for these filters.</td></tr>
             @endforelse
         </tbody>
     </table>
@@ -62,6 +66,8 @@
                 <th>Name</th>
                 <th class="num">Median Views</th>
                 <th class="num">Total Views</th>
+                <th class="num">Min Views</th>
+                <th class="num">Max Views</th>
                 <th class="num">Total Reels</th>
             </tr>
         </thead>
@@ -72,10 +78,12 @@
                     <td>{{ $person['employee_name'] }}</td>
                     <td class="num">{{ number_format($person['avg_views']) }}</td>
                     <td class="num">{{ number_format($person['total_views']) }}</td>
+                    <td class="num">{{ number_format($person['min_views']) }}</td>
+                    <td class="num">{{ number_format($person['max_views']) }}</td>
                     <td class="num">{{ number_format($person['post_count']) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="empty">No conceptors with recorded views for these filters.</td></tr>
+                <tr><td colspan="7" class="empty">No conceptors with recorded views for these filters.</td></tr>
             @endforelse
         </tbody>
     </table>

@@ -255,6 +255,12 @@ class ContentInsightController extends Controller
             $rows = $withValue->values()->concat($withoutValue->values());
         }
 
+        // Stamp each row with its trend classification — computed above for
+        // filtering, but the exports need it too (as an actual column, not
+        // just baked into the header's filter summary), so it rides along on
+        // the row rather than being recomputed a third time there.
+        $rows = $rows->map(fn ($row) => [...$row, 'overall_trend' => $overallTrend($row)]);
+
         return [
             'rows' => $rows->values(),
             'filters' => [

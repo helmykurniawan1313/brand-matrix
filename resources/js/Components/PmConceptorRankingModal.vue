@@ -146,13 +146,85 @@ watch([rangeMode, monthFrom, monthTo, ads], load);
 
 load();
 
-// --- Per-person drill-down chart ---
+// --- Per-person drill-down: a "Trend" tab (the existing monthly chart) and a
+// "Content" tab (the individual posts behind the ranking row) — same filters
+// (platform/range/ads) apply to both. ---
 
 const selectedPerson = ref(null); // { employee_id, employee_name, role }
+const personTab = ref('content');
 const chartLoading = ref(false);
 const chartError = ref(null);
 const chartCanvas = ref(null);
 let chartInstance = null;
+let chartSeries = null; // cached series data, re-rendered whenever the Trend
+// tab becomes active again — its v-if unmounts <canvas> on every tab switch,
+// which destroys the Chart.js instance, so simply toggling visibility isn't
+// enough; the chart must be rebuilt against the new canvas element each time.
+let lastChartLoadedFor = null;
+
+const postsLoading = ref(false);
+const postsError = ref(null);
+const posts = ref([]);
+let postsLoadedFor = null;
+
+const platformLabel = (p) => (p === 'tiktok' ? 'TikTok' : 'Instagram');
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+
+const loadPersonPosts = async () => {
+    if (!selectedPerson.value) return;
+
+    postsLoading.value = true;
+    postsError.value = null;
+
+    try {
+        const params = filterParams();
+        params.set('role', selectedPerson.value.role);
+
+        const response = await fetch(`/views-trend-ranking/${selectedPerson.value.employee_id}/posts?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+        });
+
+        if (!response.ok) throw new Error('Failed to load content.');
+
+        const data = await response.json();
+        posts.value = data.posts ?? [];
+        postsLoadedFor = selectedPerson.value.employee_id;
+
+        if (posts.value.length === 0) {
+            postsError.value = 'No posts for this range.';
+        }
+    } catch (e) {
+        postsError.value = e.message;
+    } finally {
+        postsLoading.value = false;
+    }
+};
+
+const selectPersonTab = async (tab) => {
+    personTab.value = tab;
+
+    if (tab === 'content' && postsLoadedFor !== selectedPerson.value?.employee_id) {
+        loadPersonPosts();
+        return;
+    }
+
+    if (tab === 'trend') {
+        if (lastChartLoadedFor !== selectedPerson.value?.employee_id || !chartSeries) {
+            loadPersonSeries();
+            return;
+        }
+
+        // Cached series, but the <canvas> was just remounted by v-if — Chart.js
+        // needs a fresh instance bound to the new element, not just a visibility
+        // toggle, or the chart silently fails to appear.
+        await nextTick();
+        if (chartSeries.length === 0) {
+            chartError.value = 'No monthly data to chart yet.';
+        } else {
+            renderPersonChart(chartSeries);
+        }
+    }
+};
 
 const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -162,11 +234,19 @@ const destroyChart = () => {
 };
 
 const openPerson = (person) => {
+    personTab.value = 'content';
+    postsLoadedFor = null;
+    posts.value = [];
+    postsError.value = null;
+    chartSeries = null;
+    lastChartLoadedFor = null;
+    chartError.value = null;
     selectedPerson.value = {
         employee_id: person.employee_id,
         employee_name: person.employee_name,
         role: activeTab.value === 'pm' ? 'project_manager_id' : 'conceptor_id',
     };
+    loadPersonPosts();
 };
 
 const closePerson = () => {
@@ -192,6 +272,8 @@ const loadPersonSeries = async () => {
 
         const data = await response.json();
         const series = data.series ?? [];
+        chartSeries = series;
+        lastChartLoadedFor = selectedPerson.value.employee_id;
 
         if (series.length === 0) {
             chartError.value = 'No monthly data to chart yet.';
@@ -265,10 +347,6 @@ const renderPersonChart = (series) => {
         },
     });
 };
-
-watch(selectedPerson, (value) => {
-    if (value) loadPersonSeries();
-});
 
 onBeforeUnmount(destroyChart);
 </script>
@@ -494,6 +572,20 @@ onBeforeUnmount(destroyChart);
                                 Total Views<span v-if="sortKey === 'total_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                             </th>
                             <th
+                                class="cursor-pointer select-none py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('min_views')"
+                            >
+                                Min Views<span v-if="sortKey === 'min_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </th>
+                            <th
+                                class="cursor-pointer select-none py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                                style="color: var(--ink-faint)"
+                                @click="sortBy('max_views')"
+                            >
+                                Max Views<span v-if="sortKey === 'max_views'" class="ml-0.5">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                            </th>
+                            <th
                                 class="cursor-pointer select-none py-2.5 pr-1 text-right text-[11px] font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                                 style="color: var(--ink-faint)"
                                 @click="sortBy('post_count')"
@@ -541,12 +633,18 @@ onBeforeUnmount(destroyChart);
                             <td class="py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                 {{ formatNumber(person.total_views) }}
                             </td>
+                            <td class="py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
+                                {{ formatNumber(person.min_views) }}
+                            </td>
+                            <td class="py-3 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
+                                {{ formatNumber(person.max_views) }}
+                            </td>
                             <td class="py-3 pr-1 text-right text-sm tabular-nums" style="color: var(--ink-muted)">
                                 {{ person.post_count }}
                             </td>
                         </tr>
                         <tr v-if="activeList.length === 0">
-                            <td colspan="5" class="py-12 text-center text-sm" style="color: var(--ink-faint)">
+                            <td colspan="7" class="py-12 text-center text-sm" style="color: var(--ink-faint)">
                                 No {{ activeTab === 'pm' ? 'project managers' : 'conceptors' }} to rank for this range.
                             </td>
                         </tr>
@@ -564,11 +662,11 @@ onBeforeUnmount(destroyChart);
                 class="flex h-[58vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-2xl"
                 style="background-color: var(--surface-raised); border-color: var(--border)"
             >
-                <div class="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-4 border-b" style="border-color: var(--border)">
+                <div class="flex shrink-0 items-start justify-between gap-4 px-6 pt-5 pb-3">
                     <div class="min-w-0">
                         <h2 class="font-display text-lg font-bold leading-tight" style="color: var(--ink)">{{ selectedPerson.employee_name }}</h2>
                         <p class="mt-1 text-sm" style="color: var(--ink-muted)">
-                            Monthly median views · {{ selectedPerson.role === 'project_manager_id' ? 'as Project Manager' : 'as Conceptor' }}
+                            {{ selectedPerson.role === 'project_manager_id' ? 'as Project Manager' : 'as Conceptor' }}
                         </p>
                     </div>
                     <button
@@ -584,7 +682,36 @@ onBeforeUnmount(destroyChart);
                     </button>
                 </div>
 
-                <div class="min-h-0 flex-1 p-6">
+                <!-- Tab bar — Content is the primary/default view (left); Trend is
+                     the secondary chart view, pushed to the right. -->
+                <div class="flex shrink-0 items-center gap-6 border-b px-6" style="border-color: var(--border)">
+                    <button
+                        type="button"
+                        class="relative -mb-px border-b-2 pb-2.5 pt-1 text-sm font-semibold transition-colors"
+                        :style="
+                            personTab === 'content'
+                                ? 'border-color: var(--accent); color: var(--ink)'
+                                : 'border-color: transparent; color: var(--ink-faint)'
+                        "
+                        @click="selectPersonTab('content')"
+                    >
+                        Content
+                    </button>
+                    <button
+                        type="button"
+                        class="relative -mb-px ml-auto border-b-2 pb-2.5 pt-1 text-sm font-semibold transition-colors"
+                        :style="
+                            personTab === 'trend'
+                                ? 'border-color: var(--accent); color: var(--ink)'
+                                : 'border-color: transparent; color: var(--ink-faint)'
+                        "
+                        @click="selectPersonTab('trend')"
+                    >
+                        Trend
+                    </button>
+                </div>
+
+                <div v-if="personTab === 'trend'" class="min-h-0 flex-1 p-6">
                     <div v-if="chartLoading" class="flex h-full items-center justify-center">
                         <span class="text-sm" style="color: var(--ink-faint)">Loading…</span>
                     </div>
@@ -594,6 +721,48 @@ onBeforeUnmount(destroyChart);
                     <div v-show="!chartLoading && !chartError" class="h-full w-full">
                         <canvas ref="chartCanvas"></canvas>
                     </div>
+                </div>
+
+                <div v-else class="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+                    <div v-if="postsLoading" class="flex h-40 items-center justify-center">
+                        <span class="text-sm" style="color: var(--ink-faint)">Loading…</span>
+                    </div>
+                    <div v-else-if="postsError" class="flex h-40 items-center justify-center">
+                        <span class="text-sm" style="color: var(--ink-faint)">{{ postsError }}</span>
+                    </div>
+                    <table v-else class="min-w-full">
+                        <thead class="sticky top-0" style="background-color: var(--surface-raised)">
+                            <tr style="border-bottom: 1px solid var(--border)">
+                                <th class="py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Account</th>
+                                <th class="py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Platform</th>
+                                <th class="py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Date</th>
+                                <th class="py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Views</th>
+                                <th class="py-2.5 pl-3 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Ads</th>
+                                <th class="py-2.5 pl-3 text-left text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="post in posts" :key="post.id" style="border-bottom: 1px solid var(--border)">
+                                <td class="py-3 text-sm font-medium" style="color: var(--ink)">{{ post.account_name }}</td>
+                                <td class="py-3 text-sm" style="color: var(--ink-muted)">{{ platformLabel(post.platform) }}</td>
+                                <td class="py-3 text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatDate(post.post_date) }}</td>
+                                <td class="py-3 text-right text-sm font-semibold tabular-nums" style="color: var(--ink)">{{ formatNumber(post.views) }}</td>
+                                <td class="py-3 pl-3 text-sm" style="color: var(--ink-muted)">{{ post.ads ? 'Yes' : 'No' }}</td>
+                                <td class="py-3 pl-3 text-right">
+                                    <a
+                                        v-if="post.link"
+                                        :href="post.link"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="text-xs font-medium transition-opacity hover:opacity-70"
+                                        style="color: var(--accent)"
+                                    >
+                                        View
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

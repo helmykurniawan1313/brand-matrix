@@ -25,80 +25,116 @@ Route::middleware('auth')->group(function () {
 
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    Route::get('views-trend', [ViewsTrendController::class, 'index'])->name('views-trend.index');
-    Route::get('views-trend-pdf', [ViewsTrendController::class, 'pdf'])->name('views-trend.pdf');
-    Route::get('views-trend-excel', [ViewsTrendController::class, 'exportExcel'])->name('views-trend.excel');
-    Route::get('views-trend-ranking', [ViewsTrendController::class, 'ranking'])->name('views-trend.ranking');
-    Route::get('views-trend-ranking-pdf', [ViewsTrendController::class, 'rankingPdf'])->name('views-trend.ranking.pdf');
-    Route::get('views-trend-ranking-excel', [ViewsTrendController::class, 'rankingExcel'])->name('views-trend.ranking.excel');
-    Route::get('views-trend-ranking/{employee}', [ViewsTrendController::class, 'personSeries'])->name('views-trend.ranking.person');
-    Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
+    Route::middleware('can-access:views-trend')->group(function () {
+        Route::get('views-trend', [ViewsTrendController::class, 'index'])->name('views-trend.index');
+        Route::get('views-trend-pdf', [ViewsTrendController::class, 'pdf'])->name('views-trend.pdf');
+        Route::get('views-trend-excel', [ViewsTrendController::class, 'exportExcel'])->name('views-trend.excel');
+        Route::get('views-trend-ranking', [ViewsTrendController::class, 'ranking'])->name('views-trend.ranking');
+        Route::get('views-trend-ranking-pdf', [ViewsTrendController::class, 'rankingPdf'])->name('views-trend.ranking.pdf');
+        Route::get('views-trend-ranking-excel', [ViewsTrendController::class, 'rankingExcel'])->name('views-trend.ranking.excel');
+        Route::get('views-trend-ranking/{employee}', [ViewsTrendController::class, 'personSeries'])->name('views-trend.ranking.person');
+        Route::get('views-trend-ranking/{employee}/posts', [ViewsTrendController::class, 'personPosts'])->name('views-trend.ranking.person-posts');
+        Route::get('views-trend/{account}', [ViewsTrendController::class, 'detail'])->name('views-trend.detail');
+        Route::get('views-trend/{account}/cycles/{cycle}/posts', [ViewsTrendController::class, 'cyclePosts'])->name('views-trend.cycle-posts');
+    });
 
-    Route::resource('accounts', AccountController::class)->only(['index']);
-    Route::get('accounts-excel', [AccountController::class, 'exportExcel'])->name('accounts.excel');
-    Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');
-    Route::post('accounts/{account}/pdf', [AccountController::class, 'pdf'])->name('accounts.pdf');
-    Route::post('accounts/{account}/summarize', [AccountController::class, 'summarize'])->name('accounts.summarize');
-    Route::get('accounts/{account}/instagram', [InstagramController::class, 'show'])->name('accounts.instagram.show');
-    Route::get('accounts/{account}/instagram/media-insights', [InstagramController::class, 'mediaInsights'])->name('accounts.instagram.media-insights');
-    Route::get('accounts/{account}/instagram/media', [InstagramController::class, 'mediaList'])->name('accounts.instagram.media');
+    Route::middleware('can-access:accounts')->group(function () {
+        Route::resource('accounts', AccountController::class)->only(['index']);
+        Route::get('accounts-excel', [AccountController::class, 'exportExcel'])->name('accounts.excel');
+        Route::get('accounts/{account}/growth', [AccountController::class, 'growth'])->name('accounts.growth');
+        Route::post('accounts/{account}/pdf', [AccountController::class, 'pdf'])->name('accounts.pdf');
+        Route::post('accounts/{account}/summarize', [AccountController::class, 'summarize'])->name('accounts.summarize');
+        Route::get('accounts/{account}/instagram', [InstagramController::class, 'show'])->name('accounts.instagram.show');
+        Route::get('accounts/{account}/instagram/media-insights', [InstagramController::class, 'mediaInsights'])->name('accounts.instagram.media-insights');
+        Route::get('accounts/{account}/instagram/media', [InstagramController::class, 'mediaList'])->name('accounts.instagram.media');
+    });
 
-    Route::resource('cycles', CycleController::class)->only(['index']);
-    Route::get('accounts/{account}/neighboring-cycle', [CycleController::class, 'neighboring'])->name('cycles.neighboring');
-    Route::get('cycles-pdf', [CycleController::class, 'pdf'])->name('cycles.pdf');
-    Route::get('cycles-excel', [CycleController::class, 'exportExcel'])->name('cycles.excel');
-    Route::get('cycles/{cycle}/pdf', [CycleController::class, 'pdfSingle'])->name('cycles.pdf-single');
-    Route::post('cycles/{cycle}/summarize', [CycleController::class, 'summarize'])->name('cycles.summarize');
-    Route::post('cycles-summarize', [CycleController::class, 'summarizeFiltered'])->name('cycles.summarize-filtered');
+    Route::middleware('can-access:cycles')->group(function () {
+        Route::resource('cycles', CycleController::class)->only(['index']);
+        Route::get('accounts/{account}/neighboring-cycle', [CycleController::class, 'neighboring'])->name('cycles.neighboring');
+        Route::get('cycles-pdf', [CycleController::class, 'pdf'])->name('cycles.pdf');
+        Route::get('cycles-excel', [CycleController::class, 'exportExcel'])->name('cycles.excel');
+        Route::get('cycles/{cycle}/pdf', [CycleController::class, 'pdfSingle'])->name('cycles.pdf-single');
+        Route::post('cycles/{cycle}/summarize', [CycleController::class, 'summarize'])->name('cycles.summarize');
+        Route::post('cycles-summarize', [CycleController::class, 'summarizeFiltered'])->name('cycles.summarize-filtered');
+        Route::get('cycles-ads-ranking', [CycleController::class, 'adsRanking'])->name('cycles.ads-ranking');
+        Route::get('cycles-ads-ranking-pdf', [CycleController::class, 'adsRankingPdf'])->name('cycles.ads-ranking.pdf');
+        Route::get('cycles-ads-ranking-excel', [CycleController::class, 'adsRankingExcel'])->name('cycles.ads-ranking.excel');
+    });
 
-    Route::resource('score-buckets', ScoreBucketController::class)->only(['index']);
+    Route::middleware('can-access:score-buckets')->group(function () {
+        Route::resource('score-buckets', ScoreBucketController::class)->only(['index']);
+    });
 
-    Route::get('content-insights', [ContentInsightController::class, 'index'])->name('content-insights.index');
-    Route::get('content-insights-pdf', [ContentInsightController::class, 'pdf'])->name('content-insights.pdf');
-    Route::get('content-insights-excel', [ContentInsightController::class, 'exportExcel'])->name('content-insights.excel');
-    Route::get('accounts/{account}/insight-cycles', [ContentInsightController::class, 'cycles'])->name('content-insights.cycles');
+    Route::middleware('can-access:content-insights')->group(function () {
+        Route::get('content-insights', [ContentInsightController::class, 'index'])->name('content-insights.index');
+        Route::get('content-insights-pdf', [ContentInsightController::class, 'pdf'])->name('content-insights.pdf');
+        Route::get('content-insights-excel', [ContentInsightController::class, 'exportExcel'])->name('content-insights.excel');
+        Route::get('accounts/{account}/insight-cycles', [ContentInsightController::class, 'cycles'])->name('content-insights.cycles');
+    });
 
-    Route::resource('departments', DepartmentController::class)->only(['index']);
+    Route::middleware('can-access:departments')->group(function () {
+        Route::resource('departments', DepartmentController::class)->only(['index']);
+    });
 
-    Route::resource('employees', EmployeeController::class)->only(['index']);
+    Route::middleware('can-access:employees')->group(function () {
+        Route::resource('employees', EmployeeController::class)->only(['index']);
+    });
 
-    Route::resource('performances', PerformanceController::class)->only(['index']);
-    Route::get('performances/{performance}/pdf', [PerformanceController::class, 'pdf'])->name('performances.pdf');
-    Route::post('performances/{performance}/summarize', [PerformanceController::class, 'summarize'])->name('performances.summarize');
-    Route::get('performances-pdf', [PerformanceController::class, 'pdfFiltered'])->name('performances.pdf-filtered');
-    Route::get('performances-excel', [PerformanceController::class, 'exportExcel'])->name('performances.excel');
-    Route::post('performances-summarize', [PerformanceController::class, 'summarizeFiltered'])->name('performances.summarize-filtered');
+    Route::middleware('can-access:performances')->group(function () {
+        Route::resource('performances', PerformanceController::class)->only(['index']);
+        Route::get('performances/{performance}/pdf', [PerformanceController::class, 'pdf'])->name('performances.pdf');
+        Route::post('performances/{performance}/summarize', [PerformanceController::class, 'summarize'])->name('performances.summarize');
+        Route::get('performances-pdf', [PerformanceController::class, 'pdfFiltered'])->name('performances.pdf-filtered');
+        Route::get('performances-excel', [PerformanceController::class, 'exportExcel'])->name('performances.excel');
+        Route::post('performances-summarize', [PerformanceController::class, 'summarizeFiltered'])->name('performances.summarize-filtered');
+    });
 
     Route::get('settings/legal-pages', [LegalPageController::class, 'edit'])->name('legal-pages.edit');
 
-    // --- Write routes: editors and super_admins only ---
+    // --- Write routes: editors and super_admins only (page-access restrictions
+    // from the groups above still apply to these, same page key per section) ---
 
     Route::middleware('can-edit')->group(function () {
-        Route::resource('accounts', AccountController::class)->only(['store', 'update', 'destroy']);
-        Route::post('accounts/{account}/instagram/connect', [InstagramController::class, 'connect'])->name('accounts.instagram.connect');
-        Route::delete('accounts/{account}/instagram/disconnect', [InstagramController::class, 'disconnect'])->name('accounts.instagram.disconnect');
-        Route::get('accounts/{account}/instagram/oauth/redirect', [InstagramController::class, 'redirect'])->name('accounts.instagram.oauth.redirect');
+        Route::middleware('can-access:accounts')->group(function () {
+            Route::resource('accounts', AccountController::class)->only(['store', 'update', 'destroy']);
+            Route::post('accounts/{account}/instagram/connect', [InstagramController::class, 'connect'])->name('accounts.instagram.connect');
+            Route::delete('accounts/{account}/instagram/disconnect', [InstagramController::class, 'disconnect'])->name('accounts.instagram.disconnect');
+            Route::get('accounts/{account}/instagram/oauth/redirect', [InstagramController::class, 'redirect'])->name('accounts.instagram.oauth.redirect');
+        });
 
-        Route::resource('cycles', CycleController::class)->only(['store', 'update', 'destroy']);
+        Route::middleware('can-access:cycles')->group(function () {
+            Route::resource('cycles', CycleController::class)->only(['store', 'update', 'destroy']);
+        });
 
-        Route::resource('score-buckets', ScoreBucketController::class)->only(['store', 'update', 'destroy']);
+        Route::middleware('can-access:score-buckets')->group(function () {
+            Route::resource('score-buckets', ScoreBucketController::class)->only(['store', 'update', 'destroy']);
+        });
 
-        Route::post('content-insights', [ContentInsightController::class, 'store'])->name('content-insights.store');
-        Route::put('content-insights/{contentInsight}', [ContentInsightController::class, 'update'])->name('content-insights.update');
-        Route::delete('content-insights/{contentInsight}', [ContentInsightController::class, 'destroy'])->name('content-insights.destroy');
+        Route::middleware('can-access:content-insights')->group(function () {
+            Route::post('content-insights', [ContentInsightController::class, 'store'])->name('content-insights.store');
+            Route::put('content-insights/{contentInsight}', [ContentInsightController::class, 'update'])->name('content-insights.update');
+            Route::delete('content-insights/{contentInsight}', [ContentInsightController::class, 'destroy'])->name('content-insights.destroy');
+        });
 
         Route::resource('label-buckets', LabelBucketController::class)->only(['store', 'update', 'destroy']);
 
         Route::put('formula-weights/{aggregate}', [FormulaWeightController::class, 'update'])
             ->name('formula-weights.update');
 
-        Route::resource('departments', DepartmentController::class)->only(['store', 'update', 'destroy']);
+        Route::middleware('can-access:departments')->group(function () {
+            Route::resource('departments', DepartmentController::class)->only(['store', 'update', 'destroy']);
+        });
 
-        Route::resource('employees', EmployeeController::class)->only(['store', 'update', 'destroy']);
+        Route::middleware('can-access:employees')->group(function () {
+            Route::resource('employees', EmployeeController::class)->only(['store', 'update', 'destroy']);
+        });
 
-        Route::resource('performances', PerformanceController::class)->only(['store', 'update', 'destroy']);
-        Route::post('performances/{performance}/instagram/link', [PerformanceController::class, 'linkInstagram'])->name('performances.instagram.link');
-        Route::delete('performances/{performance}/instagram/link', [PerformanceController::class, 'unlinkInstagram'])->name('performances.instagram.unlink');
+        Route::middleware('can-access:performances')->group(function () {
+            Route::resource('performances', PerformanceController::class)->only(['store', 'update', 'destroy']);
+            Route::post('performances/{performance}/instagram/link', [PerformanceController::class, 'linkInstagram'])->name('performances.instagram.link');
+            Route::delete('performances/{performance}/instagram/link', [PerformanceController::class, 'unlinkInstagram'])->name('performances.instagram.unlink');
+        });
 
         Route::put('settings/legal-pages/{legalPage}', [LegalPageController::class, 'update'])->name('legal-pages.update');
     });

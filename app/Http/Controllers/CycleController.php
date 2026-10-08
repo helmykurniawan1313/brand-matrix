@@ -669,6 +669,94 @@ class CycleController extends Controller
         ]);
     }
 
+    /**
+     * Ads Nominal ranking — one row per account, summing reach/views ads spend
+     * and engagement ads spend separately (plus their combined total) across
+     * whichever cycles fall in the picked month range. Ranked by total spend,
+     * highest first.
+     */
+    public function adsRanking(Request $request): JsonResponse
+    {
+        return response()->json($this->adsRankingData($request));
+    }
+
+    public function adsRankingPdf(Request $request): HttpResponse
+    {
+        ['rows' => $rows, 'filterSummary' => $filterSummary] = $this->adsRankingData($request);
+
+        $pdf = Pdf::loadView('pdf.ads-ranking', [
+            'rows' => $rows,
+            'byCurrency' => collect($rows)->groupBy('currency'),
+            'generatedAt' => now()->format('M j, Y g:i A'),
+            'filterSummary' => $filterSummary,
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('ads-ranking-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    public function adsRankingExcel(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        ['rows' => $rows, 'filterSummary' => $filterSummary] = $this->adsRankingData($request);
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\AdsRankingExport(collect($rows), $filterSummary),
+            'ads-ranking-'.now()->format('Y-m-d').'.xlsx',
+        );
+    }
+
+    private function adsRankingData(Request $request): array
+    {
+        $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+
+        $cycles = Cycle::with('account:id,name')
+            ->when($monthFrom, fn ($query) => $this->applyMonthRangeFilter($query, $monthFrom, $monthTo))
+            ->get();
+
+        // Spend is currency-specific (ads_currency per cycle, mostly IDR with
+        // some USD) — summing different currencies together as one number
+        // would be meaningless. Group by account + currency instead, so an
+        // account that ran ads in both IDR and USD gets one row per currency
+        // rather than a single blended (and wrong) total.
+        $rows = $cycles
+            ->filter(fn (Cycle $cycle) => $cycle->account !== null)
+            ->groupBy(fn (Cycle $cycle) => $cycle->account_id.'|'.($cycle->ads_currency ?: 'IDR'))
+            ->map(function (Collection $group) {
+                $reachViews = (float) $group->sum('reach_views_ads_spend');
+                $engagement = (float) $group->sum('engagement_ads_spend');
+                $first = $group->first();
+
+                return [
+                    'account_id' => $first->account_id,
+                    'account_name' => $first->account->name,
+                    'currency' => $first->ads_currency ?: 'IDR',
+                    'reach_views_ads_spend' => $reachViews,
+                    'engagement_ads_spend' => $engagement,
+                    'total_ads_spend' => $reachViews + $engagement,
+                    'cycle_count' => $group->count(),
+                ];
+            })
+            ->sortByDesc('total_ads_spend')
+            ->values()
+            ->all();
+
+        $filterSummary = $monthFrom ? 'period: '.$this->formatMonthRange($monthFrom, $monthTo) : 'period: all time';
+
+        $months = Cycle::query()
+            ->get(['cycle_start_date'])
+            ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+            ->unique()
+            ->sort()
+            ->values();
+
+        return [
+            'rows' => $rows,
+            'filters' => ['month_from' => $monthFrom, 'month_to' => $monthTo],
+            'filterSummary' => $filterSummary,
+            'months' => $months,
+        ];
+    }
+
     private function validated(Request $request): array
     {
         return $request->validate([

@@ -9,5 +9,14 @@ export function useAuth() {
     const canEdit = computed(() => role.value !== 'viewer');
     const isSuperAdmin = computed(() => role.value === 'super_admin');
 
-    return { user, role, canEdit, isSuperAdmin };
+    // null page_access = unrestricted (sees every page) — same default the
+    // backend's User::canAccessPage() uses. Super Admins always pass,
+    // regardless of their own page_access value.
+    const canAccessPage = (pageKey) => {
+        if (isSuperAdmin.value) return true;
+        const access = user.value?.page_access;
+        return access === null || access === undefined || access.includes(pageKey);
+    };
+
+    return { user, role, canEdit, isSuperAdmin, canAccessPage };
 }

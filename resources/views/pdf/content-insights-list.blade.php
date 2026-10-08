@@ -26,11 +26,17 @@
         </p>
     </div>
 
+    @php
+        $trendLabels = ['up' => 'Trending up', 'flat' => 'Flat', 'down' => 'Trending down', 'no_data' => 'No prior cycle'];
+    @endphp
+
     <table>
         <thead>
             <tr>
                 <th>Account</th>
                 <th>Platform</th>
+                <th>Project Manager</th>
+                <th>Trend</th>
                 <th class="num">Posts Score</th>
                 <th class="num">Reels Score</th>
                 <th class="num">Story Score</th>
@@ -46,6 +52,8 @@
                 <tr>
                     <td>{{ $row['current']['account_name'] }}</td>
                     <td>{{ $row['current']['platform'] === 'tiktok' ? 'TikTok' : 'Instagram' }}</td>
+                    <td>{{ $row['current']['project_manager_name'] ?? '—' }}</td>
+                    <td>{{ $trendLabels[$row['overall_trend']] ?? $row['overall_trend'] }}</td>
                     @foreach (['posts', 'reels', 'story'] as $type)
                         @php $score = $scoreFor($type); @endphp
                         <td class="num {{ $score === null ? 'na' : ($score >= 0 ? 'pos' : 'neg') }}">
@@ -56,7 +64,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="empty">No accounts match the current filters.</td>
+                    <td colspan="8" class="empty">No accounts match the current filters.</td>
                 </tr>
             @endforelse
         </tbody>

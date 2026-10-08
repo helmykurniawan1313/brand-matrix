@@ -5,7 +5,7 @@ import ProfileDropdown from '../Components/ProfileDropdown.vue';
 import ToastContainer from '../Components/ToastContainer.vue';
 import { useAuth } from '../composables/useAuth';
 
-const { isSuperAdmin } = useAuth();
+const { isSuperAdmin, canAccessPage } = useAuth();
 
 // path data for a 24x24 viewBox, stroke-based icon (matches the theme-toggle/menu icons already in this layout)
 const icons = {
@@ -24,12 +24,15 @@ const icons = {
     contentInsights: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
 };
 
+// `page` matches a key in the backend's User::PAGES — items without one
+// (Dashboard, Users, Site Settings) are never individually restrictable.
 const baseNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: icons.dashboard },
     {
         label: 'Cycles',
         href: '/cycles',
         icon: icons.cycles,
+        page: 'cycles',
         group: true,
         children: [
             { label: 'Instagram', href: '/cycles?platform=instagram', icon: icons.instagram },
@@ -41,6 +44,7 @@ const baseNavItems = [
         label: 'Performance',
         href: '/performances',
         icon: icons.performance,
+        page: 'performances',
         group: true,
         children: [
             { label: 'Instagram', href: '/performances?platform=instagram', icon: icons.instagram },
@@ -48,23 +52,25 @@ const baseNavItems = [
             { label: 'All Performance', href: '/performances', icon: icons.performance },
         ],
     },
-    { label: 'Accounts', href: '/accounts', icon: icons.accounts },
-    { label: 'Views Trend', href: '/views-trend', icon: icons.viewsTrend },
-    { label: 'Content Insights', href: '/content-insights', icon: icons.contentInsights },
-    { label: 'Employees', href: '/employees', icon: icons.employees },
-    { label: 'Departments', href: '/departments', icon: icons.departments },
-    { label: 'Scoring Buckets', href: '/score-buckets', icon: icons.buckets },
+    { label: 'Accounts', href: '/accounts', icon: icons.accounts, page: 'accounts' },
+    { label: 'Views Trend', href: '/views-trend', icon: icons.viewsTrend, page: 'views-trend' },
+    { label: 'Content Insights', href: '/content-insights', icon: icons.contentInsights, page: 'content-insights' },
+    { label: 'Employees', href: '/employees', icon: icons.employees, page: 'employees' },
+    { label: 'Departments', href: '/departments', icon: icons.departments, page: 'departments' },
+    { label: 'Scoring Buckets', href: '/score-buckets', icon: icons.buckets, page: 'score-buckets' },
 ];
 
-const navItems = computed(() =>
-    isSuperAdmin.value
+const navItems = computed(() => {
+    const items = baseNavItems.filter((item) => !item.page || canAccessPage(item.page));
+
+    return isSuperAdmin.value
         ? [
-              ...baseNavItems,
+              ...items,
               { label: 'Users', href: '/users', icon: icons.users },
               { label: 'Site Settings', href: '/settings/site', icon: icons.siteSettings },
           ]
-        : baseNavItems,
-);
+        : items;
+});
 
 const page = usePage();
 const currentPath = () => page.url.split('?')[0];

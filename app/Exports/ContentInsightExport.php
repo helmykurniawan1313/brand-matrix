@@ -27,11 +27,20 @@ class ContentInsightExport implements FromCollection, WithHeadings, WithMapping,
         return $this->rows;
     }
 
+    private const TREND_LABELS = [
+        'up' => 'Trending up',
+        'flat' => 'Flat',
+        'down' => 'Trending down',
+        'no_data' => 'No prior cycle',
+    ];
+
     public function headings(): array
     {
         return [
             'Account',
             'Platform',
+            'Project Manager',
+            'Trend',
             'Posts Score (%)',
             'Reels Score (%)',
             'Story Score (%)',
@@ -46,6 +55,8 @@ class ContentInsightExport implements FromCollection, WithHeadings, WithMapping,
         return [
             $this->sanitizeForSpreadsheet($row['current']['account_name']),
             $row['current']['platform'] === 'tiktok' ? 'TikTok' : 'Instagram',
+            $this->sanitizeForSpreadsheet($row['current']['project_manager_name'] ?? '—'),
+            self::TREND_LABELS[$row['overall_trend']] ?? $row['overall_trend'],
             $scoreFor('posts') !== null ? round($scoreFor('posts'), 1) : 'N/A',
             $scoreFor('reels') !== null ? round($scoreFor('reels'), 1) : 'N/A',
             $scoreFor('story') !== null ? round($scoreFor('story'), 1) : 'N/A',

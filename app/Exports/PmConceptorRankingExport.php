@@ -16,7 +16,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  *   1. "Filters: …" context row
  *   2. "Grouped by: post month | cycle start month" context row
  *   3. blank
- *   4. column header (Rank / Name / Median Views / Total Views / Total Reels)
+ *   4. column header (Rank / Name / Median Views / Total Views / Min Views / Max Views / Total Reels)
  *   5. "PROJECT MANAGERS" section, then a blank, then "CONCEPTORS" section
  *
  * Each person ranked best-to-worst by median views per post.
@@ -37,16 +37,16 @@ class PmConceptorRankingExport implements FromCollection, WithStyles
     {
         $rows = collect();
 
-        $rows->push(['Filters: '.$this->filterSummary, '', '', '', '']);
-        $rows->push(['Grouped by: '.$this->groupedBy, '', '', '', '']);
-        $rows->push(['', '', '', '', '']);
-        $rows->push(['Rank', 'Name', 'Median Views', 'Total Views', 'Total Reels']);
+        $rows->push(['Filters: '.$this->filterSummary, '', '', '', '', '', '']);
+        $rows->push(['Grouped by: '.$this->groupedBy, '', '', '', '', '', '']);
+        $rows->push(['', '', '', '', '', '', '']);
+        $rows->push(['Rank', 'Name', 'Median Views', 'Total Views', 'Min Views', 'Max Views', 'Total Reels']);
 
-        $rows->push(['PROJECT MANAGERS', '', '', '', '']);
+        $rows->push(['PROJECT MANAGERS', '', '', '', '', '', '']);
         $this->appendPeople($rows, $this->projectManagers);
 
-        $rows->push(['', '', '', '', '']);
-        $rows->push(['CONCEPTORS', '', '', '', '']);
+        $rows->push(['', '', '', '', '', '', '']);
+        $rows->push(['CONCEPTORS', '', '', '', '', '', '']);
         $this->appendPeople($rows, $this->conceptors);
 
         return $rows;
@@ -55,7 +55,7 @@ class PmConceptorRankingExport implements FromCollection, WithStyles
     private function appendPeople(Collection $rows, Collection $people): void
     {
         if ($people->isEmpty()) {
-            $rows->push(['—', 'No one with recorded views for these filters', '', '', '']);
+            $rows->push(['—', 'No one with recorded views for these filters', '', '', '', '', '']);
 
             return;
         }
@@ -66,6 +66,8 @@ class PmConceptorRankingExport implements FromCollection, WithStyles
                 $this->sanitizeForSpreadsheet($person['employee_name']),
                 $person['avg_views'],
                 $person['total_views'],
+                $person['min_views'],
+                $person['max_views'],
                 $person['post_count'],
             ]);
         }
