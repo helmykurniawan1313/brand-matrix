@@ -532,6 +532,14 @@ const showRankingModal = ref(false);
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                             style="color: var(--ink-faint)"
+                            @click="sortBy('last_post_count')"
+                        >
+                            Total Reels
+                            <span v-if="sort === 'last_post_count'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
+                        </th>
+                        <th
+                            class="cursor-pointer select-none px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
+                            style="color: var(--ink-faint)"
                             @click="sortBy('delta_pct')"
                         >
                             Δ%
@@ -571,13 +579,14 @@ const showRankingModal = ref(false);
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.prior_avg_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_max_views) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_min_views) }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink-muted)">{{ formatNumber(row.last_post_count) }}</td>
                         <td class="px-4 py-3.5 text-right text-sm font-semibold tabular-nums" :style="`color: ${deltaColor(row.delta_pct)}`">
                             {{ formatDelta(row.delta_pct) }}
                         </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ row.last_cycle_label }}</td>
                     </tr>
                     <tr v-if="rows.data.length === 0">
-                        <td :colspan="platform === 'all' ? 9 : 8" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
+                        <td :colspan="platform === 'all' ? 10 : 9" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
                             No accounts match this filter.
                         </td>
                     </tr>

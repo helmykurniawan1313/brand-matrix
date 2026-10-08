@@ -37,6 +37,7 @@ class ViewsTrendExport implements FromCollection, WithHeadings, WithMapping, Wit
             'Prior Cycle Median Views',
             'Max Views',
             'Min Views',
+            'Total Reels',
             'Delta (%)',
             'As Of',
         ];
@@ -52,6 +53,7 @@ class ViewsTrendExport implements FromCollection, WithHeadings, WithMapping, Wit
             $row['prior_avg_views'],
             $row['last_max_views'],
             $row['last_min_views'],
+            $row['last_post_count'] ?? 0,
             $row['delta_pct'],
             $row['last_cycle_label'],
         ];

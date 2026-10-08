@@ -605,6 +605,9 @@ class AccountController extends Controller
                     'health_label' => $scores['health_label'],
                     'er_reach_rate' => round($scores['er_reach_rate'], 2),
                     'er_follower_rate' => round($scores['er_follower_rate'], 2),
+                    'reach_views_ads_spend' => (float) $cycle->reach_views_ads_spend,
+                    'engagement_ads_spend' => (float) $cycle->engagement_ads_spend,
+                    'ads_currency' => $cycle->ads_currency,
                     'post_count' => $postCounts['post_count'],
                     'view_count' => $postCounts['view_count'],
                     // null when no Content Insight was entered for this cycle —

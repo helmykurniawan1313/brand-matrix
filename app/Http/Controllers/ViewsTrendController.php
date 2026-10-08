@@ -68,13 +68,16 @@ class ViewsTrendController extends Controller
             'counts' => $counts,
             // Distinct months a cycle actually starts in, for the month picker —
             // same convention used by the PM/Conceptor ranking's cycle picker.
+            // Plucks just the date column (skips hydrating full Cycle models
+            // for every row) rather than DATE_FORMAT() in SQL, which isn't
+            // portable to the SQLite connection the test suite runs on.
             'months' => Cycle::query()
                 ->when(
                     in_array($filters['platform'], ['instagram', 'tiktok'], true),
                     fn ($query) => $query->where('platform', $filters['platform']),
                 )
-                ->get(['cycle_start_date'])
-                ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+                ->pluck('cycle_start_date')
+                ->map(fn ($date) => $date->format('Y-m'))
                 ->unique()
                 ->sort()
                 ->values(),
@@ -132,7 +135,7 @@ class ViewsTrendController extends Controller
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
 
         $sortKey = $request->string('sort')->toString();
-        $sortKey = in_array($sortKey, ['account', 'last_avg_views', 'prior_avg_views', 'last_max_views', 'last_min_views', 'delta_pct'], true) ? $sortKey : 'trend';
+        $sortKey = in_array($sortKey, ['account', 'last_avg_views', 'prior_avg_views', 'last_max_views', 'last_min_views', 'last_post_count', 'delta_pct'], true) ? $sortKey : 'trend';
         $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
         $accounts = Account::orderBy('name')
@@ -150,17 +153,18 @@ class ViewsTrendController extends Controller
         $viewsByCycle = $this->avgViewsByCycle();
         $maxViewsByCycle = $this->maxViewsByCycle();
         $minViewsByCycle = $this->minViewsByCycle();
-        // All three derive from the same per-cycle performance scan (viewsByCyclePerformances(),
+        $postCountByCycle = $this->postCountByCycle();
+        // All four derive from the same per-cycle performance scan (viewsByCyclePerformances(),
         // memoized below) — this used to independently re-run that full-table query, once
         // per method call. Since index() calls filteredSortedRows() twice (table + chart)
         // and pdf()/exportExcel() add a third, that meant up to 4 full scans of Performance
         // per page load. Memoizing the underlying scan collapses that back to 1.
 
         $rows = $accounts
-            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $platform, $monthFrom, $monthTo) {
+            ->flatMap(function (Account $account) use ($cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $postCountByCycle, $platform, $monthFrom, $monthTo) {
                 $platforms = $platform === 'all' ? ['instagram', 'tiktok'] : [$platform];
 
-                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $monthFrom, $monthTo) {
+                return collect($platforms)->map(function (string $accountPlatform) use ($account, $cyclesByAccountPlatform, $viewsByCycle, $maxViewsByCycle, $minViewsByCycle, $postCountByCycle, $monthFrom, $monthTo) {
                     $cycles = $cyclesByAccountPlatform->get("{$account->id}:{$accountPlatform}", collect());
 
                     $series = $cycles->map(fn (Cycle $cycle) => [
@@ -170,6 +174,7 @@ class ViewsTrendController extends Controller
                         'avg_views' => $viewsByCycle->get($cycle->id),
                         'max_views' => $maxViewsByCycle->get($cycle->id),
                         'min_views' => $minViewsByCycle->get($cycle->id),
+                        'post_count' => $postCountByCycle->get($cycle->id, 0),
                     ])->filter(fn ($point) => $point['avg_views'] !== null)->values();
 
                     // month_to trims the series so "last" is this account's cycle
@@ -180,6 +185,21 @@ class ViewsTrendController extends Controller
                     $trimmedSeries = $monthTo
                         ? $series->filter(fn ($point) => $point['month'] <= $monthTo)->values()
                         : $series;
+
+                    // An explicit two-month comparison (both From and To picked) needs
+                    // an account to actually have a cycle in BOTH months themselves —
+                    // without this, buildRow()'s "nearest cycle at-or-before" fallback
+                    // would silently pair, say, August against some unrelated June
+                    // cycle (missing a From-month cycle) or resolve "last" to that same
+                    // stale cycle (missing a To-month cycle), either of which reads as
+                    // a wrong/stale comparison rather than "no data for this account."
+                    if ($monthFrom && $monthTo) {
+                        $hasFromMonth = $series->contains(fn ($point) => $point['month'] === $monthFrom);
+                        $hasToMonth = $series->contains(fn ($point) => $point['month'] === $monthTo);
+                        if (!$hasFromMonth || !$hasToMonth) {
+                            return null;
+                        }
+                    }
 
                     return $this->buildRow($account, $accountPlatform, $trimmedSeries, $monthFrom);
                 });
@@ -207,6 +227,7 @@ class ViewsTrendController extends Controller
             'prior_avg_views' => fn ($a, $b) => ($a['prior_avg_views'] ?? -1) <=> ($b['prior_avg_views'] ?? -1),
             'last_max_views' => fn ($a, $b) => ($a['last_max_views'] ?? -1) <=> ($b['last_max_views'] ?? -1),
             'last_min_views' => fn ($a, $b) => ($a['last_min_views'] ?? -1) <=> ($b['last_min_views'] ?? -1),
+            'last_post_count' => fn ($a, $b) => ($a['last_post_count'] ?? -1) <=> ($b['last_post_count'] ?? -1),
             'delta_pct' => fn ($a, $b) => ($a['delta_pct'] ?? -INF) <=> ($b['delta_pct'] ?? -INF),
             default => fn ($a, $b) => $trendRank[$a['trend']] <=> $trendRank[$b['trend']],
         };
@@ -262,6 +283,7 @@ class ViewsTrendController extends Controller
             'prior_avg_views' => 'Prior Cycle Median Views',
             'last_max_views' => 'Last Cycle Max Views',
             'last_min_views' => 'Last Cycle Min Views',
+            'last_post_count' => 'Total Reels',
             'delta_pct' => 'Delta %',
             'trend' => 'Trend (default)',
         ];
@@ -407,14 +429,15 @@ class ViewsTrendController extends Controller
             'conceptors' => $conceptors,
             // Distinct months a cycle actually starts in — so the "By Cycle"
             // picker can offer only real cycle months rather than an open-ended
-            // date input. Sorted oldest-first.
+            // date input. Sorted oldest-first. Plucks just the date column
+            // instead of hydrating full Cycle models for every row.
             'cycleMonths' => Cycle::query()
                 ->when(
                     in_array($filters['platform'], ['instagram', 'tiktok'], true),
                     fn ($query) => $query->where('platform', $filters['platform']),
                 )
-                ->get(['cycle_start_date'])
-                ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+                ->pluck('cycle_start_date')
+                ->map(fn ($date) => $date->format('Y-m'))
                 ->unique()
                 ->sort()
                 ->values(),
@@ -765,6 +788,16 @@ class ViewsTrendController extends Controller
     }
 
     /**
+     * Number of (view-resolved) posts/reels per cycle — the "Total Reels"
+     * column, alongside median/max/min. Same source as the others.
+     */
+    private function postCountByCycle(): Collection
+    {
+        return $this->viewsByCyclePerformances()
+            ->map(fn (Collection $views) => $views->count());
+    }
+
+    /**
      * Shared groundwork for avgViewsByCycle()/totalViewsByCycle(): every
      * performance's resolved view count, grouped by cycle_id. Memoized per
      * request — this scans the whole Performance table, and both callers
@@ -819,6 +852,7 @@ class ViewsTrendController extends Controller
                 'prior_avg_views' => null,
                 'last_max_views' => (int) ($series->last()['max_views'] ?? 0),
                 'last_min_views' => (int) ($series->last()['min_views'] ?? 0),
+                'last_post_count' => (int) ($series->last()['post_count'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -847,6 +881,7 @@ class ViewsTrendController extends Controller
                 'prior_avg_views' => null,
                 'last_max_views' => (int) ($last['max_views'] ?? 0),
                 'last_min_views' => (int) ($last['min_views'] ?? 0),
+                'last_post_count' => (int) ($last['post_count'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -867,6 +902,7 @@ class ViewsTrendController extends Controller
                 'prior_avg_views' => null,
                 'last_max_views' => (int) ($last['max_views'] ?? 0),
                 'last_min_views' => (int) ($last['min_views'] ?? 0),
+                'last_post_count' => (int) ($last['post_count'] ?? 0),
                 'delta_pct' => null,
                 'trend' => 'insufficient_data',
                 'stagnant_streak' => 0,
@@ -899,6 +935,7 @@ class ViewsTrendController extends Controller
             'prior_avg_views' => (int) round($prior['avg_views']),
             'last_max_views' => (int) ($last['max_views'] ?? 0),
             'last_min_views' => (int) ($last['min_views'] ?? 0),
+            'last_post_count' => (int) ($last['post_count'] ?? 0),
             'delta_pct' => $deltaPct === null ? null : round($deltaPct * 100, 1),
             'trend' => $trend,
             'stagnant_streak' => $stagnantStreak,

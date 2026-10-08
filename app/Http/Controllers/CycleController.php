@@ -742,9 +742,11 @@ class CycleController extends Controller
 
         $filterSummary = $monthFrom ? 'period: '.$this->formatMonthRange($monthFrom, $monthTo) : 'period: all time';
 
+        // Plucks just the date column instead of hydrating full Cycle models
+        // for every row just to extract/dedupe a formatted month string.
         $months = Cycle::query()
-            ->get(['cycle_start_date'])
-            ->map(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m'))
+            ->pluck('cycle_start_date')
+            ->map(fn ($date) => $date->format('Y-m'))
             ->unique()
             ->sort()
             ->values();

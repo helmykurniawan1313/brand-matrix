@@ -79,6 +79,8 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can-access:employees')->group(function () {
         Route::resource('employees', EmployeeController::class)->only(['index']);
+        Route::get('employees/{employee}/posts', [EmployeeController::class, 'posts'])->name('employees.posts');
+        Route::get('employees/{employee}/series', [EmployeeController::class, 'series'])->name('employees.series');
     });
 
     Route::middleware('can-access:performances')->group(function () {

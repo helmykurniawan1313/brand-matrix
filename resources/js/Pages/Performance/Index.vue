@@ -814,7 +814,6 @@ onBeforeUnmount(() => {
             :performance="viewingPerformance"
             :views-buckets="viewsBuckets"
             :follower-buckets="followerBuckets"
-            :default-ai-provider="defaultAiProvider"
             @close="closeDetail"
             @edit="editFromDetail"
         />

@@ -12,8 +12,9 @@
         .num { text-align: right; }
         .header { border-bottom: 2px solid #12181a; padding-bottom: 10px; }
         .empty { text-align: center; color: #8b979b; padding: 24px 0; }
-        .pos { color: #146c48; font-weight: bold; }
-        .neg { color: #a1282a; font-weight: bold; }
+        .pos { background-color: #d6f0e3; color: #146c48; font-weight: bold; border-radius: 3px; }
+        .warn { background-color: #fdf1d7; color: #92650a; font-weight: bold; border-radius: 3px; }
+        .neg { background-color: #fbdede; color: #a1282a; font-weight: bold; border-radius: 3px; }
         .na { color: #8b979b; }
     </style>
 </head>
@@ -55,8 +56,11 @@
                     <td>{{ $row['current']['project_manager_name'] ?? '—' }}</td>
                     <td>{{ $trendLabels[$row['overall_trend']] ?? $row['overall_trend'] }}</td>
                     @foreach (['posts', 'reels', 'story'] as $type)
-                        @php $score = $scoreFor($type); @endphp
-                        <td class="num {{ $score === null ? 'na' : ($score >= 0 ? 'pos' : 'neg') }}">
+                        @php
+                            $score = $scoreFor($type);
+                            $tier = $score === null ? 'na' : ($score >= 0 ? 'pos' : ($score > -10 ? 'warn' : 'neg'));
+                        @endphp
+                        <td class="num {{ $tier }}">
                             {{ $fmt($score) ?? 'N/A' }}
                         </td>
                     @endforeach

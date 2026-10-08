@@ -38,6 +38,7 @@
                 <th class="num">Prior Cycle Median</th>
                 <th class="num">Max</th>
                 <th class="num">Min</th>
+                <th class="num">Total Reels</th>
                 <th class="num">Delta %</th>
                 <th>As Of</th>
             </tr>
@@ -52,12 +53,13 @@
                     <td class="num">{{ $row['prior_avg_views'] !== null ? number_format($row['prior_avg_views']) : '—' }}</td>
                     <td class="num">{{ $row['last_max_views'] !== null ? number_format($row['last_max_views']) : '—' }}</td>
                     <td class="num">{{ $row['last_min_views'] !== null ? number_format($row['last_min_views']) : '—' }}</td>
+                    <td class="num">{{ number_format($row['last_post_count'] ?? 0) }}</td>
                     <td class="num">{{ $row['delta_pct'] !== null ? ($row['delta_pct'] > 0 ? '+' : '').$row['delta_pct'].'%' : '—' }}</td>
                     <td>{{ $row['last_cycle_label'] }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="empty">No accounts match the current filters.</td>
+                    <td colspan="10" class="empty">No accounts match the current filters.</td>
                 </tr>
             @endforelse
         </tbody>

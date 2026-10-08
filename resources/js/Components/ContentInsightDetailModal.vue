@@ -33,12 +33,24 @@ const emit = defineEmits(['close']);
 
 const num = (v) => Number(v || 0).toLocaleString('en-US');
 const fmtPct = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10}%`);
-const pctStyle = (v) =>
-    v === null || v === undefined
-        ? 'color: var(--ink-faint)'
-        : v >= 0
-          ? 'color: var(--status-sip-ink)'
-          : 'color: var(--status-parah-ink)';
+const pctStyle = (v) => {
+    if (v === null || v === undefined) return 'color: var(--ink-faint)';
+    if (v >= 0) return 'color: var(--status-sip-ink)';
+    // Mild drop (0% to -10%) reads as a caution, not a crisis — only a 10%+
+    // drop is severe enough to flag red. Matches the main table/exports.
+    return v > -10 ? 'color: var(--status-cukup-ink)' : 'color: var(--status-parah-ink)';
+};
+
+// Weighted-score card chrome — border/background follow the same tier as the
+// score itself, instead of always reading as "good" (accent/teal) regardless
+// of whether the number inside is actually negative.
+const scoreCardStyle = (v) => {
+    if (v === null || v === undefined) return 'border-color: var(--border); background-color: var(--bg)';
+    if (v >= 0) return 'border-color: var(--status-sip-ink); background-color: var(--status-sip-bg)';
+    return v > -10
+        ? 'border-color: var(--status-cukup-ink); background-color: var(--status-cukup-bg)'
+        : 'border-color: var(--status-parah-ink); background-color: var(--status-parah-bg)';
+};
 
 const platformLabel = (p) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : '');
 
@@ -420,13 +432,9 @@ onBeforeUnmount(destroyChart);
                             v-for="score in activeWeightedScores"
                             :key="score.key"
                             class="rounded-lg border-2 p-3"
-                            :style="
-                                score.score === null
-                                    ? 'border-color: var(--border); background-color: var(--bg)'
-                                    : 'border-color: var(--accent); background-color: var(--accent-soft)'
-                            "
+                            :style="scoreCardStyle(score.score)"
                         >
-                            <p class="text-[10px] font-semibold uppercase tracking-wide" :style="score.score === null ? 'color: var(--ink-faint)' : 'color: var(--accent)'">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide" :style="pctStyle(score.score)">
                                 {{ score.label }}
                             </p>
                             <p class="mt-1 inline-flex items-center gap-1 font-display text-xl font-bold tabular-nums" :style="pctStyle(score.score)">

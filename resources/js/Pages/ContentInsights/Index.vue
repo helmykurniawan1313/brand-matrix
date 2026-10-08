@@ -116,12 +116,13 @@ const pct = (from, to) => {
     return ((to - from) / from) * 100;
 };
 const fmtPct = (v) => (v === null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10}%`);
-const pctStyle = (v) =>
-    v === null
-        ? 'color: var(--ink-faint)'
-        : v >= 0
-          ? 'color: var(--status-sip-ink)'
-          : 'color: var(--status-parah-ink)';
+const pctStyle = (v) => {
+    if (v === null) return 'color: var(--ink-faint)';
+    if (v >= 0) return 'color: var(--status-sip-ink)';
+    // Mild drop (0% to -10%) reads as a caution, not a crisis — only a 10%+
+    // drop is severe enough to flag red.
+    return v > -10 ? 'color: var(--status-cukup-ink)' : 'color: var(--status-parah-ink)';
+};
 
 // Weighted Content Score — one score per content type, blending that type's
 // Views % change, Interactions % change, and (Posts/Reels only) the account's

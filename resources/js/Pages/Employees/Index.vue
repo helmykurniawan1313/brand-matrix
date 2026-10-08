@@ -5,6 +5,7 @@ import AppLayout from '../../Layouts/AppLayout.vue';
 
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import EditEmployeeModal from '../../Components/EditEmployeeModal.vue';
+import EmployeeDetailModal from '../../Components/EmployeeDetailModal.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
@@ -42,6 +43,14 @@ const submitCreate = () => {
         },
         onError: () => toast.error('Failed to add employee.'),
     });
+};
+
+const viewingEmployee = ref(null);
+const openDetail = (employee) => {
+    viewingEmployee.value = employee;
+};
+const closeDetail = () => {
+    viewingEmployee.value = null;
 };
 
 const editingEmployee = ref(null);
@@ -173,7 +182,9 @@ const destroy = () => {
                     <tr
                         v-for="employee in employees.data"
                         :key="employee.id"
+                        class="cursor-pointer transition-colors hover:opacity-80"
                         style="border-bottom: 1px solid var(--border)"
+                        @click="openDetail(employee)"
                     >
                         <td class="px-4 py-3.5 text-sm font-medium" style="color: var(--ink)">{{ employee.name }}</td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">{{ employee.email || '—' }}</td>
@@ -186,6 +197,7 @@ const destroy = () => {
                                     { label: 'Edit', onClick: () => startEdit(employee) },
                                     { label: 'Delete', danger: true, onClick: () => confirmDestroy(employee) },
                                 ]"
+                                @click.stop
                             />
                         </td>
                     </tr>
@@ -225,6 +237,12 @@ const destroy = () => {
                 </div>
             </div>
         </div>
+
+        <EmployeeDetailModal
+            v-if="viewingEmployee"
+            :employee="viewingEmployee"
+            @close="closeDetail"
+        />
 
         <EditEmployeeModal
             v-if="editingEmployee"

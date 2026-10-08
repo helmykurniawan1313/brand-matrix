@@ -237,15 +237,15 @@ const volumeTiles = computed(() => [
     { key: 'story_performance', label: 'Story Performance' },
 ]);
 
-// Metric switcher: Followers/Views/Reach/Engagement/Story Performance share
-// one chart; chips (number + delta) pick which one it plots, so all five
-// headline figures stay visible without five separate stacked chart cards.
+// Metric switcher: Followers/Views/Reach/Engagement/Ads Spend share one chart;
+// chips (number + delta) pick which one it plots, so all five headline
+// figures stay visible without five separate stacked chart cards.
 const metricSwitcherOptions = computed(() => [
     { key: 'end_follower', label: 'Followers', hasChangeLabel: false },
     { key: 'views', label: 'Views', hasChangeLabel: true },
     { key: 'reach', label: 'Reach', hasChangeLabel: true },
     { key: 'engagement', label: 'Engagement', hasChangeLabel: true },
-    { key: 'story_performance', label: 'Story Performance', hasChangeLabel: false },
+    { key: 'ads-spend', label: 'Ads Spend', hasChangeLabel: false, valueKey: 'total_ads_spend' },
 ]);
 const activeMetric = ref('end_follower');
 const activeMetricOption = computed(
@@ -269,9 +269,6 @@ const chartConfigs = {
     engagement: [
         { key: 'engagement', label: 'Engagement', suffix: '', single: true },
     ],
-    'story-performance': [
-        { key: 'story_performance', label: 'Story Performance', suffix: '', single: true },
-    ],
     scores: [
         {
             key: 'aggregate-scores',
@@ -281,6 +278,18 @@ const chartConfigs = {
                 { key: 'visibility_rate', label: 'Visibility' },
                 { key: 'engagement_score', label: 'Engagement' },
                 { key: 'health_rate', label: 'Health' },
+            ],
+            suffix: '',
+        },
+    ],
+    'ads-spend': [
+        {
+            key: 'ads-spend',
+            label: 'Ads Spend',
+            combined: true,
+            series: [
+                { key: 'reach_views_ads_spend', label: 'Reach/Views Ads' },
+                { key: 'engagement_ads_spend', label: 'Engagement Ads' },
             ],
             suffix: '',
         },
@@ -768,7 +777,14 @@ const load = async () => {
             return;
         }
 
-        cycles.value = data.cycles;
+        // Derived total ads spend per cycle, for the metric switcher's "Ads
+        // Spend" chip/chart — the backend sends the two components
+        // separately (reach/views vs. engagement) since they can have
+        // different ads_used flags, but the chip shows one combined figure.
+        cycles.value = data.cycles.map((cycle) => ({
+            ...cycle,
+            total_ads_spend: (cycle.reach_views_ads_spend ?? 0) + (cycle.engagement_ads_spend ?? 0),
+        }));
         postSummary.value = data.postSummary ?? postSummary.value;
         changeLabelBuckets.value = data.changeLabelBuckets ?? changeLabelBuckets.value;
 
@@ -1060,7 +1076,7 @@ onBeforeUnmount(() => {
                                     {{ metric.label }}
                                 </p>
                                 <p class="mt-1 font-display text-lg font-bold tabular-nums" style="color: var(--ink)">
-                                    {{ formatCompact(latestCycle?.[metric.key]) }}
+                                    {{ formatCompact(latestCycle?.[metric.valueKey ?? metric.key]) }}
                                 </p>
                                 <p v-if="deltaFor(metric.key) !== null" class="mt-0.5 text-xs font-medium" :style="deltaFor(metric.key) >= 0 ? 'color: var(--status-sip-ink)' : 'color: var(--status-parah-ink)'">
                                     {{ deltaFor(metric.key) >= 0 ? '▲' : '▼' }} {{ Math.abs(Math.round(deltaFor(metric.key) * 10) / 10) }}%
