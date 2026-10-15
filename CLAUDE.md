@@ -2,6 +2,15 @@
 
 This is a **copy** of `d:\Project\social-media-health` (the original, still-running production-ish app), created to safely upscale/redesign without touching the live version. Database is `brand_matrix_v2` (cloned from `brand_matrix`), app runs on port 8003 by convention (`APP_URL` in `.env`), original runs on 8000.
 
+## Versioning
+
+Git tags follow `vMEGA.MAJOR.MINOR` (e.g. `v1.2.0`), each digit 0-99:
+- **MEGA** — a foundational/breaking shift (architecture rebuild, core domain model change). Rare.
+- **MAJOR** — a new feature area shipped (e.g. Content Insights, Ads Nominal Ranking, per-user page permissions, Employee drill-down). Resets MINOR to 0.
+- **MINOR** — enhancements, redesigns, and bug fixes within existing features.
+
+When the user asks to "version this" / "tag this," bump MINOR for a routine batch of fixes/polish, MAJOR for a batch that introduced a genuinely new feature area, and only touch MEGA if explicitly told to. Tag with `git tag -a vX.Y.Z -m "..."` summarizing the batch, then push with `git push origin vX.Y.Z`. First tag: `v1.2.0`.
+
 ## What this app does
 
 A social media health-scoring dashboard ("Brand Matrix") for tracking brand accounts across reporting cycles (periods with follower/reach/view/engagement numbers), computing configurable Growth/Visibility/Engagement/Health scores, and generating AI summaries.
