@@ -707,7 +707,7 @@ const showAdsRankingModal = ref(false);
         <div class="flex items-start justify-between gap-4">
             <div>
                 <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">
-                    Performance Cycles
+                    Account Performance
                 </h1>
                 <p class="mt-1 text-sm" style="color: var(--ink-muted)">
                     Growth, visibility, and engagement scored per reporting cycle.

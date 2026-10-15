@@ -349,10 +349,10 @@ const destroy = () => {
     router.delete(`/performances/${deletingPerformance.value.id}`, {
         preserveScroll: true,
         onSuccess: () => {
-            toast.success('Performance record deleted.');
+            toast.success('Views record deleted.');
             deletingPerformance.value = null;
         },
-        onError: () => toast.error('Failed to delete performance record.'),
+        onError: () => toast.error('Failed to delete views record.'),
         onFinish: () => {
             deleting.value = false;
         },
@@ -465,7 +465,7 @@ onBeforeUnmount(() => {
 <template>
         <div class="flex items-start justify-between gap-4">
             <div>
-                <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Performance</h1>
+                <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Views</h1>
                 <p class="mt-1 text-sm" style="color: var(--ink-muted)">
                     Track individual social media posts and their performance.
                 </p>
@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
                 style="background-color: var(--accent); color: var(--accent-ink)"
                 @click="openCreate"
             >
-                + Add Performance
+                + Add Views
             </button>
         </div>
 
@@ -773,7 +773,7 @@ onBeforeUnmount(() => {
                         </tr>
                         <tr v-if="performances.data.length === 0">
                             <td colspan="10" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
-                                No performance records yet. Add one to get started.
+                                No views records yet. Add one to get started.
                             </td>
                         </tr>
                     </tbody>
@@ -842,8 +842,8 @@ onBeforeUnmount(() => {
 
         <ConfirmDialog
             :open="!!deletingPerformance"
-            title="Delete this performance record?"
-            message="This will permanently remove this performance record. This cannot be undone."
+            title="Delete this views record?"
+            message="This will permanently remove this views record. This cannot be undone."
             :processing="deleting"
             @confirm="destroy"
             @cancel="cancelDestroy"

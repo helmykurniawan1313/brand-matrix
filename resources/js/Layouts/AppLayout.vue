@@ -29,7 +29,7 @@ const icons = {
 const baseNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: icons.dashboard },
     {
-        label: 'Cycles',
+        label: 'Performance',
         href: '/cycles',
         icon: icons.cycles,
         page: 'cycles',
@@ -41,7 +41,7 @@ const baseNavItems = [
         ],
     },
     {
-        label: 'Performance',
+        label: 'Views',
         href: '/performances',
         icon: icons.performance,
         page: 'performances',
@@ -49,7 +49,7 @@ const baseNavItems = [
         children: [
             { label: 'Instagram', href: '/performances?platform=instagram', icon: icons.instagram },
             { label: 'TikTok', href: '/performances?platform=tiktok', icon: icons.tiktok },
-            { label: 'All Performance', href: '/performances', icon: icons.performance },
+            { label: 'All Views', href: '/performances', icon: icons.performance },
         ],
     },
     { label: 'Accounts', href: '/accounts', icon: icons.accounts, page: 'accounts' },
