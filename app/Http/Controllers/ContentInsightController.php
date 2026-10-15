@@ -97,7 +97,7 @@ class ContentInsightController extends Controller
     // --- Weighted Content Score — ports the page's client-side computeds
     // (weightedScoresFor / accountRows / filteredRows / sortedRows in
     // ContentInsights/Index.vue) so the PDF/Excel exports show exactly what
-    // the table shows, for the same search/platform/month-range/sort params. ---
+    // the table shows, for the same search/trend/month-range/sort params. ---
 
     private const SCORE_WEIGHTS = [
         'posts' => [['source' => 'views', 'weight' => 0.5], ['source' => 'interactions', 'weight' => 0.2], ['source' => 'growth', 'weight' => 0.3]],
@@ -148,16 +148,15 @@ class ContentInsightController extends Controller
     /**
      * One row per account — default: latest cycle vs. the one before it.
      * With month_from/month_to: that account's cycle in each picked month.
-     * Then filtered by search/platform and sorted, matching the page exactly.
+     * Then filtered by search/PM/trend and sorted, matching the page exactly.
      */
     private function filteredSortedRows(Request $request): array
     {
         $all = $this->allInsights();
 
         $search = $request->string('search')->trim()->lower()->toString();
-        $platform = $request->string('platform')->trim()->toString() ?: 'all';
         $pm = $request->string('pm')->trim()->toString() ?: 'all';
-        $trend = $request->string('trend')->trim()->toString() ?: 'all';
+        $trends = array_values(array_filter(explode(',', $request->string('trend')->trim()->toString())));
         $monthFrom = $request->string('month_from')->trim()->toString() ?: null;
         $monthTo = $request->string('month_to')->trim()->toString() ?: null;
         $sortKey = $request->string('sort')->trim()->toString() ?: 'account';
@@ -230,13 +229,12 @@ class ContentInsightController extends Controller
             };
         };
 
-        $rows = $rows->filter(function ($row) use ($search, $platform, $pm, $trend, $overallTrend) {
+        $rows = $rows->filter(function ($row) use ($search, $pm, $trends, $overallTrend) {
             $matchesSearch = !$search || str_contains(strtolower($row['current']['account_name'] ?? ''), $search);
-            $matchesPlatform = $platform === 'all' || $row['current']['platform'] === $platform;
             $matchesPm = $pm === 'all' || (string) $row['current']['project_manager_id'] === $pm;
-            $matchesTrend = $trend === 'all' || $overallTrend($row) === $trend;
+            $matchesTrend = empty($trends) || in_array($overallTrend($row), $trends, true);
 
-            return $matchesSearch && $matchesPlatform && $matchesPm && $matchesTrend;
+            return $matchesSearch && $matchesPm && $matchesTrend;
         })->values();
 
         if ($sortKey === 'account') {
@@ -265,9 +263,8 @@ class ContentInsightController extends Controller
             'rows' => $rows->values(),
             'filters' => [
                 'search' => $search,
-                'platform' => $platform,
                 'pm' => $pm,
-                'trend' => $trend,
+                'trends' => $trends,
                 'month_from' => $monthFrom,
                 'month_to' => $monthTo,
                 'has_range' => $hasRange,
@@ -282,17 +279,15 @@ class ContentInsightController extends Controller
         if (!empty($filters['search'])) {
             $parts[] = 'search: "'.$filters['search'].'"';
         }
-        if (!empty($filters['platform']) && $filters['platform'] !== 'all') {
-            $parts[] = 'platform: '.ucfirst($filters['platform']);
-        }
         if (!empty($filters['pm']) && $filters['pm'] !== 'all') {
             $pmName = Employee::find($filters['pm'])?->name;
             if ($pmName) {
                 $parts[] = 'PM: '.$pmName;
             }
         }
-        if (!empty($filters['trend']) && $filters['trend'] !== 'all') {
-            $parts[] = 'trend: '.ucfirst(str_replace('_', ' ', $filters['trend']));
+        if (!empty($filters['trends'])) {
+            $labels = array_map(fn ($t) => ucfirst(str_replace('_', ' ', $t)), $filters['trends']);
+            $parts[] = 'trend: '.implode(', ', $labels);
         }
         if (!empty($filters['has_range'])) {
             $parts[] = 'compared: '.$filters['month_from'].' vs '.$filters['month_to'];

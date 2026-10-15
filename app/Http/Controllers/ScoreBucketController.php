@@ -35,7 +35,7 @@ class ScoreBucketController extends Controller
 
     public function update(Request $request, ScoreBucket $scoreBucket): RedirectResponse
     {
-        $data = $this->validated($request);
+        $data = $this->validated($request, requireMetric: false);
 
         $scoreBucket->update($data);
 
@@ -49,12 +49,15 @@ class ScoreBucketController extends Controller
         return back();
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, bool $requireMetric = true): array
     {
         return $request->validate([
-            'metric' => ['required', 'string', 'in:'.implode(',', ScoreBucket::METRICS)],
+            'metric' => [$requireMetric ? 'required' : 'sometimes', 'string', 'in:'.implode(',', ScoreBucket::METRICS)],
             'min_rate' => ['nullable', 'numeric'],
             'score' => ['required', 'numeric', 'min:0'],
+            'color' => ['nullable', 'string', 'max:20'],
+            'custom_color_bg' => ['nullable', 'string', 'max:20'],
+            'custom_color_ink' => ['nullable', 'string', 'max:20'],
         ]);
     }
 }

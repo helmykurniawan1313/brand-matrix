@@ -256,14 +256,10 @@ const overallTrend = (row) => {
 // set the range picker produced. ---
 
 const search = ref('');
-const platformFilter = ref('all');
 const pmFilter = ref(''); // '' = All PMs — matches SearchableSelect's own "cleared" value
-const trendFilter = ref('all');
-
-const availablePlatforms = computed(() => [...new Set(props.allInsights.map((i) => i.platform).filter(Boolean))].sort());
+const trendFilter = ref([]); // empty = all trends
 
 const trendTabs = [
-    { value: 'all', label: 'All' },
     { value: 'up', label: 'Trending up' },
     { value: 'flat', label: 'Flat' },
     { value: 'down', label: 'Trending down' },
@@ -271,16 +267,21 @@ const trendTabs = [
 ];
 
 // --- Filter modal (draft state, only applied on "Apply") — mirrors the
-// pattern used on Views Trend: platform/PM/trend/compare-months all live in
-// one modal behind a funnel button with an active-filter-count badge, instead
-// of each growing its own permanent toolbar control. ---
+// pattern used on Views Trend: PM/trend/compare-months all live in one modal
+// behind a funnel button with an active-filter-count badge, instead of each
+// growing its own permanent toolbar control. ---
 
 const showFilterModal = ref(false);
-const draftPlatform = ref('all');
 const draftPm = ref('');
-const draftTrend = ref('all');
+const draftTrend = ref([]);
 const draftFromMonth = ref('');
 const draftToMonth = ref('');
+
+const toggleDraftTrend = (value) => {
+    draftTrend.value = draftTrend.value.includes(value)
+        ? draftTrend.value.filter((v) => v !== value)
+        : [...draftTrend.value, value];
+};
 
 // Compare-months popovers, opened independently from within the modal.
 const fromMonthPickerOpen = ref(false);
@@ -300,9 +301,8 @@ onMounted(() => document.addEventListener('click', onClickOutsideMonthPickers));
 onBeforeUnmount(() => document.removeEventListener('click', onClickOutsideMonthPickers));
 
 const openFilterModal = () => {
-    draftPlatform.value = platformFilter.value;
     draftPm.value = pmFilter.value;
-    draftTrend.value = trendFilter.value;
+    draftTrend.value = [...trendFilter.value];
     draftFromMonth.value = fromMonth.value;
     draftToMonth.value = toMonth.value;
     fromMonthPickerOpen.value = false;
@@ -317,9 +317,8 @@ const closeFilterModal = () => {
 };
 
 const applyFilterModal = () => {
-    platformFilter.value = draftPlatform.value;
     pmFilter.value = draftPm.value;
-    trendFilter.value = draftTrend.value;
+    trendFilter.value = [...draftTrend.value];
     fromMonth.value = draftFromMonth.value;
     toMonth.value = draftToMonth.value;
     showFilterModal.value = false;
@@ -327,18 +326,16 @@ const applyFilterModal = () => {
 };
 
 const clearFilterModal = () => {
-    draftPlatform.value = 'all';
     draftPm.value = '';
-    draftTrend.value = 'all';
+    draftTrend.value = [];
     draftFromMonth.value = '';
     draftToMonth.value = '';
 };
 
 const activeFilterCount = computed(() => {
     let count = 0;
-    if (platformFilter.value !== 'all') count += 1;
     if (pmFilter.value) count += 1;
-    if (trendFilter.value !== 'all') count += 1;
+    if (trendFilter.value.length > 0) count += 1;
     if (hasRange.value) count += 1;
     return count;
 });
@@ -348,10 +345,9 @@ const filteredRows = computed(() => {
 
     return accountRows.value.filter((row) => {
         const matchesSearch = !query || (row.current.account_name || '').toLowerCase().includes(query);
-        const matchesPlatform = platformFilter.value === 'all' || row.current.platform === platformFilter.value;
         const matchesPm = !pmFilter.value || String(row.current.project_manager_id) === String(pmFilter.value);
-        const matchesTrend = trendFilter.value === 'all' || overallTrend(row) === trendFilter.value;
-        return matchesSearch && matchesPlatform && matchesPm && matchesTrend;
+        const matchesTrend = trendFilter.value.length === 0 || trendFilter.value.includes(overallTrend(row));
+        return matchesSearch && matchesPm && matchesTrend;
     });
 });
 
@@ -400,7 +396,7 @@ const sortedRows = computed(() => {
 const PAGE_SIZE = 15;
 const page = ref(1);
 
-watch([search, platformFilter, pmFilter, trendFilter], () => {
+watch([search, pmFilter, trendFilter], () => {
     page.value = 1;
 });
 
@@ -421,9 +417,8 @@ const goToPage = (n) => {
 
 const exportQuery = () => ({
     search: search.value || undefined,
-    platform: platformFilter.value === 'all' ? undefined : platformFilter.value,
     pm: pmFilter.value || undefined,
-    trend: trendFilter.value === 'all' ? undefined : trendFilter.value,
+    trend: trendFilter.value.length > 0 ? trendFilter.value.join(',') : undefined,
     month_from: fromMonth.value || undefined,
     month_to: toMonth.value || undefined,
     sort: sortKey.value === 'account' ? undefined : sortKey.value,
@@ -592,41 +587,6 @@ const platformsCovered = computed(
             <!-- Scrollable body -->
             <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                 <div class="pb-5">
-                    <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Platform</label>
-                    <div
-                        class="mt-2 grid gap-1 rounded-lg border p-1"
-                        :style="`border-color: var(--border); background-color: var(--surface); grid-template-columns: repeat(${availablePlatforms.length + 1}, minmax(0, 1fr))`"
-                    >
-                        <button
-                            type="button"
-                            class="rounded-md px-2 py-1.5 text-sm font-medium transition-colors"
-                            :style="
-                                draftPlatform === 'all'
-                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                    : 'color: var(--ink-muted)'
-                            "
-                            @click="draftPlatform = 'all'"
-                        >
-                            All
-                        </button>
-                        <button
-                            v-for="p in availablePlatforms"
-                            :key="p"
-                            type="button"
-                            class="rounded-md px-2 py-1.5 text-sm font-medium transition-colors"
-                            :style="
-                                draftPlatform === p
-                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                    : 'color: var(--ink-muted)'
-                            "
-                            @click="draftPlatform = p"
-                        >
-                            {{ platformLabel(p) }}
-                        </button>
-                    </div>
-                </div>
-
-                <div class="border-t py-5" style="border-color: var(--border)">
                     <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Project Manager</label>
                     <div class="mt-2">
                         <SearchableSelect
@@ -640,21 +600,35 @@ const platformsCovered = computed(
                 </div>
 
                 <div class="border-t py-5" style="border-color: var(--border)">
-                    <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Trend</label>
-                    <div class="mt-2 grid grid-cols-2 gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Trend</label>
+                        <span class="text-xs" style="color: var(--ink-faint)">Pick any combination</span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-2 gap-1.5">
                         <button
                             v-for="tab in trendTabs"
                             :key="tab.value"
                             type="button"
-                            class="rounded-md px-2 py-1.5 text-sm font-medium transition-colors"
+                            class="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium transition-colors"
                             :style="
-                                draftTrend === tab.value
-                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                    : 'color: var(--ink-muted)'
+                                draftTrend.includes(tab.value)
+                                    ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
+                                    : 'border-color: var(--border); background-color: var(--surface); color: var(--ink-muted)'
                             "
-                            @click="draftTrend = tab.value"
+                            @click="toggleDraftTrend(tab.value)"
                         >
-                            {{ tab.label }}
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                class="h-3.5 w-3.5 shrink-0 rounded-sm border"
+                                :style="
+                                    draftTrend.includes(tab.value)
+                                        ? 'border-color: var(--accent); background-color: var(--accent)'
+                                        : 'border-color: var(--border-strong)'
+                                "
+                            >
+                                <path v-if="draftTrend.includes(tab.value)" d="M5 12l4 4 10-10" style="color: var(--accent-ink)" />
+                            </svg>
+                            <span class="truncate">{{ tab.label }}</span>
                         </button>
                     </div>
                 </div>
@@ -662,16 +636,17 @@ const platformsCovered = computed(
                 <div class="border-t pt-5" style="border-color: var(--border)">
                     <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Compare months</label>
                     <p class="mt-1 text-xs" style="color: var(--ink-muted)">
-                        Score each account's cycle in the first month against its cycle in the second.
+                        Pick two specific months to compare for each account — not a date range.
                         Leave blank to use each account's latest cycle vs. the one before it.
                     </p>
 
-                    <!-- Two independent single-month pickers, not a range — each
-                         resolves to that account's own cycle at/before the picked
-                         month, compared as two specific points, with nothing
-                         implied about the months between them. -->
+                    <!-- Two independent single-month pickers framed as A vs B
+                         (not a range) — each resolves to that account's own
+                         cycle at/before the picked month, with nothing implied
+                         about the months between them. -->
                     <div class="mt-3 flex items-center gap-2">
                         <div ref="fromMonthPickerRef" class="relative w-full">
+                            <span class="mb-1 block text-[11px] font-medium" style="color: var(--ink-faint)">Month A</span>
                             <button
                                 type="button"
                                 class="inline-flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-80"
@@ -686,7 +661,7 @@ const platformsCovered = computed(
                                     <rect x="3" y="4" width="18" height="18" rx="2" />
                                     <path d="M3 10h18M8 2v4M16 2v4" />
                                 </svg>
-                                <span class="truncate">{{ draftFromMonth ? monthLabel(draftFromMonth) : 'From…' }}</span>
+                                <span class="truncate">{{ draftFromMonth ? monthLabel(draftFromMonth) : 'Pick a month…' }}</span>
                             </button>
 
                             <div v-if="fromMonthPickerOpen" class="absolute bottom-full left-0 z-20 mb-2 w-64 shadow-xl">
@@ -694,11 +669,10 @@ const platformsCovered = computed(
                             </div>
                         </div>
 
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0" style="color: var(--ink-faint)">
-                            <path d="M5 12h14M13 6l6 6-6 6" />
-                        </svg>
+                        <span class="mt-5 shrink-0 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">vs</span>
 
                         <div ref="toMonthPickerRef" class="relative w-full">
+                            <span class="mb-1 block text-[11px] font-medium" style="color: var(--ink-faint)">Month B</span>
                             <button
                                 type="button"
                                 class="inline-flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-80"
@@ -713,7 +687,7 @@ const platformsCovered = computed(
                                     <rect x="3" y="4" width="18" height="18" rx="2" />
                                     <path d="M3 10h18M8 2v4M16 2v4" />
                                 </svg>
-                                <span class="truncate">{{ draftToMonth ? monthLabel(draftToMonth) : 'To…' }}</span>
+                                <span class="truncate">{{ draftToMonth ? monthLabel(draftToMonth) : 'Pick a month…' }}</span>
                             </button>
 
                             <div v-if="toMonthPickerOpen" class="absolute bottom-full right-0 z-20 mb-2 w-64 shadow-xl">

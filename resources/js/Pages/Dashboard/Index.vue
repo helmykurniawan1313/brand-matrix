@@ -90,7 +90,7 @@ const renderHealthChart = () => {
     healthChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
 
     const tiers = props.cycleData.healthDistribution?.tiers ?? [];
     const counts = props.cycleData.healthDistribution?.counts ?? {};
@@ -136,8 +136,8 @@ const renderCycleTrendChart = () => {
     cycleTrendChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
-    const accent = getCssVar('--accent') || '#0f766e';
+    const border = getCssVar('--border') || '#e0e6e4';
+    const accent = getCssVar('--accent') || '#0f6e63';
 
     const trend = props.cycleData.monthlyTrend ?? [];
 
@@ -190,7 +190,7 @@ const renderViewsChart = () => {
     viewsChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
 
     const tiers = props.performanceData.viewsDistribution?.tiers ?? [];
     const counts = props.performanceData.viewsDistribution?.counts ?? {};
@@ -236,8 +236,8 @@ const renderPerformanceTrendChart = () => {
     performanceTrendChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
-    const accent = getCssVar('--accent') || '#0f766e';
+    const border = getCssVar('--border') || '#e0e6e4';
+    const accent = getCssVar('--accent') || '#0f6e63';
 
     const trend = props.performanceData.monthlyTrend ?? [];
 
@@ -290,8 +290,8 @@ const renderPlatformPieChart = () => {
     platformPieChart?.destroy();
 
     const surface = getCssVar('--surface') || '#ffffff';
-    const instagramColor = '#e1306c';
-    const tiktokColor = '#010101';
+    const instagramColor = getCssVar('--platform-instagram') || '#e1306c';
+    const tiktokColor = getCssVar('--platform-tiktok') || '#010101';
 
     platformPieChart = new Chart(platformPieCanvas.value, {
         type: 'pie',
@@ -331,8 +331,8 @@ const renderPerformancePlatformPieChart = () => {
     performancePlatformPieChart?.destroy();
 
     const surface = getCssVar('--surface') || '#ffffff';
-    const instagramColor = '#e1306c';
-    const tiktokColor = '#010101';
+    const instagramColor = getCssVar('--platform-instagram') || '#e1306c';
+    const tiktokColor = getCssVar('--platform-tiktok') || '#010101';
 
     const counts = props.performanceData.platformCounts ?? {};
 
@@ -524,12 +524,12 @@ onBeforeUnmount(() => {
                         </div>
                         <div class="mt-3 flex justify-center gap-5">
                             <div class="flex items-center gap-1.5">
-                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #e1306c"></span>
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: var(--platform-instagram)"></span>
                                 <span class="text-xs" style="color: var(--ink-muted)">IG</span>
                                 <span class="text-xs font-semibold tabular-nums" style="color: var(--ink)">{{ platformCounts.instagram ?? 0 }}</span>
                             </div>
                             <div class="flex items-center gap-1.5">
-                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #010101"></span>
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: var(--platform-tiktok)"></span>
                                 <span class="text-xs" style="color: var(--ink-muted)">TT</span>
                                 <span class="text-xs font-semibold tabular-nums" style="color: var(--ink)">{{ platformCounts.tiktok ?? 0 }}</span>
                             </div>
@@ -610,12 +610,12 @@ onBeforeUnmount(() => {
                         </div>
                         <div class="mt-3 flex justify-center gap-5">
                             <div class="flex items-center gap-1.5">
-                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #e1306c"></span>
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: var(--platform-instagram)"></span>
                                 <span class="text-xs" style="color: var(--ink-muted)">IG</span>
                                 <span class="text-xs font-semibold tabular-nums" style="color: var(--ink)">{{ performanceData.platformCounts?.instagram ?? 0 }}</span>
                             </div>
                             <div class="flex items-center gap-1.5">
-                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: #010101"></span>
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: var(--platform-tiktok)"></span>
                                 <span class="text-xs" style="color: var(--ink-muted)">TT</span>
                                 <span class="text-xs font-semibold tabular-nums" style="color: var(--ink)">{{ performanceData.platformCounts?.tiktok ?? 0 }}</span>
                             </div>

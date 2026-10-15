@@ -14,6 +14,7 @@ import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import AdsRankingModal from '../../Components/AdsRankingModal.vue';
+import ScoringInfoModal from '../../Components/ScoringInfoModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -437,7 +438,7 @@ const renderScoreDistributionChart = () => {
     scoreDistributionChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
     const colors = categoricalColors();
 
     const tiers = props.scoreDistribution.tiers ?? [];
@@ -701,6 +702,7 @@ const inputStyle =
     'mt-1 w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2';
 
 const showAdsRankingModal = ref(false);
+const showScoringInfo = ref(false);
 </script>
 
 <template>
@@ -938,6 +940,21 @@ const showAdsRankingModal = ref(false);
             class="mt-3 overflow-hidden rounded-lg border scroll-mt-4"
             style="border-color: var(--border); background-color: var(--surface)"
         >
+            <div class="flex items-center justify-end border-b px-3 py-2" style="border-color: var(--border)">
+                <button
+                    type="button"
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                    style="color: var(--ink-muted)"
+                    aria-label="How statuses are scored"
+                    title="How statuses are scored"
+                    @click="showScoringInfo = true"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4m0-4h.01" />
+                    </svg>
+                </button>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[900px]">
                     <thead>
@@ -1317,6 +1334,12 @@ const showAdsRankingModal = ref(false);
         <AdsRankingModal
             v-if="showAdsRankingModal"
             @close="showAdsRankingModal = false"
+        />
+
+        <ScoringInfoModal
+            v-if="showScoringInfo"
+            :metrics="['health']"
+            @close="showScoringInfo = false"
         />
 
         <FilterSummaryModal

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Chart from '../chartSetup';
-import MonthRangePicker from './MonthRangePicker.vue';
+import SingleMonthPicker from './SingleMonthPicker.vue';
 
 const props = defineProps({
     insight: {
@@ -84,16 +84,25 @@ const cycleMonths = computed(() => [...new Set(props.history.map((h) => h.month)
 const rangeFromMonth = ref('');
 const rangeToMonth = ref('');
 const hasPickedRange = computed(() => !!rangeFromMonth.value && !!rangeToMonth.value);
-const rangePickerOpen = ref(false);
-const rangePickerRef = ref(null);
 
-const onClickOutsideRangePicker = (event) => {
-    if (rangePickerRef.value && !rangePickerRef.value.contains(event.target)) {
-        rangePickerOpen.value = false;
+// Two independent single-month pickers (Month A vs Month B), not a range —
+// each resolves to this account's own cycle in that month, compared as two
+// specific points, with nothing implied about the months between them.
+const fromPickerOpen = ref(false);
+const fromPickerRef = ref(null);
+const toPickerOpen = ref(false);
+const toPickerRef = ref(null);
+
+const onClickOutsidePickers = (event) => {
+    if (fromPickerRef.value && !fromPickerRef.value.contains(event.target)) {
+        fromPickerOpen.value = false;
+    }
+    if (toPickerRef.value && !toPickerRef.value.contains(event.target)) {
+        toPickerOpen.value = false;
     }
 };
-onMounted(() => document.addEventListener('click', onClickOutsideRangePicker));
-onBeforeUnmount(() => document.removeEventListener('click', onClickOutsideRangePicker));
+onMounted(() => document.addEventListener('click', onClickOutsidePickers));
+onBeforeUnmount(() => document.removeEventListener('click', onClickOutsidePickers));
 
 const clearPickedRange = () => {
     rangeFromMonth.value = '';
@@ -237,9 +246,9 @@ const renderTrendChart = () => {
     if (labels.length === 0) return;
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
     const surface = getCssVar('--surface') || '#ffffff';
-    const colors = [getCssVar('--accent') || '#0f766e', '#c2410c', '#7c3aed'];
+    const colors = [getCssVar('--accent') || '#0f6e63', '#c2410c', '#7c3aed'];
 
     const datasets = [
         { label: 'Posts', data: posts },
@@ -340,82 +349,80 @@ onBeforeUnmount(destroyChart);
                     </button>
                 </div>
 
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <div ref="rangePickerRef" class="relative">
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-                            :style="
-                                hasPickedRange
-                                    ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
-                                    : 'border-color: var(--border); background-color: var(--surface); color: var(--ink-muted)'
-                            "
-                            @click="rangePickerOpen = !rangePickerOpen"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-                                <rect x="3" y="4" width="18" height="18" rx="2" />
-                                <path d="M3 10h18M8 2v4M16 2v4" />
-                            </svg>
-                            <template v-if="hasPickedRange">
-                                {{ monthLabel(rangeFromMonth) }} → {{ monthLabel(rangeToMonth) }}
-                            </template>
-                            <template v-else>Pick months to compare</template>
-                        </button>
+                <!-- One cohesive comparison control: two month pickers joined at a
+                     shared divider (reads as a single "A vs B" unit, not two
+                     independent buttons), with the resulting delta inline on
+                     the same bar instead of floating disconnected beside it. -->
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div
+                        class="inline-flex items-stretch overflow-visible rounded-md border"
+                        style="border-color: var(--border); background-color: var(--surface)"
+                    >
+                        <div ref="fromPickerRef" class="relative">
+                            <button
+                                type="button"
+                                class="inline-flex h-full items-center gap-1.5 rounded-l-md px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                                :style="rangeFromMonth ? 'color: var(--accent)' : 'color: var(--ink-muted)'"
+                                @click="fromPickerOpen = !fromPickerOpen"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5 shrink-0">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                                    <path d="M3 10h18M8 2v4M16 2v4" />
+                                </svg>
+                                {{ rangeFromMonth ? monthLabel(rangeFromMonth) : 'Month A' }}
+                            </button>
 
-                        <div
-                            v-if="rangePickerOpen"
-                            class="absolute left-0 top-full z-20 mt-2 w-72 overflow-hidden rounded-lg border shadow-xl"
-                            style="border-color: var(--border); background-color: var(--surface)"
-                        >
-                            <MonthRangePicker
-                                v-model:model-from="rangeFromMonth"
-                                v-model:model-to="rangeToMonth"
-                                :allowed-months="cycleMonths"
-                                class="!max-w-none !rounded-none !border-0 !shadow-none"
-                            />
-                            <div class="flex gap-2 border-t p-3" style="border-color: var(--border)">
-                                <button
-                                    v-if="rangeFromMonth || rangeToMonth"
-                                    type="button"
-                                    class="flex-1 rounded-md border py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                                    style="border-color: var(--border); color: var(--ink-muted)"
-                                    @click="clearPickedRange"
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    type="button"
-                                    class="flex-1 rounded-md py-1.5 text-xs font-semibold transition-opacity hover:opacity-90"
-                                    style="background-color: var(--accent); color: var(--accent-ink)"
-                                    @click="rangePickerOpen = false"
-                                >
-                                    Done
-                                </button>
+                            <div v-if="fromPickerOpen" class="absolute left-0 top-full z-20 mt-2 w-64 shadow-xl">
+                                <SingleMonthPicker v-model="rangeFromMonth" :allowed-months="cycleMonths" class="!max-w-none" />
                             </div>
                         </div>
+
+                        <div
+                            class="flex shrink-0 items-center border-x px-2 text-[10px] font-bold uppercase tracking-wide"
+                            style="border-color: var(--border); color: var(--ink-faint); background-color: var(--bg)"
+                        >
+                            vs
+                        </div>
+
+                        <div ref="toPickerRef" class="relative">
+                            <button
+                                type="button"
+                                class="inline-flex h-full items-center gap-1.5 rounded-r-md px-2.5 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                                :style="rangeToMonth ? 'color: var(--accent)' : 'color: var(--ink-muted)'"
+                                @click="toPickerOpen = !toPickerOpen"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5 shrink-0">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                                    <path d="M3 10h18M8 2v4M16 2v4" />
+                                </svg>
+                                {{ rangeToMonth ? monthLabel(rangeToMonth) : 'Month B' }}
+                            </button>
+
+                            <div v-if="toPickerOpen" class="absolute right-0 top-full z-20 mt-2 w-64 shadow-xl">
+                                <SingleMonthPicker v-model="rangeToMonth" :allowed-months="cycleMonths" class="!max-w-none" />
+                            </div>
+                        </div>
+
+                        <button
+                            v-if="rangeFromMonth || rangeToMonth"
+                            type="button"
+                            class="flex shrink-0 items-center rounded-r-md border-l px-2 transition-colors hover:opacity-70"
+                            style="border-color: var(--border); color: var(--ink-faint)"
+                            aria-label="Clear comparison"
+                            @click="clearPickedRange"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                                <path d="M18 6 6 18M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <button
-                        v-if="hasPickedRange"
-                        type="button"
-                        class="text-xs font-medium transition-opacity hover:opacity-70"
-                        style="color: var(--ink-muted)"
-                        @click="clearPickedRange"
-                    >
-                        Clear
-                    </button>
-
-                    <!-- Compared-against + follower delta folds into the same row as
-                         the picker, instead of a separate strip repeating the date. -->
-                    <p class="ml-auto flex items-center gap-1.5 text-xs" style="color: var(--ink-faint)">
-                        <template v-if="activeFrom">
-                            <span>vs {{ cycleRange(activeFrom.cycle_start_date, activeFrom.cycle_end_date) }}</span>
-                            <span v-if="followerDelta !== null" class="inline-flex items-center gap-0.5 font-semibold" :style="pctStyle(followerDelta)">
-                                · {{ followerDelta >= 0 ? '▲' : '▼' }} {{ fmtPct(followerDelta) }} followers
-                            </span>
-                        </template>
-                        <template v-else>No prior cycle to compare against.</template>
+                    <!-- Follower delta between the two picked points. -->
+                    <p v-if="followerDelta !== null" class="flex items-center gap-1 text-xs font-semibold" :style="pctStyle(followerDelta)">
+                        {{ followerDelta >= 0 ? '▲' : '▼' }} {{ fmtPct(followerDelta) }}
+                        <span class="font-normal" style="color: var(--ink-faint)">followers</span>
                     </p>
+                    <p v-else-if="!activeFrom" class="text-xs" style="color: var(--ink-faint)">No prior cycle to compare against.</p>
                 </div>
             </div>
 

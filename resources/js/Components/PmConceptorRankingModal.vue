@@ -294,9 +294,9 @@ const renderPersonChart = (series) => {
     destroyChart();
     if (!chartCanvas.value) return;
 
-    const accent = getCssVar('--accent') || '#0f766e';
+    const accent = getCssVar('--accent') || '#0f6e63';
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
 
     chartInstance = new Chart(chartCanvas.value, {
         type: 'line',

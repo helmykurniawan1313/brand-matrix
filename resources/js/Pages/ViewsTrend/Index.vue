@@ -44,8 +44,8 @@ const platformTabs = [
 ];
 
 const platformMeta = {
-    instagram: { label: 'IG', color: '#e1306c' },
-    tiktok: { label: 'TT', color: '#010101' },
+    instagram: { label: 'IG', color: 'var(--platform-instagram)' },
+    tiktok: { label: 'TT', color: 'var(--platform-tiktok)' },
 };
 
 const trendMeta = {
@@ -284,7 +284,7 @@ const showRankingModal = ref(false);
 <template>
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-            <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Views Trend</h1>
+            <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Account</h1>
             <p class="mt-1 text-sm" style="color: var(--ink-muted)">
                 Which accounts are dropping off, flat, or growing in post views — compared cycle over cycle.
                 <span v-if="hasMonthRange" class="ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style="background-color: var(--accent-soft); color: var(--accent)">

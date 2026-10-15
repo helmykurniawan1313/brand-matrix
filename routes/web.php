@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AccountGrowthController;
+use App\Http\Controllers\AccountHealthController;
+use App\Http\Controllers\AccountPerformanceController;
 use App\Http\Controllers\ContentInsightController;
 use App\Http\Controllers\CycleController;
 use App\Http\Controllers\DashboardController;
@@ -14,6 +17,7 @@ use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\ScoreBucketController;
 use App\Http\Controllers\SiteSettingController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\ViewsTrackerController;
 use App\Http\Controllers\ViewsTrendController;
 use App\Models\LegalPage;
 use Illuminate\Support\Facades\Route;
@@ -47,6 +51,23 @@ Route::middleware('auth')->group(function () {
         Route::get('accounts/{account}/instagram', [InstagramController::class, 'show'])->name('accounts.instagram.show');
         Route::get('accounts/{account}/instagram/media-insights', [InstagramController::class, 'mediaInsights'])->name('accounts.instagram.media-insights');
         Route::get('accounts/{account}/instagram/media', [InstagramController::class, 'mediaList'])->name('accounts.instagram.media');
+    });
+
+    Route::middleware('can-access:account-health')->group(function () {
+        Route::get('account-health', [AccountHealthController::class, 'index'])->name('account-health.index');
+    });
+
+    Route::middleware('can-access:account-growth')->group(function () {
+        Route::get('account-growth', [AccountGrowthController::class, 'index'])->name('account-growth.index');
+    });
+
+    Route::middleware('can-access:account-performance')->group(function () {
+        Route::get('account-performance', [AccountPerformanceController::class, 'index'])->name('account-performance.index');
+        Route::get('account-performance/{account}/trend', [AccountPerformanceController::class, 'trend'])->name('account-performance.trend');
+    });
+
+    Route::middleware('can-access:views-trackers')->group(function () {
+        Route::get('views-trackers', [ViewsTrackerController::class, 'index'])->name('views-trackers.index');
     });
 
     Route::middleware('can-access:cycles')->group(function () {

@@ -13,6 +13,7 @@ import SearchableSelect from '../../Components/SearchableSelect.vue';
 import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
+import ScoringInfoModal from '../../Components/ScoringInfoModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -398,7 +399,7 @@ const renderStatusDistributionChart = () => {
     statusDistributionChart?.destroy();
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
 
     const tiers = props.statusDistribution.tiers ?? [];
     const counts = props.statusDistribution.counts ?? {};
@@ -460,12 +461,14 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     statusDistributionChart?.destroy();
 });
+
+const showScoringInfo = ref(false);
 </script>
 
 <template>
         <div class="flex items-start justify-between gap-4">
             <div>
-                <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Views</h1>
+                <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Reels / Video</h1>
                 <p class="mt-1 text-sm" style="color: var(--ink-muted)">
                     Track individual social media posts and their performance.
                 </p>
@@ -682,6 +685,21 @@ onBeforeUnmount(() => {
             class="mt-4 overflow-hidden rounded-lg border scroll-mt-4"
             style="border-color: var(--border); background-color: var(--surface)"
         >
+            <div class="flex items-center justify-end border-b px-3 py-2" style="border-color: var(--border)">
+                <button
+                    type="button"
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                    style="color: var(--ink-muted)"
+                    aria-label="How statuses are scored"
+                    title="How statuses are scored"
+                    @click="showScoringInfo = true"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4m0-4h.01" />
+                    </svg>
+                </button>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[900px]">
                     <thead>
@@ -859,6 +877,12 @@ onBeforeUnmount(() => {
             count-noun="record"
             @close="closeFilterSummaryModal"
             @generated="onSummaryGenerated"
+        />
+
+        <ScoringInfoModal
+            v-if="showScoringInfo"
+            :metrics="['views']"
+            @close="showScoringInfo = false"
         />
 
         <!-- Filter modal -->

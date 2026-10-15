@@ -10,7 +10,6 @@ import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import StatCard from '../../Components/StatCard.vue';
-import AccountStatusCell from '../../Components/AccountStatusCell.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -237,28 +236,8 @@ const onCardSortChange = (event) => {
 const pmOptions = props.accountDepartmentEmployees.map((employee) => ({ id: employee.id, name: employee.name }));
 
 const platformMeta = {
-    instagram: { label: 'IG', color: '#e1306c' },
-    tiktok: { label: 'TT', color: '#010101' },
-};
-
-// Growth Rate / Views / Reach / Engagement status labels are all user-editable
-// text (Settings → Buckets → Label Tiers), so match case-insensitively against
-// the default wording rather than hardcoding exact casing; anything
-// unrecognized falls back to a neutral tone rather than breaking. Growth Rate
-// uses "Good"/"Need attention"; Views/Reach/Engagement use "Bagus"/"Perlu
-// Perhatian" — both wordings map to the same tones.
-const growthLabelTones = {
-    sip: { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
-    good: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
-    bagus: { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
-    cukup: { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
-    'need attention': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-    'perlu perhatian': { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-};
-
-const growthLabelTone = (label) => {
-    const tone = growthLabelTones[label?.toLowerCase()] ?? { bg: 'var(--border)', ink: 'var(--ink-muted)' };
-    return `background-color: ${tone.bg}; color: ${tone.ink}`;
+    instagram: { label: 'IG', color: 'var(--platform-instagram)' },
+    tiktok: { label: 'TT', color: 'var(--platform-tiktok)' },
 };
 
 // Create/Edit modal
@@ -585,46 +564,6 @@ const accountActions = (account) =>
                         <th
                             class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
                             style="color: var(--ink-faint)"
-                            @click="sortBy('health')"
-                        >
-                            Health
-                            <span v-if="sort === 'health'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
-                            @click="sortBy('growth')"
-                        >
-                            Growth Rate
-                            <span v-if="sort === 'growth'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
-                            @click="sortBy('reach')"
-                        >
-                            Reach
-                            <span v-if="sort === 'reach'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
-                            @click="sortBy('views')"
-                        >
-                            Views
-                            <span v-if="sort === 'views'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
-                            @click="sortBy('engagement')"
-                        >
-                            Engagement
-                            <span v-if="sort === 'engagement'">{{ direction === 'asc' ? '▲' : '▼' }}</span>
-                        </th>
-                        <th
-                            class="cursor-pointer select-none px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:opacity-70"
-                            style="color: var(--ink-faint)"
                             @click="sortBy('pm')"
                         >
                             PM
@@ -668,21 +607,6 @@ const accountActions = (account) =>
                             </div>
                             <span v-else style="color: var(--ink-faint)">—</span>
                         </td>
-                        <td class="px-4 py-3.5 text-sm">
-                            <AccountStatusCell :account="account" field="health_label" />
-                        </td>
-                        <td class="px-4 py-3.5 text-sm">
-                            <AccountStatusCell :account="account" field="growth_label" :tone="growthLabelTone" />
-                        </td>
-                        <td class="px-4 py-3.5 text-sm">
-                            <AccountStatusCell :account="account" field="reach_status" :tone="growthLabelTone" />
-                        </td>
-                        <td class="px-4 py-3.5 text-sm">
-                            <AccountStatusCell :account="account" field="views_status" :tone="growthLabelTone" />
-                        </td>
-                        <td class="px-4 py-3.5 text-sm">
-                            <AccountStatusCell :account="account" field="engagement_status" :tone="growthLabelTone" />
-                        </td>
                         <td class="px-4 py-3.5 text-sm" style="color: var(--ink-muted)">
                             {{ account.project_manager?.name ?? '—' }}
                         </td>
@@ -694,7 +618,7 @@ const accountActions = (account) =>
                         </td>
                     </tr>
                     <tr v-if="accounts.data.length === 0">
-                        <td colspan="10" class="px-4 py-16 text-center text-sm" style="color: var(--ink-faint)">
+                        <td colspan="5" class="px-4 py-16 text-center text-sm" style="color: var(--ink-faint)">
                             <template v-if="hasActiveFilters">No accounts match these filters.</template>
                             <template v-else>No accounts yet. Add one to start tracking cycles.</template>
                         </td>
@@ -767,39 +691,6 @@ const accountActions = (account) =>
                             {{ platformMeta[platform]?.label ?? '?' }}
                         </span>
                         <ActionsMenu :items="accountActions(account)" />
-                    </div>
-                </div>
-
-                <div class="mt-4 grid grid-cols-2 gap-2">
-                    <div class="rounded-md border p-2.5" style="border-color: var(--border); background-color: var(--bg)">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Health</p>
-                        <div class="mt-1">
-                            <AccountStatusCell :account="account" field="health_label" size="sm" />
-                        </div>
-                    </div>
-                    <div class="rounded-md border p-2.5" style="border-color: var(--border); background-color: var(--bg)">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Growth</p>
-                        <div class="mt-1">
-                            <AccountStatusCell :account="account" field="growth_label" :tone="growthLabelTone" size="sm" />
-                        </div>
-                    </div>
-                    <div class="rounded-md border p-2.5" style="border-color: var(--border); background-color: var(--bg)">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Reach</p>
-                        <div class="mt-1">
-                            <AccountStatusCell :account="account" field="reach_status" :tone="growthLabelTone" size="sm" />
-                        </div>
-                    </div>
-                    <div class="rounded-md border p-2.5" style="border-color: var(--border); background-color: var(--bg)">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Views</p>
-                        <div class="mt-1">
-                            <AccountStatusCell :account="account" field="views_status" :tone="growthLabelTone" size="sm" />
-                        </div>
-                    </div>
-                    <div class="col-span-2 rounded-md border p-2.5" style="border-color: var(--border); background-color: var(--bg)">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Engagement</p>
-                        <div class="mt-1">
-                            <AccountStatusCell :account="account" field="engagement_status" :tone="growthLabelTone" size="sm" />
-                        </div>
                     </div>
                 </div>
 

@@ -45,8 +45,8 @@ const platformLabels = { instagram: 'Instagram', tiktok: 'TikTok' };
 // Same icon paths/brand colors used in the app nav (AppLayout.vue) — reused
 // here so a video link reads as its platform's logo instead of plain text.
 const platformIcons = {
-    instagram: { path: 'M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM17.5 6.5h.01', color: '#e1306c' },
-    tiktok: { path: 'M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5', color: '#010101' },
+    instagram: { path: 'M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM17.5 6.5h.01', color: 'var(--platform-instagram)' },
+    tiktok: { path: 'M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5', color: 'var(--platform-tiktok)' },
 };
 
 const showProofLightbox = ref(false);

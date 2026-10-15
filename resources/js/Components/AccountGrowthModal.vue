@@ -303,7 +303,7 @@ const getCssVar = (name) => getComputedStyle(document.documentElement).getProper
 
 // Fixed categorical order (never cycled) — accent first, then two more app-consistent hues.
 const palette = () => [
-    getCssVar('--accent') || '#0f766e',
+    getCssVar('--accent') || '#0f6e63',
     '#c2410c',
     '#7c3aed',
 ];
@@ -355,7 +355,7 @@ const renderChart = (config, dataCycles, canvasKey = config.key) => {
     if (!canvas) return;
 
     const inkFaint = getCssVar('--ink-faint') || '#8b979b';
-    const border = getCssVar('--border') || '#d8dedc';
+    const border = getCssVar('--border') || '#e0e6e4';
     const colors = palette();
     const labels = dataCycles.map((c) => c.label);
 

@@ -35,6 +35,10 @@
     --status-kurang-ink: #9a4816;
     --status-parah-bg: #fbe2e2;
     --status-parah-ink: #a1282a;
+
+    --platform-instagram: #e1306c;
+    --platform-tiktok: #010101;
+    --overlay: rgba(0, 0, 0, 0.5);
 }
 
 @media (prefers-color-scheme: dark) {

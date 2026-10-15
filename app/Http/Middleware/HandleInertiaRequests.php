@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\LabelBucket;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -44,6 +45,14 @@ class HandleInertiaRequests extends Middleware
                 'ig_success' => $request->session()->get('ig_success'),
                 'ig_error' => $request->session()->get('ig_error'),
             ],
+            // Shared app-wide (not just Settings/Buckets) so StatusBadge.vue can
+            // resolve a label's stored color by matching the status text it's
+            // given against each LabelBucket's own `label`, instead of a
+            // hardcoded text→color map that silently breaks if a user renames
+            // or recolors a label in Settings.
+            'labelBuckets' => fn () => $request->user()
+                ? LabelBucket::select(['id', 'metric', 'min_score', 'label', 'color', 'custom_color_bg', 'custom_color_ink'])->get()
+                : [],
         ];
     }
 }

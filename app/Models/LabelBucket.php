@@ -49,6 +49,9 @@ class LabelBucket extends Model
         'metric',
         'min_score',
         'label',
+        'color',
+        'custom_color_bg',
+        'custom_color_ink',
     ];
 
     protected $casts = [

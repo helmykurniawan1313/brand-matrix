@@ -6,6 +6,7 @@ import AppLayout from '../../Layouts/AppLayout.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+import { STATUS_TONES, resolveBucketColor } from '../../utils/bucketColor';
 
 defineOptions({ layout: AppLayout });
 
@@ -65,18 +66,27 @@ const componentLabels = {
     engagement_score: 'Engagement Score',
 };
 
-// Fixed rotation of status tones for tier chips/range segments — assigned by
-// rank (best tier first), never by label text, so an unrecognized label
-// (e.g. a custom "Good"/"Cukup" from account_growth) still gets a sensible
-// best-to-worst color instead of falling back to gray.
-const tierTones = [
-    { bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
-    { bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
-    { bg: 'var(--status-cukup-bg)', ink: 'var(--status-cukup-ink)' },
-    { bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
-    { bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-];
-const toneAt = (index) => tierTones[Math.min(index, tierTones.length - 1)];
+// Fixed rotation of status tones — still used for Formula Weights' component
+// swatches (which aren't buckets and have no stored color) and as the
+// fallback for any bucket tier that has no `color` of its own yet.
+const toneAt = (index) => resolveBucketColor(null, index);
+
+// A bucket tier's own color (editable via the swatch picker below), falling
+// back to rank-based rotation when unset — this replaces the old fixed
+// tierTones/toneAt(rank) lookup for score/label tiers specifically.
+const tierTone = (bucket, rank) => resolveBucketColor(bucket, rank);
+
+const colorLabels = {
+    sip: 'SIP', bagus: 'Bagus', cukup: 'Cukup', kurang: 'Kurang', parah: 'Parah',
+};
+const swatchOptions = STATUS_TONES;
+
+const setBucketColor = (form, bucketId, token) => {
+    form.color = token;
+    form.custom_color_bg = null;
+    form.custom_color_ink = null;
+    markDirty(bucketId);
+};
 
 const inputStyle = 'rounded-md border px-2.5 py-1.5 text-sm tabular-nums transition-colors focus:outline-none';
 const inputSurface = 'border-color: var(--border); background-color: var(--surface-raised); color: var(--ink)';
@@ -115,7 +125,7 @@ const labelBucketsByMetric = computed(() => {
 // are visible at a glance. The floor tier (min = null) always starts at 0%;
 // the axis max is the highest finite tier's threshold padded by 25%, so the
 // top tier still reads as a real (non-infinite) span rather than a sliver.
-const rangeSegments = (tiers, minKey) => {
+const rangeSegments = (tiers, minKey, forms) => {
     const finite = tiers.map((t) => t[minKey]).filter((v) => v !== null).map(Number);
     const axisMax = finite.length ? Math.max(...finite) * 1.25 : 1;
 
@@ -131,12 +141,14 @@ const rangeSegments = (tiers, minKey) => {
         const widthPct = axisMax > 0 ? Math.max(((max - min) / axisMax) * 100, 0.5) : 0;
         // Rank from the *original* best-first order so tone matches the tier list below.
         const rank = tiers.length - 1 - i;
-        return { tier, startPct, widthPct, tone: toneAt(rank) };
+        // Prefer the live form's color (reflects unsaved edits) over the prop.
+        const live = forms?.[tier.id] ?? tier;
+        return { tier, startPct, widthPct, tone: tierTone(live, rank) };
     });
 };
 
-const scoreRangeSegments = (metric) => rangeSegments(scoreBucketsByMetric.value[metric] ?? [], 'min_rate');
-const labelRangeSegments = (metric) => rangeSegments(labelBucketsByMetric.value[metric] ?? [], 'min_score');
+const scoreRangeSegments = (metric) => rangeSegments(scoreBucketsByMetric.value[metric] ?? [], 'min_rate', scoreForms);
+const labelRangeSegments = (metric) => rangeSegments(labelBucketsByMetric.value[metric] ?? [], 'min_score', labelForms);
 
 const formatThreshold = (value) => {
     if (value === null || value === undefined) return '0';
@@ -148,7 +160,13 @@ const formatThreshold = (value) => {
 
 const scoreForms = reactive({});
 const initScoreForm = (bucket) => {
-    scoreForms[bucket.id] = useForm({ min_rate: bucket.min_rate, score: bucket.score });
+    scoreForms[bucket.id] = useForm({
+        min_rate: bucket.min_rate,
+        score: bucket.score,
+        color: bucket.color,
+        custom_color_bg: bucket.custom_color_bg,
+        custom_color_ink: bucket.custom_color_ink,
+    });
 };
 props.scoreBuckets.forEach(initScoreForm);
 
@@ -209,7 +227,13 @@ const addScoreBucket = (metric) => {
 
 const labelForms = reactive({});
 const initLabelForm = (bucket) => {
-    labelForms[bucket.id] = useForm({ min_score: bucket.min_score, label: bucket.label });
+    labelForms[bucket.id] = useForm({
+        min_score: bucket.min_score,
+        label: bucket.label,
+        color: bucket.color,
+        custom_color_bg: bucket.custom_color_bg,
+        custom_color_ink: bucket.custom_color_ink,
+    });
 };
 props.labelBuckets.forEach(initLabelForm);
 
@@ -283,6 +307,89 @@ const addLabelBucket = (metric) => {
         },
         onError: () => toast.error('Failed to add tier.'),
     });
+};
+
+// --- Live mini-examples ---
+// Mirrors ScoreBucketResolver::resolve() (app/Services/ScoreBucketResolver.php)
+// exactly: highest min (<= value) wins, null min = floor (-Infinity). Runs
+// against the FORM's live values (not the original props), so edits to a
+// tier's threshold/score update the example instantly, no save/reload needed.
+const resolveTier = (tiers, forms, minKey, valueKey, value) => {
+    let winner = null;
+    let winnerMin = -Infinity;
+    for (const tier of tiers) {
+        const live = forms[tier.id] ?? tier;
+        const rawMin = live[minKey];
+        const min = rawMin === null || rawMin === undefined || rawMin === '' ? -Infinity : Number(rawMin);
+        if (min > value) continue;
+        if (winner === null || min > winnerMin) {
+            winner = live;
+            winnerMin = min;
+        }
+    }
+    return winner ? Number(winner[valueKey]) : null;
+};
+
+// A representative rate for each score metric's example — chosen to read as
+// a plausible, clean mid-range value per metric rather than one number reused
+// everywhere (e.g. "7%" reads naturally for growth/view rates but not for a
+// reach rate that's typically >100%).
+const exampleRateByMetric = {
+    growth: 7,
+    reach: 120,
+    view: 45,
+    er_reach: 5,
+    er_follower: 8,
+};
+
+const scoreExample = (metric) => {
+    const tiers = scoreBucketsByMetric.value[metric] ?? [];
+    if (!tiers.length) return null;
+    const rate = exampleRateByMetric[metric] ?? 10;
+    const score = resolveTier(tiers, scoreForms, 'min_rate', 'score', rate);
+    if (score === null) return null;
+    return { rate, score };
+};
+
+// Health is the terminal aggregate; visibility/engagement feed into it. This
+// is just a plain-language hint, not a computed dependency chain.
+const feedsInto = {
+    growth: 'Health',
+    reach: 'Visibility',
+    view: 'Visibility',
+    er_reach: 'Engagement',
+    er_follower: 'Engagement',
+};
+
+const scoreExampleText = (metric) => {
+    const example = scoreExample(metric);
+    if (!example) return null;
+    const unit = metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' || metric === 'view' || metric === 'reach' ? '%' : '';
+    return `Example: a ${example.rate}${unit} ${metricTitles[metric].toLowerCase()} → scores ${example.score} → feeds into ${feedsInto[metric] ?? '—'}.`;
+};
+
+// Representative aggregate score for each label metric's example.
+const exampleScoreByMetric = {
+    visibility: 82,
+    engagement: 70,
+    health: 75,
+    growth: 65,
+    views: 50000,
+    followers: 10000,
+    account_growth: 7,
+    views_change: 15,
+    reach_change: 10,
+    engagement_change: 12,
+};
+
+const labelExampleText = (metric) => {
+    const tiers = labelBucketsByMetric.value[metric] ?? [];
+    if (!tiers.length) return null;
+    const score = exampleScoreByMetric[metric] ?? 50;
+    const label = resolveTier(tiers, labelForms, 'min_score', 'label', score);
+    if (label === null || label === undefined) return null;
+    const noun = ['views', 'followers'].includes(metric) ? 'value' : 'score';
+    return `Example: a ${noun} of ${score.toLocaleString()} → labeled ${label}.`;
 };
 
 // --- Formula weight editing ---
@@ -469,14 +576,22 @@ const saveWeights = (aggregate) => {
                     <span>higher →</span>
                 </div>
 
+                <!-- Live worked example — recalculates as tiers below are edited -->
+                <p v-if="scoreExampleText(metric)" class="mt-2 text-xs italic" style="color: var(--ink-muted)">
+                    {{ scoreExampleText(metric) }}
+                </p>
+
                 <div class="mt-4 space-y-2">
                     <div
                         v-for="(bucket, i) in scoreBucketsByMetric[metric]"
                         :key="bucket.id"
-                        class="flex items-center gap-2 rounded-md border px-3 py-2"
+                        class="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
                         style="border-color: var(--border); background-color: var(--bg)"
                     >
-                        <span class="h-2 w-2 shrink-0 rounded-full" :style="`background-color: ${toneAt(i).ink}`" />
+                        <span
+                            class="h-2 w-2 shrink-0 rounded-full"
+                            :style="`background-color: ${tierTone(scoreForms[bucket.id], scoreBucketsByMetric[metric].length - 1 - i).ink}`"
+                        />
                         <span class="text-xs" style="color: var(--ink-faint)">≥</span>
                         <input
                             v-model.number="scoreForms[bucket.id].min_rate"
@@ -500,6 +615,21 @@ const saveWeights = (aggregate) => {
                             class="w-20 disabled:opacity-60"
                             @input="markDirty(bucket.id)"
                         />
+
+                        <!-- Color swatch picker -->
+                        <div v-if="canEdit" class="flex items-center gap-1">
+                            <button
+                                v-for="token in swatchOptions"
+                                :key="token"
+                                type="button"
+                                class="h-5 w-5 shrink-0 rounded-full transition-transform"
+                                :style="`background-color: var(--status-${token}-ink); ${scoreForms[bucket.id].color === token ? 'outline: 2px solid var(--ink); outline-offset: 1px;' : ''}`"
+                                :aria-label="`Set color ${colorLabels[token]}`"
+                                :title="colorLabels[token]"
+                                @click="setBucketColor(scoreForms[bucket.id], bucket.id, token)"
+                            />
+                        </div>
+
                         <div v-if="canEdit" class="ml-auto flex items-center gap-1">
                             <button
                                 type="button"
@@ -626,14 +756,22 @@ const saveWeights = (aggregate) => {
                     </div>
                 </div>
 
+                <!-- Live worked example — recalculates as tiers below are edited -->
+                <p v-if="labelExampleText(metric)" class="mt-2 text-xs italic" style="color: var(--ink-muted)">
+                    {{ labelExampleText(metric) }}
+                </p>
+
                 <div class="mt-4 space-y-2">
                     <div
                         v-for="(bucket, i) in labelBucketsByMetric[metric]"
                         :key="bucket.id"
-                        class="flex items-center gap-2 rounded-md border px-3 py-2"
+                        class="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
                         style="border-color: var(--border); background-color: var(--bg)"
                     >
-                        <span class="h-2 w-2 shrink-0 rounded-full" :style="`background-color: ${toneAt(i).ink}`" />
+                        <span
+                            class="h-2 w-2 shrink-0 rounded-full"
+                            :style="`background-color: ${tierTone(labelForms[bucket.id], labelBucketsByMetric[metric].length - 1 - i).ink}`"
+                        />
                         <span class="text-xs" style="color: var(--ink-faint)">≥</span>
                         <input
                             v-model.number="labelForms[bucket.id].min_score"
@@ -655,6 +793,21 @@ const saveWeights = (aggregate) => {
                             class="w-24 disabled:opacity-60"
                             @input="markDirty(bucket.id)"
                         />
+
+                        <!-- Color swatch picker -->
+                        <div v-if="canEdit" class="flex items-center gap-1">
+                            <button
+                                v-for="token in swatchOptions"
+                                :key="token"
+                                type="button"
+                                class="h-5 w-5 shrink-0 rounded-full transition-transform"
+                                :style="`background-color: var(--status-${token}-ink); ${labelForms[bucket.id].color === token ? 'outline: 2px solid var(--ink); outline-offset: 1px;' : ''}`"
+                                :aria-label="`Set color ${colorLabels[token]}`"
+                                :title="colorLabels[token]"
+                                @click="setBucketColor(labelForms[bucket.id], bucket.id, token)"
+                            />
+                        </div>
+
                         <div v-if="canEdit" class="ml-auto flex items-center gap-1">
                             <button
                                 type="button"

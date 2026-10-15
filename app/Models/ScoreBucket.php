@@ -28,6 +28,9 @@ class ScoreBucket extends Model
         'metric',
         'min_rate',
         'score',
+        'color',
+        'custom_color_bg',
+        'custom_color_ink',
     ];
 
     protected $casts = [
