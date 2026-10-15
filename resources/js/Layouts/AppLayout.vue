@@ -7,6 +7,11 @@ import { useAuth } from '../composables/useAuth';
 
 const { isSuperAdmin, canAccessPage } = useAuth();
 
+// Bumped per CLAUDE.md's versioning convention (vMEGA.MAJOR.MINOR) — tagged
+// in git alongside this value each time it changes, so this string and the
+// corresponding git tag always stay in sync.
+const appVersion = 'v1.3.0';
+
 // path data for a 24x24 viewBox, stroke-based icon (matches the theme-toggle/menu icons already in this layout)
 const icons = {
     dashboard: 'M3 13h8V3H3v10zM13 21h8V11h-8v10zM13 3v6h8V3h-8zM3 21h8v-6H3v6z',
@@ -319,6 +324,7 @@ watch(() => page.url, closeMobileMenu);
             <div v-if="user" class="mt-3 border-t pt-3" style="border-color: var(--border)">
                 <ProfileDropdown :user="user" />
             </div>
+            <p class="mt-3 text-center text-[11px]" style="color: var(--ink-faint)">{{ appVersion }}</p>
         </div>
 
         <!-- Desktop sidebar -->
@@ -472,6 +478,9 @@ watch(() => page.url, closeMobileMenu);
                         <path d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
                     </svg>
                 </button>
+                <p v-if="!sidebarCollapsed" class="mt-2 text-center text-[11px]" style="color: var(--ink-faint)">
+                    {{ appVersion }}
+                </p>
             </div>
         </aside>
 

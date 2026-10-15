@@ -48,20 +48,28 @@ const platformMeta = {
     tiktok: { label: 'TT', color: 'var(--platform-tiktok)' },
 };
 
+// The backend still classifies each row into 4 precise buckets (setback/
+// stagnant/growing/stable, see ViewsTrendController) — the UI only ever
+// shows the 2-bucket rollup: growing+stable -> Increasing, setback+stagnant
+// -> Decreasing. insufficient_data stays its own case (not a growth/decline
+// reading at all).
+const trendGroup = (trend) => {
+    if (trend === 'growing' || trend === 'stable') return 'increasing';
+    if (trend === 'setback' || trend === 'stagnant') return 'decreasing';
+    return 'insufficient_data';
+};
+
 const trendMeta = {
-    setback: { label: 'Setback', bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
-    stagnant: { label: 'Stagnant', bg: 'var(--status-kurang-bg)', ink: 'var(--status-kurang-ink)' },
-    growing: { label: 'Growing', bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
-    stable: { label: 'Stable', bg: 'var(--status-bagus-bg)', ink: 'var(--status-bagus-ink)' },
+    increasing: { label: 'Increasing', bg: 'var(--status-sip-bg)', ink: 'var(--status-sip-ink)' },
+    decreasing: { label: 'Decreasing', bg: 'var(--status-parah-bg)', ink: 'var(--status-parah-ink)' },
     insufficient_data: { label: 'Not enough data', bg: 'var(--border)', ink: 'var(--ink-muted)' },
 };
 
 const trendTabs = [
     { value: 'all', label: 'All accounts', tone: null },
-    { value: 'setback', label: 'Setback', tone: 'setback' },
-    { value: 'stagnant', label: 'Stagnant', tone: 'stagnant' },
-    { value: 'growing', label: 'Growing', tone: 'growing' },
-    { value: 'stable', label: 'Stable', tone: 'stable' },
+    { value: 'increasing', label: 'Increasing', tone: 'increasing' },
+    { value: 'decreasing', label: 'Decreasing', tone: 'decreasing' },
+    { value: 'insufficient_data', label: 'No Data', tone: 'insufficient_data' },
 ];
 
 const applyFilters = () => {
@@ -209,7 +217,7 @@ const chartRowsWithDelta = computed(() => props.chartRows.filter((row) => row.de
 const chartRows = computed(() => {
     const filtered = chartTrendFilter.value === 'all'
         ? chartRowsWithDelta.value
-        : chartRowsWithDelta.value.filter((row) => row.trend === chartTrendFilter.value);
+        : chartRowsWithDelta.value.filter((row) => trendGroup(row.trend) === chartTrendFilter.value);
 
     return filtered.slice().sort((a, b) => (chartSort.value === 'best' ? b.delta_pct - a.delta_pct : a.delta_pct - b.delta_pct));
 });
@@ -327,8 +335,19 @@ const showRankingModal = ref(false);
         </div>
     </div>
 
-    <!-- KPI row: tap a tile to filter the table/chart below by that trend. -->
+    <!-- KPI row: tap a tile to filter the table/chart below by that trend.
+         Total is a plain count, not a filter toggle (there's nothing to
+         narrow down to — it's already "all accounts"). -->
     <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div
+            class="rounded-lg border p-4 text-left"
+            style="border-color: var(--border); background-color: var(--surface)"
+        >
+            <p class="text-xs font-medium uppercase tracking-wide" style="color: var(--ink-faint)">Total</p>
+            <p class="mt-1.5 font-display text-3xl font-bold" style="color: var(--ink)">{{ counts.total }}</p>
+            <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">accounts matching current filters</p>
+        </div>
+
         <button
             v-for="tab in trendTabs.slice(1)"
             :key="tab.value"
@@ -346,7 +365,13 @@ const showRankingModal = ref(false);
                 {{ counts[tab.value] }}
             </p>
             <p class="mt-0.5 text-xs" style="color: var(--ink-muted)">
-                {{ tab.value === 'setback' ? 'views dropped 15%+' : tab.value === 'stagnant' ? 'flat for 3+ cycles' : tab.value === 'growing' ? 'views up 15%+' : 'minor movement' }}
+                {{
+                    tab.value === 'increasing'
+                        ? 'views trending up vs. prior cycle'
+                        : tab.value === 'decreasing'
+                          ? 'views trending down vs. prior cycle'
+                          : 'not enough cycle history to classify'
+                }}
             </p>
         </button>
     </div>
@@ -568,11 +593,10 @@ const showRankingModal = ref(false);
                         <td class="px-4 py-3.5 text-sm">
                             <span
                                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-                                :style="`background-color: ${trendMeta[row.trend].bg}; color: ${trendMeta[row.trend].ink}`"
+                                :style="`background-color: ${trendMeta[trendGroup(row.trend)].bg}; color: ${trendMeta[trendGroup(row.trend)].ink}`"
                             >
-                                <span class="h-1.5 w-1.5 rounded-full" :style="`background-color: ${trendMeta[row.trend].ink}`" />
-                                {{ trendMeta[row.trend].label }}
-                                <template v-if="row.trend === 'stagnant'">({{ row.stagnant_streak }} cycles)</template>
+                                <span class="h-1.5 w-1.5 rounded-full" :style="`background-color: ${trendMeta[trendGroup(row.trend)].ink}`" />
+                                {{ trendMeta[trendGroup(row.trend)].label }}
                             </span>
                         </td>
                         <td class="px-4 py-3.5 text-right text-sm tabular-nums" style="color: var(--ink)">{{ formatNumber(row.last_avg_views) }}</td>
@@ -806,7 +830,7 @@ const showRankingModal = ref(false);
 
                 <div class="border-t py-5" style="border-color: var(--border)">
                     <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Trend</label>
-                    <div class="mt-2 grid grid-cols-3 gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
+                    <div class="mt-2 grid grid-cols-4 gap-1 rounded-lg border p-1" style="border-color: var(--border); background-color: var(--surface)">
                         <button
                             v-for="tab in trendTabs"
                             :key="tab.value"

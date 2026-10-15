@@ -350,10 +350,10 @@ const destroy = () => {
     router.delete(`/performances/${deletingPerformance.value.id}`, {
         preserveScroll: true,
         onSuccess: () => {
-            toast.success('Views record deleted.');
+            toast.success('Reels / Video record deleted.');
             deletingPerformance.value = null;
         },
-        onError: () => toast.error('Failed to delete views record.'),
+        onError: () => toast.error('Failed to delete Reels / Video record.'),
         onFinish: () => {
             deleting.value = false;
         },
@@ -480,7 +480,7 @@ const showScoringInfo = ref(false);
                 style="background-color: var(--accent); color: var(--accent-ink)"
                 @click="openCreate"
             >
-                + Add Views
+                + Add Reels / Video
             </button>
         </div>
 
@@ -791,7 +791,7 @@ const showScoringInfo = ref(false);
                         </tr>
                         <tr v-if="performances.data.length === 0">
                             <td colspan="10" class="px-4 py-12 text-center text-sm" style="color: var(--ink-faint)">
-                                No views records yet. Add one to get started.
+                                No Reels / Video records yet. Add one to get started.
                             </td>
                         </tr>
                     </tbody>
@@ -860,8 +860,8 @@ const showScoringInfo = ref(false);
 
         <ConfirmDialog
             :open="!!deletingPerformance"
-            title="Delete this views record?"
-            message="This will permanently remove this views record. This cannot be undone."
+            title="Delete this Reels / Video record?"
+            message="This will permanently remove this Reels / Video record. This cannot be undone."
             :processing="deleting"
             @confirm="destroy"
             @cancel="cancelDestroy"

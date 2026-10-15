@@ -119,10 +119,17 @@ class ViewsTrendController extends Controller
         $platform = $request->string('platform')->toString();
         $platform = in_array($platform, ['instagram', 'tiktok'], true) ? $platform : 'all';
 
-        $trendFilter = $request->string('trend')->toString();
-        $trendFilter = in_array($trendFilter, ['setback', 'stagnant', 'growing', 'stable', 'insufficient_data'], true)
-            ? $trendFilter
-            : null;
+        // The UI only exposes two buckets (Increasing/Decreasing) over the
+        // underlying 4-way classification — growing+stable count as
+        // Increasing, setback+stagnant count as Decreasing. insufficient_data
+        // stays its own bucket since it isn't a growth/decline reading at all.
+        $trendGroupValues = [
+            'increasing' => ['growing', 'stable'],
+            'decreasing' => ['setback', 'stagnant'],
+            'insufficient_data' => ['insufficient_data'],
+        ];
+        $trendFilterGroup = $request->string('trend')->toString();
+        $trendFilterValues = $trendGroupValues[$trendFilterGroup] ?? null;
 
         // From/To month picker — an explicit comparison, not just "whatever
         // cycle happens to precede the picked month". "Last cycle" becomes
@@ -213,6 +220,11 @@ class ViewsTrendController extends Controller
             'growing' => $rows->where('trend', 'growing')->count(),
             'stable' => $rows->where('trend', 'stable')->count(),
             'insufficient_data' => $rows->where('trend', 'insufficient_data')->count(),
+            // Grouped counts the UI's two stat cards actually show — Increasing
+            // (growing + stable) / Decreasing (setback + stagnant).
+            'increasing' => $rows->whereIn('trend', ['growing', 'stable'])->count(),
+            'decreasing' => $rows->whereIn('trend', ['setback', 'stagnant'])->count(),
+            'total' => $rows->count(),
         ];
 
         // Worst-first is the default: setback -> stagnant -> stable -> growing -> insufficient,
@@ -233,7 +245,7 @@ class ViewsTrendController extends Controller
         };
 
         $sorted = $rows
-            ->when($trendFilter, fn (Collection $rows) => $rows->where('trend', $trendFilter))
+            ->when($trendFilterValues, fn (Collection $rows) => $rows->whereIn('trend', $trendFilterValues))
             ->sort(function ($a, $b) use ($comparator, $sortKey, $direction) {
                 $result = $comparator($a, $b);
 
@@ -250,7 +262,7 @@ class ViewsTrendController extends Controller
         return [
             'rows' => $sorted,
             'counts' => $counts,
-            'filters' => ['search' => $search, 'platform' => $platform, 'trend' => $trendFilter, 'month_from' => $monthFrom, 'month_to' => $monthTo, 'sort' => $sortKey, 'direction' => $direction],
+            'filters' => ['search' => $search, 'platform' => $platform, 'trend' => $trendFilterGroup ?: null, 'month_from' => $monthFrom, 'month_to' => $monthTo, 'sort' => $sortKey, 'direction' => $direction],
         ];
     }
 
