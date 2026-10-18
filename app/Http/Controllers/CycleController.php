@@ -186,12 +186,15 @@ class CycleController extends Controller
     public function pdf(Request $request, MetricCalculator $calculator): HttpResponse
     {
         ['cycles' => $cycles, 'filterSummary' => $filterSummary] = $this->filteredScoredCyclesForExport($request, $calculator);
+        $healthColors = $this->healthLabelColors();
 
         $pdf = Pdf::loadView('pdf.cycles-list', [
             'cycles' => $cycles,
             'generatedAt' => now()->format('M j, Y g:i A'),
             'filterSummary' => $filterSummary,
             'aiSummary' => $request->string('ai_summary')->trim()->toString() ?: null,
+            'healthBreakdown' => $this->healthLabelBreakdown($cycles, $healthColors),
+            'healthColors' => $healthColors,
         ])->setPaper('a4', 'landscape');
 
         return $pdf->download('performance-cycles-'.now()->format('Y-m-d').'.pdf');
@@ -200,11 +203,48 @@ class CycleController extends Controller
     public function exportExcel(Request $request, MetricCalculator $calculator): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         ['cycles' => $cycles] = $this->filteredScoredCyclesForExport($request, $calculator);
+        $healthColors = $this->healthLabelColors();
 
         return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\CyclesExport($cycles),
+            new \App\Exports\CyclesExport($cycles, $this->healthLabelBreakdown($cycles, $healthColors), $healthColors),
             'performance-cycles-'.now()->format('Y-m-d').'.xlsx',
         );
+    }
+
+    /**
+     * Each Health label's resolved tier color (BucketColorResolver), ordered
+     * best-to-worst, keyed by label text — shared by the summary table AND
+     * the Health column of the full per-cycle list, so both exports visually
+     * match the app's live StatusBadge for every Health label shown.
+     *
+     * @return array<string, array{bg: string, ink: string}>
+     */
+    private function healthLabelColors(): array
+    {
+        $buckets = LabelBucket::where('metric', LabelBucket::METRIC_HEALTH)
+            ->orderByDesc('min_score')
+            ->get();
+
+        $colors = [];
+        foreach ($buckets->values() as $rank => $bucket) {
+            $colors[$bucket->label] = \App\Services\BucketColorResolver::resolve($bucket, $rank);
+        }
+
+        return $colors;
+    }
+
+    /**
+     * How many cycles in the exported set landed on each Health label, ordered
+     * best-to-worst by the label bucket's own min_score — a quick "how many
+     * Bagus, how many Kurang..." summary alongside the full row-per-cycle list.
+     */
+    private function healthLabelBreakdown(Collection $cycles, array $healthColors): Collection
+    {
+        return collect($healthColors)->map(fn ($color, $label) => [
+            'label' => $label,
+            'count' => $cycles->filter(fn ($cycle) => $cycle['scores']['health_label'] === $label)->count(),
+            'color' => $color,
+        ])->values();
     }
 
     public function pdfSingle(Cycle $cycle, MetricCalculator $calculator): HttpResponse

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\AccountPerformanceExport;
 use App\Models\Account;
 use App\Models\Cycle;
 use App\Models\Employee;
@@ -9,12 +10,15 @@ use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
 use App\Models\ScoreBucket;
 use App\Services\MetricCalculator;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * Account Performance — same Growth/Visibility/Engagement/Health breakdown
@@ -27,20 +31,10 @@ class AccountPerformanceController extends Controller
 {
     public function index(Request $request, MetricCalculator $calculator): Response
     {
-        $search = $request->string('search')->trim()->toString() ?: null;
-        $pmId = $request->integer('project_manager_id') ?: null;
-        $healthFilter = array_values(array_filter(explode(',', $request->string('health_label')->trim()->toString())));
+        ['rows' => $rows] = $this->filteredRows($request, $calculator);
+
         $page = $request->integer('page', 1);
         $perPage = 15;
-
-        $accountIds = Account::query()
-            ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
-            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
-            ->pluck('id');
-
-        $rows = $this->latestCyclePerAccountPlatform($accountIds, $calculator)
-            ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
-            ->values();
 
         $paginator = new LengthAwarePaginator(
             $rows->forPage($page, $perPage)->values(),
@@ -56,9 +50,10 @@ class AccountPerformanceController extends Controller
                 'total' => $rows->count(),
             ],
             'filters' => [
-                'search' => $search,
-                'project_manager_id' => $pmId,
-                'health_label' => $healthFilter,
+                'search' => $request->string('search')->trim()->toString() ?: null,
+                'project_manager_id' => $request->integer('project_manager_id') ?: null,
+                'health_label' => $this->parseLabelFilter($request, 'health_label'),
+                'month_to' => $request->string('month_to')->trim()->toString() ?: null,
             ],
             'accountDepartmentEmployees' => Employee::whereHas(
                 'department',
@@ -67,7 +62,84 @@ class AccountPerformanceController extends Controller
             'healthLabels' => LabelBucket::where('metric', LabelBucket::METRIC_HEALTH)
                 ->orderByDesc('min_score')
                 ->pluck('label'),
+            // Portable distinct-months list (no DATE_FORMAT — not supported by
+            // the SQLite connection the test suite runs on), same convention
+            // as ViewsTrendController's month picker.
+            'months' => Cycle::query()
+                ->pluck('cycle_start_date')
+                ->map(fn ($date) => $date->format('Y-m'))
+                ->unique()
+                ->sort()
+                ->values(),
         ]);
+    }
+
+    public function pdf(Request $request, MetricCalculator $calculator): HttpResponse
+    {
+        ['rows' => $rows, 'filterSummary' => $filterSummary] = $this->filteredRows($request, $calculator);
+
+        $pdf = Pdf::loadView('pdf.account-performance-list', [
+            'rows' => $rows,
+            'generatedAt' => now()->format('M j, Y g:i A'),
+            'filterSummary' => $filterSummary,
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('account-performance-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    public function exportExcel(Request $request, MetricCalculator $calculator): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        ['rows' => $rows] = $this->filteredRows($request, $calculator);
+
+        return Excel::download(
+            new AccountPerformanceExport($rows),
+            'account-performance-'.now()->format('Y-m-d').'.xlsx',
+        );
+    }
+
+    /**
+     * Comma-separated query param -> array of label strings.
+     */
+    private function parseLabelFilter(Request $request, string $key): array
+    {
+        return array_values(array_filter(explode(',', $request->string($key)->trim()->toString())));
+    }
+
+    /**
+     * The filtered row set shared by the page, PDF export, and Excel export —
+     * one place for search/PM/health/month filtering so all three stay in sync.
+     */
+    private function filteredRows(Request $request, MetricCalculator $calculator): array
+    {
+        $search = $request->string('search')->trim()->toString() ?: null;
+        $pmId = $request->integer('project_manager_id') ?: null;
+        $healthFilter = $this->parseLabelFilter($request, 'health_label');
+        $monthTo = $request->string('month_to')->trim()->toString() ?: null;
+
+        $accountIds = Account::query()
+            ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
+            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
+            ->pluck('id');
+
+        $rows = $this->latestCyclePerAccountPlatform($accountIds, $calculator, $monthTo)
+            ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
+            ->values();
+
+        $parts = [];
+        if ($search) {
+            $parts[] = 'search: "'.$search.'"';
+        }
+        if ($healthFilter) {
+            $parts[] = 'health: '.implode(', ', $healthFilter);
+        }
+        if ($monthTo) {
+            $parts[] = 'as of: '.$monthTo;
+        }
+
+        return [
+            'rows' => $rows,
+            'filterSummary' => $parts ? implode(' · ', $parts) : 'none',
+        ];
     }
 
     /**
@@ -116,8 +188,13 @@ class AccountPerformanceController extends Controller
      * combination's MOST RECENT cycle's full score breakdown — same
      * per-platform grouping as Account Health/Account Growth, so an account
      * with both Instagram and TikTok cycles shows two separate rows.
+     *
+     * $monthTo (optional, 'Y-m'): when set, "most recent" means the latest
+     * cycle AT OR BEFORE that month instead of the account's true latest —
+     * lets the page be viewed "as of" a past month. An account with no cycle
+     * at/before that month is simply excluded, not back-filled with a later one.
      */
-    private function latestCyclePerAccountPlatform(Collection $accountIds, MetricCalculator $calculator): Collection
+    private function latestCyclePerAccountPlatform(Collection $accountIds, MetricCalculator $calculator, ?string $monthTo = null): Collection
     {
         if ($accountIds->isEmpty()) {
             return collect();
@@ -136,7 +213,7 @@ class AccountPerformanceController extends Controller
             ->orderBy('cycle_start_date')
             ->get()
             ->groupBy('account_id')
-            ->flatMap(function (Collection $accountCycles, int $accountId) use ($accountsById, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights) {
+            ->flatMap(function (Collection $accountCycles, int $accountId) use ($accountsById, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $monthTo) {
                 $account = $accountsById->get($accountId);
                 if (! $account) {
                     return [];
@@ -144,8 +221,14 @@ class AccountPerformanceController extends Controller
 
                 return $accountCycles
                     ->groupBy(fn (Cycle $cycle) => $cycle->platform ?? 'instagram')
-                    ->map(function (Collection $cycles, string $platform) use ($account, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights) {
+                    ->map(function (Collection $cycles, string $platform) use ($account, $calculator, $scoreBuckets, $labelBuckets, $formulaWeights, $monthTo) {
+                        if ($monthTo) {
+                            $cycles = $cycles->filter(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m') <= $monthTo);
+                        }
                         $latest = $cycles->last();
+                        if (! $latest) {
+                            return null;
+                        }
                         $scores = $calculator->calculate($latest, $scoreBuckets, $labelBuckets, $formulaWeights);
 
                         return [
@@ -165,6 +248,7 @@ class AccountPerformanceController extends Controller
                             'health_label' => $scores['health_label'],
                         ];
                     })
+                    ->filter()
                     ->values();
             })
             ->sortBy('account_name')

@@ -14,6 +14,7 @@ use App\Http\Controllers\InstagramController;
 use App\Http\Controllers\LabelBucketController;
 use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\PerformanceController;
+use App\Http\Controllers\ReportPromptController;
 use App\Http\Controllers\ScoreBucketController;
 use App\Http\Controllers\SiteSettingController;
 use App\Http\Controllers\UserController;
@@ -64,6 +65,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can-access:account-performance')->group(function () {
         Route::get('account-performance', [AccountPerformanceController::class, 'index'])->name('account-performance.index');
         Route::get('account-performance/{account}/trend', [AccountPerformanceController::class, 'trend'])->name('account-performance.trend');
+        Route::get('account-performance-pdf', [AccountPerformanceController::class, 'pdf'])->name('account-performance.pdf');
+        Route::get('account-performance-excel', [AccountPerformanceController::class, 'exportExcel'])->name('account-performance.excel');
     });
 
     Route::middleware('can-access:views-trackers')->group(function () {
@@ -169,6 +172,9 @@ Route::middleware('auth')->group(function () {
 
         Route::get('settings/site', [SiteSettingController::class, 'edit'])->name('site-settings.edit');
         Route::put('settings/site', [SiteSettingController::class, 'update'])->name('site-settings.update');
+
+        Route::get('report-prompt', [ReportPromptController::class, 'index'])->name('report-prompt.index');
+        Route::post('report-prompt/generate', [ReportPromptController::class, 'generate'])->name('report-prompt.generate');
     });
 });
 

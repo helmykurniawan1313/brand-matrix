@@ -32,6 +32,7 @@ const icons = {
     reelsVideo: 'M23 7l-7 5 7 5V7zM1 5h15a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H1a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
     account: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
     accountGrowth: 'M23 6l-9.5 9.5-5-5L1 18 M17 6h6v6',
+    reportPrompt: 'M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8',
 };
 
 // `page` matches a key in the backend's User::PAGES — items without one
@@ -74,6 +75,7 @@ const navItems = computed(() => {
     return isSuperAdmin.value
         ? [
               ...items,
+              { label: 'Report Prompt', href: '/report-prompt', icon: icons.reportPrompt },
               { label: 'Users', href: '/users', icon: icons.users },
               { label: 'Site Settings', href: '/settings/site', icon: icons.siteSettings },
           ]

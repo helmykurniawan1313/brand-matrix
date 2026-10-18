@@ -17,11 +17,14 @@
         .ai-summary p { margin: 0; line-height: 1.5; }
         .legend { margin-top: 14px; padding-top: 6px; font-size: 7.5px; color: #566469; border-top: 1px solid #d8dedc; text-align: center; }
         .legend strong { color: #12181a; }
+        .summary-table { margin-top: 16px; width: auto; }
+        .summary-table th, .summary-table td { padding: 5px 14px; text-align: center; }
+        .summary-table td { font-size: 13px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Brand Matrix — Performance Cycles</h1>
+        <h1>Brand Matrix — Account Health by Cycles</h1>
         <p class="meta">
             Generated {{ $generatedAt }} &middot; Filters: {{ $filterSummary }} &middot;
             {{ count($cycles) }} {{ Str::plural('cycle', count($cycles)) }}
@@ -34,6 +37,23 @@
             <p>{{ $aiSummary }}</p>
         </div>
     @endif
+
+    <table class="summary-table">
+        <thead>
+            <tr>
+                @foreach ($healthBreakdown as $row)
+                    <th style="background-color: #{{ $row['color']['bg'] }}; color: #{{ $row['color']['ink'] }}">{{ $row['label'] }}</th>
+                @endforeach
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                @foreach ($healthBreakdown as $row)
+                    <td style="background-color: #{{ $row['color']['bg'] }}; color: #{{ $row['color']['ink'] }}">{{ $row['count'] }}</td>
+                @endforeach
+            </tr>
+        </tbody>
+    </table>
 
     <table>
         <thead>
@@ -60,7 +80,8 @@
                     <td class="num">{{ $cycle['scores']['visibility_rate'] }}</td>
                     <td class="num">{{ $cycle['scores']['engagement_score'] }}</td>
                     <td class="num">{{ $cycle['scores']['health_rate'] }}</td>
-                    <td class="num">{{ $cycle['scores']['health_label'] }}</td>
+                    @php($color = $healthColors[$cycle['scores']['health_label']] ?? null)
+                    <td class="num" style="{{ $color ? "background-color: #{$color['bg']}; color: #{$color['ink']}" : '' }}">{{ $cycle['scores']['health_label'] }}</td>
                 </tr>
             @empty
                 <tr>
