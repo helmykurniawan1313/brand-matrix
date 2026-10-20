@@ -111,7 +111,10 @@ class ReportPromptController extends Controller
                     'reach' => $cycle->reach,
                     'views' => $cycle->views,
                     'engagement' => $cycle->engagement,
+                    'ads_currency' => $cycle->ads_currency,
+                    'reach_views_ads_used' => (bool) $cycle->reach_views_ads_used,
                     'reach_views_ads_spend' => (float) $cycle->reach_views_ads_spend,
+                    'engagement_ads_used' => (bool) $cycle->engagement_ads_used,
                     'engagement_ads_spend' => (float) $cycle->engagement_ads_spend,
                     'growth_rate' => round($scores['growth_rate'], 2),
                     'visibility_rate' => round($scores['visibility_rate'], 2),
@@ -130,7 +133,7 @@ class ReportPromptController extends Controller
 
     private function performancesSection(string $monthFrom, string $monthTo, ?int $pmId): array
     {
-        $rows = Performance::with('account', 'projectManager')
+        $rows = Performance::with('account', 'projectManager', 'conceptor', 'editor')
             ->when($pmId, fn ($query) => $query->where('project_manager_id', $pmId))
             ->get()
             ->filter(function (Performance $p) use ($monthFrom, $monthTo) {
@@ -144,11 +147,16 @@ class ReportPromptController extends Controller
             ->map(fn (Performance $p) => [
                 'account' => $p->account->name ?? '—',
                 'platform' => $p->platform === 'tiktok' ? 'TikTok' : 'Instagram',
+                'content_type' => $p->ig_media_product_type,
                 'pm' => $p->projectManager->name ?? '—',
+                'conceptor' => $p->conceptor->name ?? '—',
+                'editor' => $p->editor->name ?? '—',
                 'post_date' => $p->post_date?->format('M j, Y'),
+                'preview_date' => $p->preview_date?->format('M j, Y'),
                 'followers' => $p->followers,
                 'total_views_h7' => $p->total_views_h7,
                 'ads' => $p->ads ? 'Yes' : 'No',
+                'notes' => $p->notes,
             ])
             ->values();
 
