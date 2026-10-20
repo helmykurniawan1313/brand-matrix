@@ -1408,6 +1408,17 @@ const showScoringInfo = ref(false);
                     </div>
 
                     <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Platform</label>
+                        <SearchableSelect
+                            v-model="draftPlatformFilter"
+                            :options="platformOptions"
+                            clearable
+                            clear-label="All platforms"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Growth</label>
                         <MultiSelectDropdown
                             v-model="draftGrowthFilter"
