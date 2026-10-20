@@ -48,13 +48,18 @@ class ReportPromptController extends Controller
     public function generate(Request $request, MetricCalculator $calculator): JsonResponse
     {
         $data = $request->validate([
-            'month' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'month_from' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'month_to' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
             'project_manager_id' => ['nullable', 'integer', 'exists:employees,id'],
             'sources' => ['required', 'array', 'min:1'],
             'sources.*' => ['string', 'in:cycles,performances,content_insights,employees'],
         ]);
 
-        $month = $data['month'];
+        $monthFrom = $data['month_from'];
+        $monthTo = $data['month_to'] ?? $monthFrom;
+        if ($monthTo < $monthFrom) {
+            [$monthFrom, $monthTo] = [$monthTo, $monthFrom];
+        }
         $pmId = $data['project_manager_id'] ?? null;
         $sources = $data['sources'];
         $pm = $pmId ? Employee::find($pmId) : null;
@@ -62,24 +67,24 @@ class ReportPromptController extends Controller
         $sections = [];
 
         if (in_array('cycles', $sources, true)) {
-            $sections['cycles'] = $this->cyclesSection($month, $pmId, $calculator);
+            $sections['cycles'] = $this->cyclesSection($monthFrom, $monthTo, $pmId, $calculator);
         }
         if (in_array('performances', $sources, true)) {
-            $sections['performances'] = $this->performancesSection($month, $pmId);
+            $sections['performances'] = $this->performancesSection($monthFrom, $monthTo, $pmId);
         }
         if (in_array('content_insights', $sources, true)) {
-            $sections['content_insights'] = $this->contentInsightsSection($month, $pmId);
+            $sections['content_insights'] = $this->contentInsightsSection($monthFrom, $monthTo, $pmId);
         }
         if (in_array('employees', $sources, true)) {
             $sections['employees'] = $this->employeesSection($pmId);
         }
 
-        $prompt = $this->buildPrompt($month, $pm, $sections);
+        $prompt = $this->buildPrompt($monthFrom, $monthTo, $pm, $sections);
 
         return response()->json(['prompt' => $prompt]);
     }
 
-    private function cyclesSection(string $month, ?int $pmId, MetricCalculator $calculator): array
+    private function cyclesSection(string $monthFrom, string $monthTo, ?int $pmId, MetricCalculator $calculator): array
     {
         $scoreBuckets = ScoreBucket::all();
         $labelBuckets = LabelBucket::all();
@@ -88,7 +93,11 @@ class ReportPromptController extends Controller
         $cycles = Cycle::with('account', 'projectManager')
             ->when($pmId, fn ($query) => $query->where('project_manager_id', $pmId))
             ->get()
-            ->filter(fn (Cycle $cycle) => $cycle->cycle_start_date->format('Y-m') === $month)
+            ->filter(function (Cycle $cycle) use ($monthFrom, $monthTo) {
+                $month = $cycle->cycle_start_date->format('Y-m');
+
+                return $month >= $monthFrom && $month <= $monthTo;
+            })
             ->map(function (Cycle $cycle) use ($calculator, $scoreBuckets, $labelBuckets, $formulaWeights) {
                 $scores = $calculator->calculate($cycle, $scoreBuckets, $labelBuckets, $formulaWeights);
 
@@ -117,12 +126,19 @@ class ReportPromptController extends Controller
         ];
     }
 
-    private function performancesSection(string $month, ?int $pmId): array
+    private function performancesSection(string $monthFrom, string $monthTo, ?int $pmId): array
     {
         $rows = Performance::with('account', 'projectManager')
             ->when($pmId, fn ($query) => $query->where('project_manager_id', $pmId))
             ->get()
-            ->filter(fn (Performance $p) => $p->post_date && $p->post_date->format('Y-m') === $month)
+            ->filter(function (Performance $p) use ($monthFrom, $monthTo) {
+                if (! $p->post_date) {
+                    return false;
+                }
+                $month = $p->post_date->format('Y-m');
+
+                return $month >= $monthFrom && $month <= $monthTo;
+            })
             ->map(fn (Performance $p) => [
                 'account' => $p->account->name ?? '—',
                 'platform' => $p->platform === 'tiktok' ? 'TikTok' : 'Instagram',
@@ -140,11 +156,18 @@ class ReportPromptController extends Controller
         ];
     }
 
-    private function contentInsightsSection(string $month, ?int $pmId): array
+    private function contentInsightsSection(string $monthFrom, string $monthTo, ?int $pmId): array
     {
         $rows = ContentInsight::with('account', 'cycle.projectManager')
             ->get()
-            ->filter(fn (ContentInsight $ci) => $ci->cycle && $ci->cycle->cycle_start_date->format('Y-m') === $month)
+            ->filter(function (ContentInsight $ci) use ($monthFrom, $monthTo) {
+                if (! $ci->cycle) {
+                    return false;
+                }
+                $month = $ci->cycle->cycle_start_date->format('Y-m');
+
+                return $month >= $monthFrom && $month <= $monthTo;
+            })
             ->when($pmId, fn ($rows) => $rows->filter(fn (ContentInsight $ci) => $ci->cycle->project_manager_id === $pmId))
             ->map(fn (ContentInsight $ci) => [
                 'account' => $ci->account->name ?? '—',
@@ -183,15 +206,20 @@ class ReportPromptController extends Controller
         ];
     }
 
-    private function buildPrompt(string $month, ?Employee $pm, array $sections): string
+    private function buildPrompt(string $monthFrom, string $monthTo, ?Employee $pm, array $sections): string
     {
-        $monthLabel = \Carbon\Carbon::createFromFormat('Y-m', $month)->format('F Y');
+        $fromLabel = \Carbon\Carbon::createFromFormat('Y-m', $monthFrom)->format('F Y');
+        $periodLabel = $fromLabel;
+        if ($monthTo !== $monthFrom) {
+            $toLabel = \Carbon\Carbon::createFromFormat('Y-m', $monthTo)->format('F Y');
+            $periodLabel = "{$fromLabel} – {$toLabel}";
+        }
 
         $lines = [];
         $lines[] = 'You are building a PowerPoint (PPTX) performance report for a social media management agency, using the raw data below.';
         $lines[] = '';
         $lines[] = 'SCOPE';
-        $lines[] = "- Reporting month: {$monthLabel}";
+        $lines[] = "- Reporting period: {$periodLabel}";
         $lines[] = '- Project Manager: '.($pm ? $pm->name : 'All PMs');
         $lines[] = '';
         $lines[] = 'INSTRUCTIONS';

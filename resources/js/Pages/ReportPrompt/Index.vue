@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
-import SingleMonthPicker from '../../Components/SingleMonthPicker.vue';
+import MonthRangePicker from '../../Components/MonthRangePicker.vue';
 import { useToast } from '../../composables/useToast';
 
 defineOptions({ layout: AppLayout });
@@ -29,7 +29,9 @@ const sources = [
     { value: 'employees', label: 'Employees', hint: 'PM / Conceptor / Editor roster' },
 ];
 
-const month = ref(props.months.length ? props.months[props.months.length - 1] : '');
+const defaultMonth = props.months.length ? props.months[props.months.length - 1] : '';
+const monthFrom = ref(defaultMonth);
+const monthTo = ref(defaultMonth);
 const pmFilter = ref('');
 const selectedSources = ref(sources.map((s) => s.value));
 const monthPickerOpen = ref(false);
@@ -46,11 +48,17 @@ const monthLabel = (ym) => {
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 };
 
+const periodLabel = computed(() => {
+    if (!monthFrom.value) return '';
+    if (!monthTo.value || monthTo.value === monthFrom.value) return monthLabel(monthFrom.value);
+    return `${monthLabel(monthFrom.value)} – ${monthLabel(monthTo.value)}`;
+});
+
 const generating = ref(false);
 const generatedPrompt = ref('');
 const generateError = ref(null);
 
-const canGenerate = computed(() => !!month.value && selectedSources.value.length > 0 && !generating.value);
+const canGenerate = computed(() => !!monthFrom.value && selectedSources.value.length > 0 && !generating.value);
 
 const generate = async () => {
     if (!canGenerate.value) return;
@@ -71,7 +79,8 @@ const generate = async () => {
                 ),
             },
             body: JSON.stringify({
-                month: month.value,
+                month_from: monthFrom.value,
+                month_to: monthTo.value || monthFrom.value,
                 project_manager_id: pmFilter.value || null,
                 sources: selectedSources.value,
             }),
@@ -104,6 +113,17 @@ const copyPrompt = async () => {
         toast.error('Failed to copy — select and copy manually.');
     }
 };
+
+const downloadPrompt = () => {
+    const slug = periodLabel.value.replace(/\s+/g, '-').replace(/[^\w-]/g, '').toLowerCase();
+    const blob = new Blob([generatedPrompt.value], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `report-prompt-${slug || 'export'}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+};
 </script>
 
 <template>
@@ -119,13 +139,13 @@ const copyPrompt = async () => {
             <h2 class="text-sm font-semibold" style="color: var(--ink)">Scope</h2>
 
             <div class="mt-3">
-                <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Month</label>
+                <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Month (or range)</label>
                 <div class="relative mt-1.5">
                     <button
                         type="button"
                         class="inline-flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-80"
                         :style="
-                            month
+                            monthFrom
                                 ? 'border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent)'
                                 : 'border-color: var(--border); background-color: var(--bg); color: var(--ink-muted)'
                         "
@@ -135,13 +155,27 @@ const copyPrompt = async () => {
                             <rect x="3" y="4" width="18" height="18" rx="2" />
                             <path d="M3 10h18M8 2v4M16 2v4" />
                         </svg>
-                        <span class="truncate">{{ month ? monthLabel(month) : 'Pick a month…' }}</span>
+                        <span class="truncate">{{ periodLabel || 'Pick a month or range…' }}</span>
                     </button>
 
                     <div v-if="monthPickerOpen" class="absolute left-0 top-full z-20 mt-2 w-64 shadow-xl">
-                        <SingleMonthPicker v-model="month" :allowed-months="months" class="!max-w-none" @update:model-value="monthPickerOpen = false" />
+                        <MonthRangePicker
+                            v-model:model-from="monthFrom"
+                            v-model:model-to="monthTo"
+                            :allowed-months="months"
+                            class="!max-w-none"
+                        />
+                        <button
+                            type="button"
+                            class="mt-1.5 w-full rounded-md border px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-80"
+                            style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
+                            @click="monthPickerOpen = false"
+                        >
+                            Done
+                        </button>
                     </div>
                 </div>
+                <p class="mt-1.5 text-xs" style="color: var(--ink-faint)">Click one month, or click two to select a range.</p>
             </div>
 
             <div class="mt-4">
@@ -204,19 +238,31 @@ const copyPrompt = async () => {
         <div class="rounded-lg border p-5" style="border-color: var(--border); background-color: var(--surface)">
             <div class="flex items-center justify-between gap-3">
                 <h2 class="text-sm font-semibold" style="color: var(--ink)">Generated prompt</h2>
-                <button
-                    v-if="generatedPrompt"
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-80"
-                    style="border-color: var(--border); color: var(--ink)"
-                    @click="copyPrompt"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
-                        <rect x="9" y="9" width="13" height="13" rx="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    {{ copied ? 'Copied!' : 'Copy' }}
-                </button>
+                <div v-if="generatedPrompt" class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-80"
+                        style="border-color: var(--border); color: var(--ink)"
+                        @click="copyPrompt"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        {{ copied ? 'Copied!' : 'Copy' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors hover:opacity-80"
+                        style="border-color: var(--border); color: var(--ink)"
+                        @click="downloadPrompt"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                        </svg>
+                        Download .txt
+                    </button>
+                </div>
             </div>
 
             <div v-if="generateError" class="mt-4 rounded-md p-3 text-sm" style="background-color: var(--status-parah-bg); color: var(--status-parah-ink)">
