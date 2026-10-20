@@ -111,6 +111,8 @@ class ReportPromptController extends Controller
                     'reach' => $cycle->reach,
                     'views' => $cycle->views,
                     'engagement' => $cycle->engagement,
+                    'reach_views_ads_spend' => (float) $cycle->reach_views_ads_spend,
+                    'engagement_ads_spend' => (float) $cycle->engagement_ads_spend,
                     'growth_rate' => round($scores['growth_rate'], 2),
                     'visibility_rate' => round($scores['visibility_rate'], 2),
                     'engagement_score' => round($scores['engagement_score'], 2),
