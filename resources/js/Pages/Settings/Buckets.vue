@@ -13,6 +13,17 @@ defineOptions({ layout: AppLayout });
 const toast = useToast();
 const { canEdit } = useAuth();
 
+const recalculating = ref(false);
+const recalculateAll = () => {
+    recalculating.value = true;
+    router.post('/score-buckets-recalculate', {}, {
+        preserveScroll: true,
+        onSuccess: () => toast.success('Recalculated tier, needs_check, and health_3c for all cycles.'),
+        onError: () => toast.error('Recalculation failed.'),
+        onFinish: () => { recalculating.value = false; },
+    });
+};
+
 const props = defineProps({
     scoreBuckets: { type: Array, required: true },
     labelBuckets: { type: Array, required: true },
@@ -533,10 +544,22 @@ const saveWeights = (aggregate) => {
         <div>
             <h1 class="font-display text-2xl font-bold tracking-tight" style="color: var(--ink)">Scoring Buckets</h1>
             <p class="mt-1 max-w-2xl text-sm" style="color: var(--ink-muted)">
-                Tune how raw metrics become scores and labels across the app — changes apply the next time a
-                dashboard page loads.
+                Tune how raw metrics become scores and labels across the app. Health/Visibility/Engagement scores
+                recompute live on every page load — but each cycle's size tier, "Data perlu dicek" flag, and
+                3-cycle average are resolved once when that cycle is saved, so they can go stale after a threshold,
+                weight, or tier-boundary change here. Use Recalculate below to refresh them for every cycle.
             </p>
         </div>
+        <button
+            v-if="canEdit"
+            type="button"
+            class="shrink-0 rounded-md border px-4 py-2 text-sm font-semibold transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            style="border-color: var(--border); color: var(--ink)"
+            :disabled="recalculating"
+            @click="recalculateAll"
+        >
+            {{ recalculating ? 'Recalculating…' : 'Recalculate tier / health_3c for all cycles' }}
+        </button>
     </div>
 
     <!-- Segmented tab bar -->

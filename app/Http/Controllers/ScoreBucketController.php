@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Cycle;
 use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
 use App\Models\ScoreBucket;
@@ -36,6 +37,7 @@ class ScoreBucketController extends Controller
     {
         $data = $this->validated($request);
 
+        $this->assertGrowthThresholdNotNegative($data);
         $this->assertGrowthFloorIsZero($data);
         $this->assertAscendingWithinGroup($data);
 
@@ -49,6 +51,7 @@ class ScoreBucketController extends Controller
         $data = $this->validated($request, requireMetric: false);
 
         $merged = array_merge($scoreBucket->only(['metric', 'platform', 'tier']), $data);
+        $this->assertGrowthThresholdNotNegative($merged);
         $this->assertGrowthFloorIsZero($merged, ignoreId: $scoreBucket->id);
         $this->assertAscendingWithinGroup($merged, ignoreId: $scoreBucket->id);
 
@@ -62,6 +65,21 @@ class ScoreBucketController extends Controller
         $scoreBucket->delete();
 
         return back();
+    }
+
+    /**
+     * tier/needs_check/health_3c are resolved once at save time (Cycle::
+     * saving()), not recomputed live on every page load like health_rate
+     * itself — so a threshold/weight/tier-boundary change made here doesn't
+     * retroactively update them on existing cycles until each one is saved
+     * again. This re-saves every cycle so they catch up with whatever
+     * Settings changes were made since.
+     */
+    public function recalculate(): RedirectResponse
+    {
+        Cycle::orderBy('cycle_start_date')->get()->each->save();
+
+        return back()->with('status', 'Recalculated tier, needs_check, and health_3c for all cycles.');
     }
 
     private function validated(Request $request, bool $requireMetric = true): array
@@ -78,6 +96,31 @@ class ScoreBucketController extends Controller
             'custom_color_bg' => ['nullable', 'string', 'max:20'],
             'custom_color_ink' => ['nullable', 'string', 'max:20'],
         ]);
+    }
+
+    /**
+     * Growth's lowest non-floor threshold must be >= 0% — a negative
+     * threshold (e.g. -1%) would let losing followers score positively
+     * (25+), defeating the floor-is-0 rule above it: the floor only catches
+     * rates BELOW the lowest threshold, so a negative threshold moves the
+     * "never scores positively" boundary into territory that includes
+     * follower loss.
+     */
+    private function assertGrowthThresholdNotNegative(array $data): void
+    {
+        if (($data['metric'] ?? null) !== ScoreBucket::METRIC_GROWTH) {
+            return;
+        }
+
+        if (! array_key_exists('min_rate', $data) || $data['min_rate'] === null) {
+            return;
+        }
+
+        if ((float) $data['min_rate'] < 0) {
+            throw ValidationException::withMessages([
+                'min_rate' => 'Growth thresholds must be 0% or higher — a negative threshold would let losing followers score positively.',
+            ]);
+        }
     }
 
     /**

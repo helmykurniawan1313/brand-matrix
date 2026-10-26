@@ -50,7 +50,12 @@ class Health3cResolver
         $health3c = round($healthRates->avg(), 2);
         $label = $this->resolveLabel($labelBuckets, $health3c);
 
-        return [$health3c, $label];
+        // True if ANY cycle in the window (not just this one) is flagged —
+        // a suspect growth input from 1-2 cycles ago still taints the
+        // averaged trend line, even if this cycle's own data looks fine.
+        $needsCheck = $window->contains(fn (Cycle $c) => (bool) $c->needs_check);
+
+        return [$health3c, $label, $needsCheck];
     }
 
     private function resolveLabel($labelBuckets, float $score): ?string

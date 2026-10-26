@@ -240,6 +240,12 @@ const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
 // reads as a real, trustworthy result.
 const growthNeedsCheck = computed(() => !!props.cycle.needs_check);
 
+// health_3c_needs_check is true when ANY cycle in the 3-cycle window (this
+// one or either of its 2 priors) is flagged, not just this cycle itself —
+// resolved alongside health_3c on the backend (Health3cResolver), since a
+// suspect growth input 1-2 cycles back still taints the averaged trend line.
+const healthNeedsCheck3c = computed(() => !!props.cycle.health_3c_needs_check);
+
 const aggregateRows = computed(() => [
     {
         label: 'Growth Rate',
@@ -263,14 +269,16 @@ const aggregateRows = computed(() => [
     {
         label: 'Health',
         formula: 'weighted average of Growth + Visibility + Engagement',
-        rate: round(s.value.health_rate),
-        badge: s.value.health_label,
+        rate: growthNeedsCheck.value ? '—' : round(s.value.health_rate),
+        badge: growthNeedsCheck.value ? null : s.value.health_label,
+        flag: growthNeedsCheck.value ? 'Data perlu dicek' : null,
     },
     {
         label: 'Health (3-cycle avg)',
         formula: 'average Health of this cycle + up to 2 previous (same account & platform)',
-        rate: props.cycle.health_3c !== null && props.cycle.health_3c !== undefined ? round(props.cycle.health_3c) : '—',
-        badge: props.cycle.health_3c_label,
+        rate: healthNeedsCheck3c.value ? '—' : (props.cycle.health_3c !== null && props.cycle.health_3c !== undefined ? round(props.cycle.health_3c) : '—'),
+        badge: healthNeedsCheck3c.value ? null : props.cycle.health_3c_label,
+        flag: healthNeedsCheck3c.value ? 'Data perlu dicek' : null,
     },
 ]);
 </script>

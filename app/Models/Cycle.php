@@ -27,7 +27,26 @@ class Cycle extends Model
             $cycle->needs_check = (float) $cycle->start_follower === 0.0
                 || abs($cycle->growthRateForNeedsCheck()) > 100.0;
 
-            [$cycle->health_3c, $cycle->health_3c_label] = (new Health3cResolver())->resolve($cycle);
+            [$cycle->health_3c, $cycle->health_3c_label, $cycle->health_3c_needs_check] = (new Health3cResolver())->resolve($cycle);
+        });
+
+        // health_3c of the NEXT 2 cycles (same account + platform) may include
+        // this one in their own 3-cycle window, so their health_3c can go
+        // stale the moment this cycle's own Health score changes. Re-saved
+        // after this cycle is committed (not in `saving`, which runs before
+        // that), via saveQuietly() to avoid recursively re-triggering this
+        // same `saved` cascade on each of them.
+        static::saved(function (Cycle $cycle) {
+            Cycle::where('account_id', $cycle->account_id)
+                ->where('platform', $cycle->platform)
+                ->where('cycle_start_date', '>', $cycle->cycle_start_date)
+                ->orderBy('cycle_start_date')
+                ->limit(2)
+                ->get()
+                ->each(function (Cycle $later) {
+                    [$later->health_3c, $later->health_3c_label, $later->health_3c_needs_check] = (new Health3cResolver())->resolve($later);
+                    $later->saveQuietly();
+                });
         });
     }
 
@@ -75,6 +94,7 @@ class Cycle extends Model
         'reach_views_ads_used' => 'boolean',
         'engagement_ads_used' => 'boolean',
         'needs_check' => 'boolean',
+        'health_3c_needs_check' => 'boolean',
         'formula_changed_at' => 'datetime',
     ];
 

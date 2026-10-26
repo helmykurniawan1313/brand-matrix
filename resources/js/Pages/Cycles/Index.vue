@@ -1204,7 +1204,9 @@ const showScoringInfo = ref(false);
 
                     <div class="grid grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-sm font-medium" style="color: var(--ink-muted)">Reach</label>
+                            <label class="block text-sm font-medium" style="color: var(--ink-muted)">
+                                {{ form.platform === 'tiktok' ? 'Profile Views' : 'Reach' }}
+                            </label>
                             <input
                                 v-model.number="form.reach"
                                 type="number"

@@ -230,8 +230,13 @@ const selectedDateRange = computed(() => {
 // volumeTiles: Reach / Views / Engagement / Story Performance all now have
 // their own unified Followers-style section (headline number + line chart);
 // this list only remains to feed the PDF export's "Volume" summary block.
+// TikTok's "reach" field is actually profile views, not unique accounts
+// reached (see MetricCalculator/CycleDetailModal) — labeled accordingly
+// wherever this modal surfaces it, so it doesn't read as a real reach figure.
+const reachLabel = computed(() => (activeTab.value === 'tiktok' ? 'Profile Views' : 'Reach'));
+
 const volumeTiles = computed(() => [
-    { key: 'reach', label: 'Reach' },
+    { key: 'reach', label: reachLabel.value },
     { key: 'views', label: 'Views' },
     { key: 'engagement', label: 'Engagement' },
     { key: 'story_performance', label: 'Story Performance' },
@@ -243,7 +248,7 @@ const volumeTiles = computed(() => [
 const metricSwitcherOptions = computed(() => [
     { key: 'end_follower', label: 'Followers', hasChangeLabel: false },
     { key: 'views', label: 'Views', hasChangeLabel: true },
-    { key: 'reach', label: 'Reach', hasChangeLabel: true },
+    { key: 'reach', label: reachLabel.value, hasChangeLabel: true },
     { key: 'engagement', label: 'Engagement', hasChangeLabel: true },
     { key: 'ads-spend', label: 'Ads Spend', hasChangeLabel: false, valueKey: 'total_ads_spend' },
 ]);
@@ -256,7 +261,9 @@ const chartSections = [
     { key: 'scores', title: 'Scores', description: 'Visibility, Engagement, and Health scores side by side.' },
 ];
 
-const chartConfigs = {
+// computed (not a plain object) so reach's label reacts to the active
+// platform tab — TikTok's "reach" field is actually profile views.
+const chartConfigs = computed(() => ({
     followers: [
         { key: 'end_follower', label: 'Followers', suffix: '', single: true },
     ],
@@ -264,7 +271,7 @@ const chartConfigs = {
         { key: 'views', label: 'Views', suffix: '', single: true },
     ],
     reach: [
-        { key: 'reach', label: 'Reach', suffix: '', single: true },
+        { key: 'reach', label: reachLabel.value, suffix: '', single: true },
     ],
     engagement: [
         { key: 'engagement', label: 'Engagement', suffix: '', single: true },
@@ -294,7 +301,7 @@ const chartConfigs = {
             suffix: '',
         },
     ],
-};
+}));
 
 const canvasRefs = {};
 const charts = {};
@@ -535,7 +542,7 @@ const weightedContentScores = computed(() => {
 // Rendered into the fixed 'metric-switcher' canvas while config.key stays
 // e.g. 'views' — that's what reads each cycle's actual `views` field.
 const activeMetricChartConfig = () =>
-    Object.values(chartConfigs)
+    Object.values(chartConfigs.value)
         .flat()
         .find((c) => c.key === activeMetric.value) ?? null;
 
@@ -553,7 +560,7 @@ const renderAllCharts = async () => {
     await nextTick();
     renderMetricSwitcherChart();
     chartSections.forEach((section) => {
-        (chartConfigs[section.key] ?? []).forEach((config) => renderChart(config, activeCycles.value));
+        (chartConfigs.value[section.key] ?? []).forEach((config) => renderChart(config, activeCycles.value));
     });
 };
 

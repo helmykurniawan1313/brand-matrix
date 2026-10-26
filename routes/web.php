@@ -135,6 +135,7 @@ Route::middleware('auth')->group(function () {
 
         Route::middleware('can-access:score-buckets')->group(function () {
             Route::resource('score-buckets', ScoreBucketController::class)->only(['store', 'update', 'destroy']);
+            Route::post('score-buckets-recalculate', [ScoreBucketController::class, 'recalculate'])->name('score-buckets.recalculate');
         });
 
         Route::middleware('can-access:content-insights')->group(function () {
