@@ -32,6 +32,14 @@ class LabelBucket extends Model
 
     public const METRIC_ENGAGEMENT_CHANGE = 'engagement_change';
 
+    // Account-size tier (Rintisan/Kecil/Menengah/Besar) resolved from a cycle's
+    // start_follower, used to pick which ScoreBucket threshold set scores that
+    // cycle (see MetricCalculator). Deliberately separate from METRIC_FOLLOWERS
+    // (Nano/Micro/Macro/Mega), which labels individual Reels/Video posts on the
+    // Performance page and is scaled/named differently — the two must not share
+    // buckets, or editing one silently changes the other's behavior.
+    public const METRIC_ACCOUNT_TIER = 'account_tier';
+
     public const METRICS = [
         self::METRIC_GROWTH,
         self::METRIC_VISIBILITY,
@@ -43,6 +51,7 @@ class LabelBucket extends Model
         self::METRIC_VIEWS_CHANGE,
         self::METRIC_REACH_CHANGE,
         self::METRIC_ENGAGEMENT_CHANGE,
+        self::METRIC_ACCOUNT_TIER,
     ];
 
     protected $fillable = [

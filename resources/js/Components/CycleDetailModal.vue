@@ -14,8 +14,8 @@ const props = defineProps({
         default: 'groq',
     },
     scoreBuckets: {
-        type: Object,
-        default: () => ({}),
+        type: Array,
+        default: () => [],
     },
 });
 
@@ -23,7 +23,50 @@ const emit = defineEmits(['close', 'edit']);
 
 const { canEdit } = useAuth();
 
-const bucketsFor = (metric) => props.scoreBuckets[metric] ?? [];
+// Mirrors MetricCalculator::resolveScore()'s fallback order exactly:
+// (platform, tier) -> (platform, no tier) -> (no platform, no tier). Without
+// this, the tooltip showed every tier's thresholds mashed into one list
+// (e.g. 20 rows for "growth" once Instagram tiering shipped) with no way to
+// tell which ones actually applied to this cycle.
+const bucketsFor = (metric) => {
+    const all = (props.scoreBuckets ?? []).filter((b) => b.metric === metric);
+    const platform = props.cycle.platform ?? null;
+    const tier = props.cycle.tier ?? null;
+
+    const fallbacks = [
+        [platform, tier],
+        [platform, null],
+        [null, null],
+    ];
+
+    for (const [fallbackPlatform, fallbackTier] of fallbacks) {
+        const matching = all.filter((b) => (b.platform ?? null) === fallbackPlatform && (b.tier ?? null) === fallbackTier);
+        if (matching.length) return matching;
+    }
+
+    return [];
+};
+
+const platformLabels = { instagram: 'Instagram', tiktok: 'TikTok' };
+
+// Describes which bucket set is actually backing the tooltip currently open,
+// so it's clear whether these thresholds are this cycle's own tier, a
+// platform-wide fallback, or the global default — not just an unlabeled list.
+const bucketScopeLabel = (metric) => {
+    const buckets = bucketsFor(metric);
+    if (!buckets.length) return null;
+
+    const [sample] = buckets;
+    if (sample.tier) {
+        const platformPart = sample.platform ? platformLabels[sample.platform] ?? sample.platform : 'All platforms';
+        return `${platformPart} — ${sample.tier}`;
+    }
+    if (sample.platform) {
+        return `${platformLabels[sample.platform] ?? sample.platform} (no tier match — platform default)`;
+    }
+
+    return 'Global default';
+};
 
 // reach/view rates are displayed as a decimal ratio (rate / 100); their bucket
 // thresholds are stored on the same raw percentage scale, so divide to match.
@@ -165,12 +208,20 @@ const rateRows = computed(() => [
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
 
+// cycles.needs_check flags start_follower = 0 or |growth_rate| > 100% — a
+// jump too large to be organic (e.g. BHC May 2026: 6,768 -> 24,575
+// followers). The growth score/label are still computed and stored as
+// normal, but shown as "Data perlu dicek" here rather than a number that
+// reads as a real, trustworthy result.
+const growthNeedsCheck = computed(() => !!props.cycle.needs_check);
+
 const aggregateRows = computed(() => [
     {
         label: 'Growth Rate',
         formula: 'score based on growth rate',
-        rate: round(s.value.growth_score),
-        badge: s.value.growth_label,
+        rate: growthNeedsCheck.value ? '—' : round(s.value.growth_score),
+        badge: growthNeedsCheck.value ? null : s.value.growth_label,
+        flag: growthNeedsCheck.value ? 'Data perlu dicek' : null,
     },
     {
         label: 'Visibility',
@@ -319,6 +370,9 @@ const aggregateRows = computed(() => [
                     <p class="text-[11px] font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
                         Scoring Buckets
                     </p>
+                    <p v-if="bucketScopeLabel(tooltipMetric)" class="mt-0.5 text-[10px]" style="color: var(--ink-muted)">
+                        {{ bucketScopeLabel(tooltipMetric) }}
+                    </p>
                     <ul class="mt-1.5 space-y-1.5">
                         <li
                             v-for="bucket in bucketsFor(tooltipMetric)"
@@ -362,6 +416,13 @@ const aggregateRows = computed(() => [
                             </p>
                         </div>
                         <StatusBadge v-if="row.badge" :status="row.badge" class="mt-1.5" />
+                        <span
+                            v-if="row.flag"
+                            class="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                            style="background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)"
+                        >
+                            ⚠ {{ row.flag }}
+                        </span>
                         <p class="mt-auto pt-2 text-[10px] leading-snug" style="color: var(--ink-faint)">{{ row.formula }}</p>
                     </div>
                 </div>

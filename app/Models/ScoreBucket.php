@@ -26,6 +26,8 @@ class ScoreBucket extends Model
 
     protected $fillable = [
         'metric',
+        'platform',
+        'tier',
         'min_rate',
         'score',
         'color',

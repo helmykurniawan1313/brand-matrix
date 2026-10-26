@@ -19,6 +19,12 @@ class MetricCalculator
      * @param  Collection<int, ScoreBucket>|null  $scoreBuckets  Rate-based buckets. Loaded from DB if omitted.
      * @param  Collection<int, LabelBucket>|null  $labelBuckets  Label-based buckets. Loaded from DB if omitted.
      * @param  Collection<int, FormulaWeight>|null  $formulaWeights  Aggregate weights. Loaded from DB if omitted.
+     *
+     * Reads tier from $cycle->tier — resolved once (via AccountTierResolver)
+     * and stored on the cycle when it's created/updated, not re-resolved live
+     * on every calculate() call. A cycle with no tier stored yet (not
+     * resolved, or tiering not configured) falls back to the global bucket
+     * set via resolveScore()'s (platform, null) / (null, null) fallbacks.
      */
     public function calculate(
         Cycle $cycle,
@@ -30,10 +36,13 @@ class MetricCalculator
         $labelBuckets ??= LabelBucket::all();
         $formulaWeights ??= FormulaWeight::all();
 
-        // Grouping once per call (instead of filtering the full collection by
-        // metric on every resolveScore()/resolveLabel() call below) avoids
-        // repeated Collection::where() allocation — this function runs once
-        // per cycle, and pages can score hundreds of cycles per request.
+        $tier = $cycle->tier;
+        $platform = $cycle->platform;
+
+        // Grouped by metric only — the (platform, tier) fallback itself is
+        // resolved per-metric in resolveScore() below, since a metric can
+        // have a platform+tier-specific bucket set, a platform-only one, or
+        // only the global one, and the right fallback differs per metric.
         $scoreBucketsByMetric = $scoreBuckets->groupBy('metric');
         $labelBucketsByMetric = $labelBuckets->groupBy('metric');
 
@@ -44,11 +53,11 @@ class MetricCalculator
         $erReachRate = $this->percentage($cycle->engagement, $cycle->reach);
         $erFollowerRate = $this->percentage($cycle->engagement, $cycle->end_follower);
 
-        $growthScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_GROWTH, $growthRate);
-        $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate);
-        $viewScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_VIEW, $viewRate);
-        $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate);
-        $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate);
+        $growthScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_GROWTH, $growthRate, $platform, $tier);
+        $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate, $platform, $tier);
+        $viewScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_VIEW, $viewRate, $platform, $tier);
+        $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate, $platform, $tier);
+        $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate, $platform, $tier);
 
         $visibilityRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_VISIBILITY, [
             'reach_score' => $reachScore,
@@ -60,7 +69,12 @@ class MetricCalculator
             'er_follower_score' => $erFollowerScore,
         ]);
 
-        $growthLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_GROWTH, $growthRate);
+        // Uses growth_score (0-100, tier-aware), not the raw growthRate — a
+        // tiered score/rate mismatch here previously let e.g. a 6.92% growth
+        // rate score 100 (strong for a Menengah/Besar account) but still
+        // label CUKUP, because the label cutoffs were still being checked
+        // against the pre-tiering percentage scale.
+        $growthLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_GROWTH, $growthScore);
         $visibilityLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_VISIBILITY, $visibilityRate);
         $engagementLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_ENGAGEMENT, $engagementScore);
 
@@ -72,6 +86,7 @@ class MetricCalculator
         $healthLabel = $this->resolveLabel($labelBucketsByMetric, LabelBucket::METRIC_HEALTH, $healthRate);
 
         return [
+            'tier' => $tier,
             'growth' => $growth,
             'growth_rate' => $growthRate,
             'reach_rate' => $reachRate,
@@ -117,11 +132,37 @@ class MetricCalculator
         return $weightedSum / $totalWeight;
     }
 
-    private function resolveScore(Collection $scoreBucketsByMetric, string $metric, float $rate): float
+    /**
+     * Resolves a rate to a score for one metric, preferring the most specific
+     * matching bucket set and falling back to progressively less specific
+     * ones: (platform, tier) -> (platform, no tier) -> (no platform, no
+     * tier). A bucket row with platform/tier = null acts as that fallback's
+     * catch-all, so an admin can define global defaults and only add
+     * platform/tier-specific overrides where the brief's thresholds differ.
+     */
+    private function resolveScore(Collection $scoreBucketsByMetric, string $metric, float $rate, ?string $platform, ?string $tier): float
     {
-        $value = $this->resolver->resolve($scoreBucketsByMetric->get($metric, Collection::empty()), $rate);
+        $buckets = $scoreBucketsByMetric->get($metric, Collection::empty());
 
-        return $value === null ? 0.0 : (float) $value;
+        $fallbacks = [
+            [$platform, $tier],
+            [$platform, null],
+            [null, null],
+        ];
+
+        foreach ($fallbacks as [$fallbackPlatform, $fallbackTier]) {
+            $matching = $buckets->filter(
+                fn ($bucket) => $bucket->platform === $fallbackPlatform && $bucket->tier === $fallbackTier
+            );
+
+            if ($matching->isNotEmpty()) {
+                $value = $this->resolver->resolve($matching, $rate);
+
+                return $value === null ? 0.0 : (float) $value;
+            }
+        }
+
+        return 0.0;
     }
 
     private function resolveLabel(Collection $labelBucketsByMetric, string $metric, float $score): ?string

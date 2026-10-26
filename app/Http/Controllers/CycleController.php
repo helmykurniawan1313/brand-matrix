@@ -113,7 +113,10 @@ class CycleController extends Controller
                 'month_to' => $monthTo,
             ],
             'defaultAiProvider' => config('services.ai_summary.provider', 'groq'),
-            'scoreBuckets' => $scoreBuckets->groupBy('metric'),
+            // Sent flat (not pre-grouped by metric) — CycleDetailModal picks
+            // the right (platform, tier) subset per cycle client-side, using
+            // the same fallback order as MetricCalculator::resolveScore().
+            'scoreBuckets' => $scoreBuckets->values(),
         ]);
     }
 

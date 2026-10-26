@@ -69,8 +69,8 @@ const props = defineProps({
         default: 'groq',
     },
     scoreBuckets: {
-        type: Object,
-        default: () => ({}),
+        type: Array,
+        default: () => [],
     },
     scoreDistribution: {
         type: Object,
