@@ -46,28 +46,60 @@ class MetricCalculator
         $scoreBucketsByMetric = $scoreBuckets->groupBy('metric');
         $labelBucketsByMetric = $labelBuckets->groupBy('metric');
 
+        $isTiktok = $platform === 'tiktok';
+
         $growth = $cycle->end_follower - $cycle->start_follower;
         $growthRate = $this->percentage($growth, $cycle->start_follower);
-        $reachRate = $this->percentage($cycle->reach, $cycle->end_follower);
         $viewRate = $this->percentage($cycle->views, $cycle->end_follower);
+
+        // TikTok's "reach" column is actually profile views (per-post profile
+        // visits, not unique accounts reached) — reach_rate/er_reach_rate are
+        // still computed below (never null in the response, so existing
+        // display code doesn't break), but they must NOT feed TikTok's score
+        // or aggregates: profile_rate/er_view_rate replace them instead.
+        $reachRate = $this->percentage($cycle->reach, $cycle->end_follower);
         $erReachRate = $this->percentage($cycle->engagement, $cycle->reach);
         $erFollowerRate = $this->percentage($cycle->engagement, $cycle->end_follower);
+        $profileRate = $this->percentage($cycle->reach, $cycle->views) * 10; // profile visits per 1,000 views
+        $erViewRate = $this->percentage($cycle->engagement, $cycle->views);
 
         $growthScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_GROWTH, $growthRate, $platform, $tier);
-        $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate, $platform, $tier);
         $viewScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_VIEW, $viewRate, $platform, $tier);
-        $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate, $platform, $tier);
-        $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate, $platform, $tier);
 
-        $visibilityRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_VISIBILITY, [
-            'reach_score' => $reachScore,
-            'view_score' => $viewScore,
-        ]);
+        if ($isTiktok) {
+            $profileScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_PROFILE, $profileRate, $platform, $tier);
+            $erViewScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_VIEW, $erViewRate, $platform, $tier);
 
-        $engagementScore = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_ENGAGEMENT, [
-            'er_reach_score' => $erReachScore,
-            'er_follower_score' => $erFollowerScore,
-        ]);
+            // Still resolved for display/consistency — not used in any TikTok aggregate.
+            $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate, $platform, $tier);
+            $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate, $platform, $tier);
+            $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate, $platform, $tier);
+
+            $visibilityRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_VISIBILITY_TIKTOK, [
+                'profile_score' => $profileScore,
+                'view_score' => $viewScore,
+            ]);
+
+            $engagementScore = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_ENGAGEMENT_TIKTOK, [
+                'er_view_score' => $erViewScore,
+            ]);
+        } else {
+            $reachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_REACH, $reachRate, $platform, $tier);
+            $erReachScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_REACH, $erReachRate, $platform, $tier);
+            $erFollowerScore = $this->resolveScore($scoreBucketsByMetric, ScoreBucket::METRIC_ER_FOLLOWER, $erFollowerRate, $platform, $tier);
+            $profileScore = 0.0;
+            $erViewScore = 0.0;
+
+            $visibilityRate = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_VISIBILITY, [
+                'reach_score' => $reachScore,
+                'view_score' => $viewScore,
+            ]);
+
+            $engagementScore = $this->weightedAverage($formulaWeights, FormulaWeight::AGGREGATE_ENGAGEMENT, [
+                'er_reach_score' => $erReachScore,
+                'er_follower_score' => $erFollowerScore,
+            ]);
+        }
 
         // Uses growth_score (0-100, tier-aware), not the raw growthRate — a
         // tiered score/rate mismatch here previously let e.g. a 6.92% growth
@@ -93,12 +125,16 @@ class MetricCalculator
             'view_rate' => $viewRate,
             'er_reach_rate' => $erReachRate,
             'er_follower_rate' => $erFollowerRate,
+            'profile_rate' => $profileRate,
+            'er_view_rate' => $erViewRate,
             'growth_score' => $growthScore,
             'growth_label' => $growthLabel,
             'reach_score' => $reachScore,
             'view_score' => $viewScore,
             'er_reach_score' => $erReachScore,
             'er_follower_score' => $erFollowerScore,
+            'profile_score' => $profileScore,
+            'er_view_score' => $erViewScore,
             'visibility_rate' => $visibilityRate,
             'visibility_label' => $visibilityLabel,
             'engagement_score' => $engagementScore,

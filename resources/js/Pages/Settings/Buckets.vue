@@ -25,10 +25,12 @@ const props = defineProps({
 
 const metricTitles = {
     growth: 'Growth Rate',
-    reach: 'Reach Rate',
+    reach: 'Reach Rate (Instagram)',
     view: 'View Rate',
-    er_reach: 'Engagement Rate (of Reach)',
-    er_follower: 'Engagement Rate (of Followers)',
+    er_reach: 'Engagement Rate of Reach (Instagram)',
+    er_follower: 'Engagement Rate of Followers',
+    profile: 'Profile Rate (TikTok)',
+    er_view: 'Engagement Rate of Views (TikTok)',
     visibility: 'Visibility',
     engagement: 'Engagement',
     health: 'Health',
@@ -38,17 +40,23 @@ const metricTitles = {
     views_change: 'Growth Analysis — Views Change',
     reach_change: 'Growth Analysis — Reach Change',
     engagement_change: 'Growth Analysis — Engagement Change',
+    visibility_tiktok: 'Visibility (TikTok)',
+    engagement_tiktok: 'Engagement (TikTok)',
 };
 
 const metricHints = {
     growth: '(end − start) / start × 100',
-    reach: 'reach / end followers × 100',
+    reach: 'reach / end followers × 100 — Instagram only, feeds Visibility',
     view: 'views / end followers × 100',
-    er_reach: 'engagement / reach × 100',
-    er_follower: 'engagement / end followers × 100',
-    visibility: 'weighted average of reach score + view score — see Formula Weights tab for current weights',
-    engagement: 'weighted average of ER-reach score + ER-follower score — see Formula Weights tab for current weights',
+    er_reach: 'engagement / reach × 100 — Instagram only, feeds Engagement',
+    er_follower: 'engagement / end followers × 100 — display only, not scored',
+    profile: "profile_views / views × 1000 — TikTok's \"reach\" field is actually profile views; feeds Visibility in place of Reach Rate",
+    er_view: 'engagement / views × 100 — feeds Engagement for TikTok in place of ER-Reach/ER-Follower',
+    visibility: 'Instagram: weighted average of Reach Rate + View Rate — see Formula Weights tab',
+    engagement: 'Instagram: weighted average of ER-Reach + ER-Follower scores — see Formula Weights tab',
     health: 'weighted average of growth score + visibility rate + engagement score — see Formula Weights tab for current weights',
+    visibility_tiktok: 'TikTok: weighted average of Profile Rate + View Rate — see Formula Weights tab',
+    engagement_tiktok: 'TikTok: ER-View score — see Formula Weights tab',
     views: 'raw Views H+7 count, from Performance records',
     followers: 'raw follower count, from Performance records',
     account_growth: "latest cycle's growth rate — shown on the Accounts table and Growth modal",
@@ -62,6 +70,8 @@ const componentLabels = {
     view_score: 'View Score',
     er_reach_score: 'ER-Reach Score',
     er_follower_score: 'ER-Follower Score',
+    profile_score: 'Profile Score',
+    er_view_score: 'ER-View Score',
     growth_score: 'Growth Score',
     visibility_rate: 'Visibility Rate',
     engagement_score: 'Engagement Score',
@@ -431,6 +441,8 @@ const exampleRateByMetric = {
     view: 45,
     er_reach: 5,
     er_follower: 8,
+    profile: 11,
+    er_view: 2,
 };
 
 const scoreExample = (metric, tiers) => {
@@ -449,6 +461,8 @@ const feedsInto = {
     view: 'Visibility',
     er_reach: 'Engagement',
     er_follower: 'Engagement',
+    profile: 'Visibility (TikTok)',
+    er_view: 'Engagement (TikTok)',
 };
 
 const scoreExampleText = (metric, tiers) => {

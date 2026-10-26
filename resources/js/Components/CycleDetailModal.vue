@@ -72,7 +72,7 @@ const bucketScopeLabel = (metric) => {
 // thresholds are stored on the same raw percentage scale, so divide to match.
 const bucketDivisorFor = (metric) => (metric === 'reach' || metric === 'view' ? 100 : 1);
 
-const bucketSuffixFor = (metric) => (metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' ? '%' : '');
+const bucketSuffixFor = (metric) => (metric === 'growth' || metric === 'er_reach' || metric === 'er_follower' || metric === 'er_view' ? '%' : '');
 
 const tooltipMetric = ref(null);
 const tooltipStyle = ref({});
@@ -187,24 +187,49 @@ const totalAdsSpend = computed(() => {
 
 const s = computed(() => props.cycle.scores);
 
+// TikTok's "reach" column is actually profile views (per-post profile
+// visits), not unique accounts reached — labeled accordingly here so it
+// doesn't read as a real reach figure. See MetricCalculator for the formula
+// split (profile_rate/er_view_rate replace reach_rate/er_reach_rate/
+// er_follower_rate for TikTok scoring).
+const isTiktok = computed(() => props.cycle.platform === 'tiktok');
+
 const inputs = computed(() => [
     { label: 'Start Followers', value: props.cycle.start_follower.toLocaleString() },
     { label: 'End Followers', value: props.cycle.end_follower.toLocaleString() },
-    { label: 'Reach', value: props.cycle.reach.toLocaleString() },
+    { label: isTiktok.value ? 'Profile Views' : 'Reach', value: props.cycle.reach.toLocaleString() },
     { label: 'Views', value: props.cycle.views.toLocaleString() },
     { label: 'Engagement', value: props.cycle.engagement.toLocaleString() },
 ]);
 
-const rateRows = computed(() => [
-    { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
-    { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
-    { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
-    { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
-    { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
-    { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
-    { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
-    { label: 'Total Ads Spend', metric: null, formula: 'reach & views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
-]);
+const rateRows = computed(() => {
+    const rows = [
+        { label: 'Growth', metric: 'growth', formula: 'end − start', rate: `${s.value.growth > 0 ? '+' : ''}${s.value.growth}`, score: s.value.growth_score },
+        { label: 'Growth Rate', metric: 'growth', formula: '(end − start) / start × 100', rate: `${round(s.value.growth_rate)}%`, score: s.value.growth_score },
+    ];
+
+    if (isTiktok.value) {
+        rows.push(
+            { label: 'Profile Rate', metric: 'profile', formula: 'profile views / views × 1,000', rate: `${round(s.value.profile_rate)}`, score: s.value.profile_score },
+            { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score },
+            { label: 'ER (of Views)', metric: 'er_view', formula: 'engagement / views × 100', rate: `${round(s.value.er_view_rate)}%`, score: s.value.er_view_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+        );
+    } else {
+        rows.push(
+            { label: 'Reach Rate', metric: 'reach', formula: 'reach / end followers', rate: `${round(s.value.reach_rate / 100)}`, score: s.value.reach_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
+            { label: 'View Rate', metric: 'view', formula: 'views / end followers', rate: `${round(s.value.view_rate / 100)}`, score: s.value.view_score, ads: adsLine(props.cycle.reach_views_ads_used, props.cycle.reach_views_ads_spend) },
+            { label: 'ER (of Reach)', metric: 'er_reach', formula: 'engagement / reach × 100', rate: `${round(s.value.er_reach_rate)}%`, score: s.value.er_reach_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+            { label: 'ER (of Followers)', metric: 'er_follower', formula: 'engagement / end followers × 100', rate: `${round(s.value.er_follower_rate)}%`, score: s.value.er_follower_score, ads: adsLine(props.cycle.engagement_ads_used, props.cycle.engagement_ads_spend) },
+        );
+    }
+
+    rows.push(
+        { label: 'Story Performance', metric: null, formula: 'manual input', rate: (props.cycle.story_performance ?? 0).toLocaleString(), score: null },
+        { label: 'Total Ads Spend', metric: null, formula: 'reach & views + engagement ads spend', rate: formatAdsSpend(totalAdsSpend.value, props.cycle.ads_currency), score: null },
+    );
+
+    return rows;
+});
 
 const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
 
@@ -225,13 +250,13 @@ const aggregateRows = computed(() => [
     },
     {
         label: 'Visibility',
-        formula: 'weighted average of Reach Score + View Score',
+        formula: isTiktok.value ? 'weighted average of Profile Score + View Score' : 'weighted average of Reach Score + View Score',
         rate: round(s.value.visibility_rate),
         badge: s.value.visibility_label,
     },
     {
         label: 'Engagement',
-        formula: 'weighted average of ER-Reach Score + ER-Follower Score',
+        formula: isTiktok.value ? 'ER-View Score' : 'weighted average of ER-Reach Score + ER-Follower Score',
         rate: round(s.value.engagement_score),
         badge: s.value.engagement_label,
     },
