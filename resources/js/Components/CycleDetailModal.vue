@@ -266,6 +266,12 @@ const aggregateRows = computed(() => [
         rate: round(s.value.health_rate),
         badge: s.value.health_label,
     },
+    {
+        label: 'Health (3-cycle avg)',
+        formula: 'average Health of this cycle + up to 2 previous (same account & platform)',
+        rate: props.cycle.health_3c !== null && props.cycle.health_3c !== undefined ? round(props.cycle.health_3c) : '—',
+        badge: props.cycle.health_3c_label,
+    },
 ]);
 </script>
 

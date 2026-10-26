@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\AccountTierResolver;
+use App\Services\Health3cResolver;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,13 +17,17 @@ class Cycle extends Model
     {
         // Resolved on every create/update rather than left to the caller, so
         // every path that saves a Cycle (controller, factory, future admin
-        // tooling) gets a consistent tier/needs_check without having to
-        // remember to call AccountTierResolver itself.
+        // tooling) gets a consistent tier/needs_check/health_3c without
+        // having to remember to call each resolver itself. Order matters:
+        // tier must be set before Health3cResolver runs, since it calls
+        // MetricCalculator (tier-aware) on this cycle and its prior ones.
         static::saving(function (Cycle $cycle) {
             $cycle->tier = (new AccountTierResolver())->resolve((float) $cycle->start_follower);
 
             $cycle->needs_check = (float) $cycle->start_follower === 0.0
                 || abs($cycle->growthRateForNeedsCheck()) > 100.0;
+
+            [$cycle->health_3c, $cycle->health_3c_label] = (new Health3cResolver())->resolve($cycle);
         });
     }
 
