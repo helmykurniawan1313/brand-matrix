@@ -53,6 +53,7 @@ const metricTitles = {
     engagement_change: 'Growth Analysis — Engagement Change',
     visibility_tiktok: 'Visibility (TikTok)',
     engagement_tiktok: 'Engagement (TikTok)',
+    account_tier: 'Account Size Tier',
 };
 
 const metricHints = {
@@ -74,6 +75,7 @@ const metricHints = {
     views_change: '% change in Views between the two picked months, Growth Analysis panel',
     reach_change: '% change in Reach between the two picked months, Growth Analysis panel',
     engagement_change: '% change in Engagement between the two picked months, Growth Analysis panel',
+    account_tier: "resolved from a cycle's start_follower — drives which Score Tiers threshold set a cycle is scored against (growth/reach/view/er_reach on Instagram, growth/profile/view/er_view on TikTok). Renaming a tier here does NOT retag existing Score Tiers rows — see the warning below.",
 };
 
 const componentLabels = {
@@ -495,6 +497,7 @@ const exampleScoreByMetric = {
     views_change: 15,
     reach_change: 10,
     engagement_change: 12,
+    account_tier: 8000,
 };
 
 const labelExampleText = (metric) => {
@@ -503,7 +506,7 @@ const labelExampleText = (metric) => {
     const score = exampleScoreByMetric[metric] ?? 50;
     const label = resolveTier(tiers, labelForms, 'min_score', 'label', score);
     if (label === null || label === undefined) return null;
-    const noun = ['views', 'followers'].includes(metric) ? 'value' : 'score';
+    const noun = ['views', 'followers', 'account_tier'].includes(metric) ? (metric === 'account_tier' ? 'start_follower' : 'value') : 'score';
     return `Example: a ${noun} of ${score.toLocaleString()} → labeled ${label}.`;
 };
 
