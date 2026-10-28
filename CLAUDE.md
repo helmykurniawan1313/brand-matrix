@@ -1,6 +1,8 @@
-# Brand Matrix — Project Context
+# Brand Matrix Experimental Plus — Project Context
 
-This is a **copy** of `d:\Project\social-media-health` (the original, still-running production-ish app), created to safely upscale/redesign without touching the live version. Database is `brand_matrix_v2` (cloned from `brand_matrix`), app runs on port 8003 by convention (`APP_URL` in `.env`), original runs on 8000.
+This is a **copy of `d:\Project\brand-health-with-api`** (itself a copy of `d:\Project\social-media-health`), made so very major/breaking changes can happen here without touching the stable `brand-health-with-api` copy. Database is `brand_matrix_experimental_plus` (cloned from `brand_health_api`), app runs on port 8005 by convention (`APP_URL` in `.env`). `brand-health-with-api` runs on 8003, the original `social-media-health` on 8000.
+
+This project has its **own, independent git history** — the `.git` folder was copied along with everything else, then detached from the shared `brand-matrix` GitHub remote so nothing here can accidentally push to that repo. Commits made from this point forward are local-only until/unless a new remote is added. Treat the pre-detach commit history (everything before this notice) as inherited context, not as this project's own authored history.
 
 ## Versioning
 
