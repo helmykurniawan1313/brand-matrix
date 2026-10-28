@@ -28,7 +28,7 @@ class ContentInsightController extends Controller
             'allInsights' => $all->values(),
             'months' => $all->pluck('month')->filter()->unique()->sort()->values(),
             'accounts' => Account::orderBy('name')->get(['id', 'name']),
-            'projectManagers' => Employee::whereIn('id', Account::query()->whereNotNull('project_manager_id')->distinct()->pluck('project_manager_id'))
+            'projectManagers' => Employee::whereIn('id', Cycle::query()->whereNotNull('project_manager_id')->distinct()->pluck('project_manager_id'))
                 ->orderBy('name')
                 ->get(['id', 'name']),
         ]);
@@ -65,9 +65,9 @@ class ContentInsightController extends Controller
     private function allInsights(): Collection
     {
         return ContentInsight::with([
-            'account:id,name,project_manager_id',
-            'account.projectManager:id,name',
-            'cycle:id,account_id,cycle_start_date,cycle_end_date,platform,end_follower',
+            'account:id,name',
+            'cycle:id,account_id,cycle_start_date,cycle_end_date,platform,end_follower,project_manager_id',
+            'cycle.projectManager:id,name',
         ])
             ->join('cycles', 'cycles.id', '=', 'content_insights.cycle_id')
             ->orderByDesc('cycles.cycle_start_date')
@@ -78,8 +78,10 @@ class ContentInsightController extends Controller
                 'account_id' => $insight->account_id,
                 'cycle_id' => $insight->cycle_id,
                 'account_name' => $insight->account?->name,
-                'project_manager_id' => $insight->account?->project_manager_id,
-                'project_manager_name' => $insight->account?->projectManager?->name,
+                // This insight belongs to one specific cycle, so it's that
+                // cycle's own PM — not the account's derived "current" PM.
+                'project_manager_id' => $insight->cycle?->project_manager_id,
+                'project_manager_name' => $insight->cycle?->projectManager?->name,
                 'platform' => $insight->cycle?->platform,
                 'month' => $insight->cycle?->cycle_start_date?->format('Y-m'),
                 'cycle_start_date' => $insight->cycle?->cycle_start_date?->toDateString(),

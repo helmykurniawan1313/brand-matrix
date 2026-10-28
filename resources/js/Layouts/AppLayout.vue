@@ -10,7 +10,7 @@ const { isSuperAdmin, canAccessPage } = useAuth();
 // Bumped per CLAUDE.md's versioning convention (vMEGA.MAJOR.MINOR) — tagged
 // in git alongside this value each time it changes, so this string and the
 // corresponding git tag always stay in sync.
-const appVersion = 'v1.5.3';
+const appVersion = 'v1.6.0';
 
 // path data for a 24x24 viewBox, stroke-based icon (matches the theme-toggle/menu icons already in this layout)
 const icons = {

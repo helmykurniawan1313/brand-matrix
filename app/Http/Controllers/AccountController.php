@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\ContentInsight;
 use App\Models\Cycle;
 use App\Models\Performance;
+use App\Services\AccountProjectManagerHistory;
 use App\Services\MetricCalculator;
 use App\Services\ScoreBucketResolver;
 use App\Services\SummaryProviderResolver;
@@ -50,13 +51,16 @@ class AccountController extends Controller
         // unfiltered pass regardless of which one narrowed it.
         $healthForSummary = null;
 
-        // A status filter, or a sort by any computed column (health, growth,
-        // reach, views, engagement — none are real DB columns), can only be
-        // resolved after scores are computed, so it forces the same PHP-side
-        // compute-then-filter-then-paginate path — even if the user is sorting
-        // by name/PM/cycles instead.
+        // A status filter, a sort by any computed column (health, growth,
+        // reach, views, engagement — none are real DB columns), a PM filter,
+        // or a PM sort can only be resolved after scores/PM are computed
+        // (PM is derived from each account's latest cycle, not its own
+        // column anymore) — all force the same PHP-side compute-then-filter-
+        // then-paginate path, even when sorting by name/cycles otherwise would.
         $hasStatusFilter = $healthFilter || $growthFilter || $reachFilter || $viewsFilter || $engagementFilter;
-        $needsScorePath = in_array($sortKey, ['health', 'growth', 'reach', 'views', 'engagement'], true) || $hasStatusFilter;
+        $needsScorePath = in_array($sortKey, ['health', 'growth', 'reach', 'views', 'engagement', 'pm'], true)
+            || $hasStatusFilter
+            || $pmId;
 
         $accounts = $needsScorePath
             ? $this->paginateSortedByHealth($request, $search, $pmId, $direction, $calculator, $healthFilter, $growthFilter, $reachFilter, $viewsFilter, $engagementFilter, $sortKey, $healthForSummary)
@@ -290,18 +294,17 @@ class AccountController extends Controller
      */
     private function paginateSortedBySqlColumn(Request $request, ?string $search, ?int $pmId, string $sortKey, string $direction): LengthAwarePaginator
     {
+        // 'pm' sort and any PM filter are routed to paginateSortedByHealth()
+        // instead (PM is derived from cycles, not a real column to sort/
+        // filter in SQL anymore) — this path only ever sees 'name'/'cycles' now.
         $sortColumns = [
             'name' => 'accounts.name',
-            'pm' => 'employees.name',
             'cycles' => 'cycles_count',
         ];
         $sortColumn = $sortColumns[$sortKey] ?? 'accounts.name';
 
-        $accounts = Account::with('projectManager:id,name')
-            ->leftJoin('employees', 'employees.id', '=', 'accounts.project_manager_id')
-            ->withCount('cycles')
+        $accounts = Account::withCount('cycles')
             ->when($search, fn ($query, $search) => $query->where('accounts.name', 'like', "%{$search}%"))
-            ->when($pmId, fn ($query, $pmId) => $query->where('accounts.project_manager_id', $pmId))
             ->orderBy($sortColumn, $direction)
             ->orderBy('accounts.name')
             ->paginate(15)
@@ -325,12 +328,19 @@ class AccountController extends Controller
      */
     private function paginateSortedByHealth(Request $request, ?string $search, ?int $pmId, string $direction, MetricCalculator $calculator, ?array $healthFilter, ?array $growthFilter, ?array $reachFilter, ?array $viewsFilter, ?array $engagementFilter, string $sortKey, ?Collection &$healthByAccountOut = null): LengthAwarePaginator
     {
-        $matching = Account::with('projectManager:id,name')
-            ->withCount('cycles')
+        $allAccounts = Account::withCount('cycles')
             ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
-            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
             ->orderBy('name')
             ->get();
+
+        $pmByAccount = $this->currentPmByAccount($allAccounts->pluck('id'));
+        $pmNames = Employee::whereIn('id', $pmByAccount->filter()->unique()->values())->get(['id', 'name'])->keyBy('id');
+
+        // PM filter can only be applied once each account's current PM is
+        // derived (it's no longer a real column to filter on in SQL).
+        $matching = $pmId
+            ? $allAccounts->filter(fn (Account $account) => $pmByAccount->get($account->id) === $pmId)->values()
+            : $allAccounts;
 
         $healthByAccount = $this->latestCycleHealthByAccount($matching->pluck('id'), $calculator);
         $healthByAccountOut = $healthByAccount;
@@ -349,6 +359,8 @@ class AccountController extends Controller
                 'growth_label' => $healthByAccount->get($account->id)['growth_label'] ?? null,
                 'scores' => $healthByAccount->get($account->id),
                 'platforms' => $platformsByAccount->get($account->id, []),
+                'pm_id' => $pmByAccount->get($account->id),
+                'pm_name' => $pmNames->get($pmByAccount->get($account->id))?->name,
             ])
             ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
             ->when($growthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['growth_label'], $growthFilter, true)))
@@ -382,6 +394,22 @@ class AccountController extends Controller
 
                 return $direction === 'desc' ? $rankB <=> $rankA : $rankA <=> $rankB;
             })->values();
+        } elseif ($sortKey === 'pm') {
+            // No-PM accounts sort last regardless of direction, same "no data"
+            // convention as health/numeric sorts above.
+            $sorted = $rows->sort(function ($a, $b) use ($direction) {
+                $nameA = $a['pm_name'];
+                $nameB = $b['pm_name'];
+
+                if ($nameA === null && $nameB === null) {
+                    return 0;
+                }
+                if ($nameA === null || $nameB === null) {
+                    return $nameA === null ? 1 : -1;
+                }
+
+                return $direction === 'desc' ? strcasecmp($nameB, $nameA) : strcasecmp($nameA, $nameB);
+            })->values();
         } elseif ($numericField) {
             // Accounts with no value (no cycles, or no prior cycle to compare
             // against) sort last regardless of direction — same "no data isn't
@@ -414,7 +442,7 @@ class AccountController extends Controller
             ['path' => $request->url(), 'query' => $request->query()],
         );
 
-        $paginator->through(fn ($row) => $this->presentAccount($row['account'], $row['scores'], $row['platforms']));
+        $paginator->through(fn ($row) => $this->presentAccount($row['account'], $row['scores'], $row['platforms'], $row['pm_id'], $pmNames));
 
         return $paginator;
     }
@@ -428,24 +456,28 @@ class AccountController extends Controller
     {
         $healthByAccount = $this->latestCycleHealthByAccount($accounts->pluck('id'), $calculator);
         $platformsByAccount = $this->platformsByAccount($accounts->pluck('id'));
+        $pmByAccount = $this->currentPmByAccount($accounts->pluck('id'));
+        $pmNames = Employee::whereIn('id', $pmByAccount->filter()->unique()->values())->get(['id', 'name'])->keyBy('id');
 
         $accounts->through(fn (Account $account) => $this->presentAccount(
             $account,
             $healthByAccount->get($account->id),
             $platformsByAccount->get($account->id, []),
+            $pmByAccount->get($account->id),
+            $pmNames,
         ));
     }
 
     /**
      * @param  array{health_label?: ?string, growth_rate?: ?float, growth_label?: ?string, views_status?: ?string, reach_status?: ?string, engagement_status?: ?string}|null  $scores
      */
-    private function presentAccount(Account $account, ?array $scores, array $platforms): array
+    private function presentAccount(Account $account, ?array $scores, array $platforms, ?int $pmId = null, ?Collection $pmNames = null): array
     {
         return [
             'id' => $account->id,
             'name' => $account->name,
-            'project_manager_id' => $account->project_manager_id,
-            'project_manager' => $account->projectManager,
+            'project_manager_id' => $pmId,
+            'project_manager' => $pmId && $pmNames ? $pmNames->get($pmId) : null,
             'cycles_count' => $account->cycles_count,
             'ig_business_id' => $account->ig_business_id,
             'ig_username' => $account->ig_username,
@@ -554,6 +586,31 @@ class AccountController extends Controller
             ->map(fn (Collection $cycles) => $cycles->pluck('platform')->unique()->values()->all());
     }
 
+    /**
+     * Each account's current PM, derived from its single most-recently-started
+     * cycle regardless of platform (deliberately NOT split per-platform like
+     * latestCycleHealthByAccount() above — an account's "current PM" is one
+     * person, not one-per-platform, per how this was scoped). Account no
+     * longer has its own project_manager_id column in active use; this is
+     * the one place "this account's PM" gets computed, so sort/filter/display
+     * all agree with each other and with the Account detail page.
+     *
+     * @return Collection<int, ?int> account_id => project_manager_id (or null)
+     */
+    private function currentPmByAccount(Collection $accountIds): Collection
+    {
+        if ($accountIds->isEmpty()) {
+            return collect();
+        }
+
+        return Cycle::whereIn('account_id', $accountIds)
+            ->orderByDesc('cycle_start_date')
+            ->orderByDesc('id')
+            ->get(['account_id', 'project_manager_id'])
+            ->unique('account_id')
+            ->pluck('project_manager_id', 'account_id');
+    }
+
     public function growth(Account $account, MetricCalculator $calculator): JsonResponse
     {
         $scoreBuckets = ScoreBucket::all();
@@ -623,9 +680,21 @@ class AccountController extends Controller
                 ];
             });
 
+        $pmTimeline = (new AccountProjectManagerHistory())->timeline($account);
+        $pmIds = $pmTimeline->pluck('project_manager_id')->filter()->unique()->values();
+        $pmNames = Employee::whereIn('id', $pmIds)->pluck('name', 'id');
+
         return response()->json([
             'account' => ['id' => $account->id, 'name' => $account->name],
             'cycles' => $cycles,
+            // Consecutive-same-PM runs across the account's whole cycle
+            // history (oldest first) — "No PM yet" is its own run so a gap
+            // still shows up rather than silently vanishing from the list.
+            'pmHistory' => $pmTimeline->map(fn ($run) => [
+                'project_manager_name' => $run['project_manager_id'] ? $pmNames->get($run['project_manager_id']) : null,
+                'from' => $run['from']->toDateString(),
+                'to' => $run['to']->toDateString(),
+            ])->values(),
             'postSummary' => $this->postSummaryByPlatform($performances),
             'ai_summary' => $account->ai_summary,
             'ai_summary_generated_at' => $account->ai_summary_generated_at?->toIso8601String(),
@@ -801,9 +870,11 @@ class AccountController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // No project_manager_id here — an account's PM is derived from its
+        // cycles (see currentPmByAccount()), and a brand-new account has none
+        // yet. It'll show "No PM yet" until its first cycle is created.
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'project_manager_id' => ['nullable', 'exists:employees,id'],
         ]);
 
         Account::create($data);
@@ -815,7 +886,6 @@ class AccountController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'project_manager_id' => ['nullable', 'exists:employees,id'],
         ]);
 
         $account->update($data);

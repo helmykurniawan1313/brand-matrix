@@ -35,6 +35,10 @@ const emptySummary = () => ({
 });
 const postSummary = ref({ instagram: emptySummary(), tiktok: emptySummary() });
 const changeLabelBuckets = ref({ views: [], reach: [], engagement: [] });
+// Consecutive-same-PM runs across this account's whole cycle history
+// (oldest first) — e.g. [{project_manager_name: 'Sarah', from: ..., to: ...}, ...].
+const pmHistory = ref([]);
+const showPmHistory = ref(false);
 
 const tabs = [
     { key: 'instagram', label: 'Instagram' },
@@ -794,6 +798,7 @@ const load = async () => {
         }));
         postSummary.value = data.postSummary ?? postSummary.value;
         changeLabelBuckets.value = data.changeLabelBuckets ?? changeLabelBuckets.value;
+        pmHistory.value = data.pmHistory ?? [];
 
         if (data.ai_summary) {
             summaryResult.value = {
@@ -1056,7 +1061,44 @@ onBeforeUnmount(() => {
                             </svg>
                             <span class="text-xs" style="color: var(--ink-faint)">PM</span>
                             <span class="text-xs font-medium" style="color: var(--ink)">{{ latestCycle?.project_manager_name || '—' }}</span>
+                            <button
+                                v-if="pmHistory.length > 1"
+                                type="button"
+                                class="text-xs font-medium underline-offset-2 transition-opacity hover:opacity-70"
+                                style="color: var(--accent)"
+                                @click="showPmHistory = !showPmHistory"
+                            >
+                                {{ showPmHistory ? 'Hide history' : 'History' }}
+                            </button>
                         </div>
+                    </div>
+
+                    <!-- PM history timeline — consecutive same-PM runs across the
+                         account's whole cycle history, oldest first. Only shown when
+                         there's actually more than one run (i.e. the PM has changed
+                         at least once); a single-PM account has nothing to show here. -->
+                    <div
+                        v-if="showPmHistory && pmHistory.length > 1"
+                        class="mt-2 rounded-lg border px-4 py-3"
+                        style="border-color: var(--border); background-color: var(--bg)"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">PM History</p>
+                        <ul class="mt-2 space-y-1.5">
+                            <li
+                                v-for="(run, index) in [...pmHistory].reverse()"
+                                :key="`${run.project_manager_name}-${run.from}`"
+                                class="flex items-center gap-2 text-xs"
+                            >
+                                <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full"
+                                    :style="`background-color: ${index === 0 ? 'var(--accent)' : 'var(--ink-faint)'}`"
+                                />
+                                <span class="font-medium" style="color: var(--ink)">{{ run.project_manager_name || 'No PM' }}</span>
+                                <span style="color: var(--ink-faint)">
+                                    {{ formatDate(run.from) }} – {{ formatDate(run.to) }}
+                                </span>
+                            </li>
+                        </ul>
                     </div>
 
                     <!-- Metric switcher: one shared chart, five chips to pick what it plots.

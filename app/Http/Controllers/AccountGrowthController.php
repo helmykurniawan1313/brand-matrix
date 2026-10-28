@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ComputesAccountHealthAndDelta;
 use App\Models\Account;
+use App\Models\Cycle;
 use App\Models\Employee;
 use App\Models\LabelBucket;
 use App\Services\MetricCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,16 +38,28 @@ class AccountGrowthController extends Controller
         $page = $request->integer('page', 1);
         $perPage = 15;
 
-        $accounts = Account::with('projectManager:id,name')
-            ->withCount('cycles')
+        $accounts = Account::withCount('cycles')
             ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
-            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
             ->orderBy('name')
             ->get();
 
+        $pmByAccount = $this->currentPmByAccount($accounts->pluck('id'));
+        $pmNames = Employee::whereIn('id', $pmByAccount->filter()->unique()->values())->get(['id', 'name'])->keyBy('id');
+
+        // PM filter applied in PHP, after deriving each account's current PM
+        // from its latest cycle — it's no longer a real accounts column.
+        if ($pmId) {
+            $accounts = $accounts->filter(fn (Account $account) => $pmByAccount->get($account->id) === $pmId)->values();
+        }
+
         $healthByAccount = $this->latestCycleHealthByAccount($accounts->pluck('id'), $calculator);
 
-        $rows = $accounts->map(fn (Account $account) => $this->presentAccount($account, $healthByAccount->get($account->id)))
+        $rows = $accounts->map(fn (Account $account) => $this->presentAccount(
+            $account,
+            $healthByAccount->get($account->id),
+            $pmByAccount->get($account->id),
+            $pmNames,
+        ))
             ->when($growthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['growth_label'], $growthFilter, true)))
             ->when($reachFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['reach_status'], $reachFilter, true)))
             ->when($viewsFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['views_status'], $viewsFilter, true)))
@@ -143,13 +157,33 @@ class AccountGrowthController extends Controller
         return false;
     }
 
-    private function presentAccount(Account $account, ?array $scores): array
+    /**
+     * Each account's current PM, derived from its single most-recently-started
+     * cycle (same convention as AccountController::currentPmByAccount()).
+     *
+     * @return Collection<int, ?int> account_id => project_manager_id (or null)
+     */
+    private function currentPmByAccount(Collection $accountIds): Collection
+    {
+        if ($accountIds->isEmpty()) {
+            return collect();
+        }
+
+        return Cycle::whereIn('account_id', $accountIds)
+            ->orderByDesc('cycle_start_date')
+            ->orderByDesc('id')
+            ->get(['account_id', 'project_manager_id'])
+            ->unique('account_id')
+            ->pluck('project_manager_id', 'account_id');
+    }
+
+    private function presentAccount(Account $account, ?array $scores, ?int $pmId = null, ?Collection $pmNames = null): array
     {
         return [
             'id' => $account->id,
             'name' => $account->name,
-            'project_manager_id' => $account->project_manager_id,
-            'project_manager' => $account->projectManager,
+            'project_manager_id' => $pmId,
+            'project_manager' => $pmId && $pmNames ? $pmNames->get($pmId) : null,
             'cycles_count' => $account->cycles_count,
             'latest_cycle_label' => $scores['latest_cycle_label'] ?? null,
             'growth_rate' => $scores['growth_rate'] ?? null,

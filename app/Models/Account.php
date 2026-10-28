@@ -13,7 +13,6 @@ class Account extends Model
 
     protected $fillable = [
         'name',
-        'project_manager_id',
     ];
 
     protected $casts = [

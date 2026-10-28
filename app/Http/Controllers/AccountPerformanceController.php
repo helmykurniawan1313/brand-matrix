@@ -118,10 +118,13 @@ class AccountPerformanceController extends Controller
 
         $accountIds = Account::query()
             ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
-            ->when($pmId, fn ($query, $pmId) => $query->where('project_manager_id', $pmId))
             ->pluck('id');
 
+        // PM filter applied to the rows themselves (each row IS a specific
+        // cycle, carrying that cycle's own PM) rather than pre-filtering
+        // accounts by a column that no longer exists.
         $rows = $this->latestCyclePerAccountPlatform($accountIds, $calculator, $monthTo)
+            ->when($pmId, fn ($rows) => $rows->filter(fn ($row) => $row['project_manager']?->id === $pmId))
             ->when($healthFilter, fn ($rows) => $rows->filter(fn ($row) => in_array($row['health_label'], $healthFilter, true)))
             ->values();
 
@@ -200,8 +203,7 @@ class AccountPerformanceController extends Controller
             return collect();
         }
 
-        $accountsById = Account::with('projectManager:id,name')
-            ->whereIn('id', $accountIds)
+        $accountsById = Account::whereIn('id', $accountIds)
             ->get()
             ->keyBy('id');
 
@@ -209,7 +211,8 @@ class AccountPerformanceController extends Controller
         $labelBuckets = LabelBucket::all();
         $formulaWeights = FormulaWeight::all();
 
-        return Cycle::whereIn('account_id', $accountIds)
+        return Cycle::with('projectManager:id,name')
+            ->whereIn('account_id', $accountIds)
             ->orderBy('cycle_start_date')
             ->get()
             ->groupBy('account_id')
@@ -234,7 +237,11 @@ class AccountPerformanceController extends Controller
                         return [
                             'account_id' => $account->id,
                             'account_name' => $account->name,
-                            'project_manager' => $account->projectManager,
+                            // This row IS a specific cycle (the latest for this
+                            // account+platform, possibly as of a chosen month),
+                            // so its PM is that cycle's own PM — no separate
+                            // "account's current PM" derivation needed here.
+                            'project_manager' => $latest->projectManager,
                             'platform' => $platform,
                             'cycle_id' => $latest->id,
                             'latest_cycle_label' => $latest->cycle_start_date->format('M Y'),

@@ -247,7 +247,6 @@ const editingAccount = ref(null);
 
 const accountForm = useForm({
     name: '',
-    project_manager_id: '',
 });
 
 const openCreate = () => {
@@ -260,7 +259,6 @@ const openCreate = () => {
 const openEdit = (account) => {
     editingAccount.value = account;
     accountForm.name = account.name;
-    accountForm.project_manager_id = account.project_manager_id ?? '';
     accountForm.clearErrors();
     showFormModal.value = true;
 };
@@ -774,19 +772,14 @@ const accountActions = (account) =>
                     </p>
                 </div>
 
-                <div>
+                <div v-if="editingAccount">
                     <label class="block text-sm font-medium" style="color: var(--ink-muted)">Project Manager</label>
-                    <div class="mt-1.5">
-                        <SearchableSelect
-                            v-model="accountForm.project_manager_id"
-                            :options="pmOptions"
-                            placeholder="Select PM…"
-                            clearable
-                            clear-label="No PM"
-                        />
-                    </div>
-                    <p v-if="accountForm.errors.project_manager_id" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
-                        {{ accountForm.errors.project_manager_id }}
+                    <p class="mt-1.5 text-sm" style="color: var(--ink)">
+                        {{ editingAccount.project_manager?.name ?? 'No PM yet' }}
+                    </p>
+                    <p class="mt-1 text-xs" style="color: var(--ink-faint)">
+                        Derived from this account's most recent cycle — set or change it from the cycle itself,
+                        not here. Each past cycle keeps its own PM on record.
                     </p>
                 </div>
 
