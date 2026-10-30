@@ -103,6 +103,85 @@ if (isConnected.value) {
     loadData();
 }
 
+// Bulk import from Meta Business Suite's daily export CSVs
+
+const importFields = [
+    { key: 'follows', label: 'Follows' },
+    { key: 'viewers', label: 'Viewers' },
+    { key: 'views', label: 'Views' },
+    { key: 'interactions', label: 'Interactions' },
+    { key: 'visits', label: 'Visits' },
+    { key: 'link_clicks', label: 'Link clicks' },
+];
+
+const importFiles = reactive({
+    follows: null,
+    viewers: null,
+    views: null,
+    interactions: null,
+    visits: null,
+    link_clicks: null,
+});
+
+const startingFollowers = ref('');
+const importing = ref(false);
+const importError = ref(null);
+const importResult = ref(null);
+
+const onImportFileChange = (key, event) => {
+    importFiles[key] = event.target.files?.[0] ?? null;
+};
+
+const submitImport = async () => {
+    const chosen = Object.entries(importFiles).filter(([, file]) => file);
+
+    if (chosen.length === 0) {
+        importError.value = 'Choose at least one Meta export file.';
+        return;
+    }
+
+    importing.value = true;
+    importError.value = null;
+    importResult.value = null;
+
+    const formData = new FormData();
+    chosen.forEach(([key, file]) => formData.append(key, file));
+    if (startingFollowers.value !== '') {
+        formData.append('starting_followers', startingFollowers.value);
+    }
+
+    try {
+        const res = await fetch(`/accounts/${props.account.id}/instagram/import`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? ''),
+            },
+            body: formData,
+        });
+        const body = await res.json();
+
+        if (!res.ok) {
+            importError.value = body.message ?? 'Import failed.';
+            return;
+        }
+
+        importResult.value = body;
+        toast.success(`Imported ${body.dates_imported} day(s) of data.`);
+
+        Object.keys(importFiles).forEach((key) => (importFiles[key] = null));
+        document.querySelectorAll('[data-meta-import-input]').forEach((el) => (el.value = ''));
+
+        if (isConnected.value) {
+            loadData();
+        }
+    } catch (e) {
+        importError.value = 'Network error while importing.';
+    } finally {
+        importing.value = false;
+    }
+};
+
 const expandedMediaId = ref(null);
 const mediaInsightsLoading = ref(null);
 const mediaInsightsError = reactive({});
@@ -318,6 +397,68 @@ const toggleMediaInsights = async (item) => {
                     <button v-if="canEdit" class="text-sm font-medium" style="color: var(--status-parah-ink)" @click="confirmDisconnect">Disconnect</button>
                 </div>
             </div>
+
+            <details v-if="canEdit" class="mt-6 rounded-md border p-4" style="border-color: var(--border)">
+                <summary class="cursor-pointer text-sm font-semibold" style="color: var(--ink)">
+                    Import Meta Export (bulk daily data)
+                </summary>
+                <p class="mt-2 text-xs" style="color: var(--ink-faint)">
+                    Upload the daily CSVs exported from Meta Business Suite ("Export data" on each Insights chart). Any
+                    subset works — each file is matched by metric, not filename. Rows are merged into this account's
+                    daily history, which Add Cycle's auto-fill already reads from.
+                </p>
+
+                <form @submit.prevent="submitImport" class="mt-4 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div v-for="field in importFields" :key="field.key">
+                            <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                                {{ field.label }}
+                            </label>
+                            <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                data-meta-import-input
+                                class="mt-1 w-full text-xs"
+                                style="color: var(--ink-muted)"
+                                @change="onImportFileChange(field.key, $event)"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                            Starting follower count (optional)
+                        </label>
+                        <input
+                            v-model="startingFollowers"
+                            type="number"
+                            min="0"
+                            placeholder="Leave blank to use the last known count"
+                            class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                            style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
+                        />
+                        <p class="mt-1 text-xs" style="color: var(--ink-faint)">
+                            "Follows" in the export is the net change per day, not a running total — this seeds the
+                            count it accumulates onto for the first imported day. If left blank, the last recorded
+                            snapshot before the import range is used, if any.
+                        </p>
+                    </div>
+
+                    <p v-if="importError" class="text-sm" style="color: var(--status-parah-ink)">{{ importError }}</p>
+                    <p v-if="importResult" class="text-sm" style="color: var(--status-sip-ink)">
+                        Imported {{ importResult.dates_imported }} day(s), {{ importResult.date_from }} to {{ importResult.date_to }}.
+                    </p>
+
+                    <button
+                        type="submit"
+                        :disabled="importing"
+                        class="rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                        style="background-color: var(--accent); color: var(--accent-ink)"
+                    >
+                        {{ importing ? 'Importing…' : 'Import' }}
+                    </button>
+                </form>
+            </details>
         </div>
 
         <ConfirmDialog

@@ -116,13 +116,42 @@ const inputStyle = 'rounded-md border px-2.5 py-1.5 text-sm tabular-nums transit
 const inputSurface = 'border-color: var(--border); background-color: var(--surface-raised); color: var(--ink)';
 
 // --- Tabs ---
+// Grouped by aggregate rather than by Score/Label, so a metric's rate→score
+// tiers sit next to the label tiers they ultimately feed (e.g. Visibility
+// shows Reach/View score tiers together with the Visibility label tiers)
+// instead of splitting the same conceptual chain across two tabs.
 
 const tabs = [
+    { key: 'growth', label: 'Growth', hint: 'Growth rate → score → label' },
+    { key: 'visibility', label: 'Visibility', hint: 'Reach/View/Profile → Visibility' },
+    { key: 'engagement', label: 'Engagement', hint: 'ER-Reach/ER-Follower/ER-View → Engagement' },
+    { key: 'health', label: 'Health', hint: 'Terminal aggregate label' },
+    { key: 'other', label: 'Other', hint: 'Standalone label-only metrics' },
     { key: 'weights', label: 'Formula Weights', hint: 'How aggregates combine' },
-    { key: 'scores', label: 'Score Tiers', hint: 'Rate → 0-100 score' },
-    { key: 'labels', label: 'Label Tiers', hint: 'Score → status text' },
 ];
-const activeTab = ref('weights');
+const activeTab = ref('growth');
+
+// Which score-tier metrics and which label-tier metric(s) belong to each
+// aggregate tab — mirrors the feedsInto relationship already used for the
+// score-tier example text below.
+const aggregateGroups = {
+    growth: { scoreMetrics: ['growth'], labelMetrics: ['growth'] },
+    visibility: { scoreMetrics: ['reach', 'view', 'profile'], labelMetrics: ['visibility'] },
+    engagement: { scoreMetrics: ['er_reach', 'er_follower', 'er_view'], labelMetrics: ['engagement'] },
+    health: { scoreMetrics: [], labelMetrics: ['health'] },
+    other: {
+        scoreMetrics: [],
+        labelMetrics: ['account_growth', 'views', 'followers', 'views_change', 'reach_change', 'engagement_change', 'account_tier'],
+    },
+};
+
+// Only show a tab's score-metric section for metrics that actually have
+// buckets defined (e.g. a brand-new install with no TikTok tiers yet still
+// shows Visibility cleanly without an empty "Profile Rate" card).
+const tabScoreMetrics = (tabKey) =>
+    (aggregateGroups[tabKey]?.scoreMetrics ?? []).filter((m) => props.scoreMetrics.includes(m));
+const tabLabelMetrics = (tabKey) =>
+    (aggregateGroups[tabKey]?.labelMetrics ?? []).filter((m) => props.labelMetrics.includes(m));
 
 const scoreBucketsByMetric = computed(() => {
     const grouped = {};
@@ -178,6 +207,38 @@ const scoreGroupsByMetric = computed(() => {
     }
     return groups;
 });
+
+// Pivots a metric's groups into a platform-column × tier-row table — rows:
+// Global (untiered fallback) first, then each known account tier in order;
+// columns: one per platform that actually has any groups for this metric,
+// "Global" column folded into the row when there's no tiering at all. This
+// replaces stacking all 9 groups (Global + 2 platforms × 4 tiers) vertically,
+// which made Growth/Visibility/Engagement tabs very long to scroll.
+const scoreTableByMetric = computed(() => {
+    const tables = {};
+    for (const metric of props.scoreMetrics) {
+        const groups = scoreGroupsByMetric.value[metric] ?? [];
+        const platforms = [...new Set(groups.filter((g) => g.platform).map((g) => g.platform))].sort();
+        const tiers = [...new Set(groups.filter((g) => g.tier).map((g) => g.tier))].sort(
+            (a, b) => tierSortIndex(a) - tierSortIndex(b),
+        );
+        const globalGroup = groups.find((g) => !g.platform && !g.tier) ?? null;
+        const findGroup = (platform, tier) => groups.find((g) => g.platform === platform && g.tier === tier) ?? null;
+
+        tables[metric] = { platforms, tiers, globalGroup, findGroup };
+    }
+    return tables;
+});
+
+// Which table cell (keyed by `${metric}|${platform ?? ''}|${tier ?? ''}`) is
+// currently expanded to show its full editable rows — collapsed cells show a
+// compact read-only chip summary instead.
+const expandedCell = ref(null);
+const cellKey = (metric, platform, tier) => `${metric}|${platform ?? ''}|${tier ?? ''}`;
+const toggleCell = (metric, platform, tier) => {
+    const key = cellKey(metric, platform, tier);
+    expandedCell.value = expandedCell.value === key ? null : key;
+};
 
 const labelBucketsByMetric = computed(() => {
     const grouped = {};
@@ -259,6 +320,11 @@ watch(
 
 const dirtyTiers = reactive({}); // bucket.id -> bool, drives the "unsaved" affordance
 const markDirty = (id) => { dirtyTiers[id] = true; };
+
+// Which label-tier row's inline color picker is open — only one at a time,
+// replacing 5 color-swatch rows shown permanently (very repetitive at 5+
+// tiers) with an on-demand picker opened via the row's own color dot.
+const colorPickerOpen = ref(null);
 
 const saveScoreBucket = (bucket) => {
     scoreForms[bucket.id].put(`/score-buckets/${bucket.id}`, {
@@ -441,7 +507,9 @@ const resolveTier = (tiers, forms, minKey, valueKey, value) => {
             winnerMin = min;
         }
     }
-    return winner ? Number(winner[valueKey]) : null;
+    if (!winner) return null;
+    const raw = winner[valueKey];
+    return typeof raw === 'string' && valueKey !== 'label' ? Number(raw) : raw;
 };
 
 // A representative rate for each score metric's example — chosen to read as
@@ -589,119 +657,74 @@ const saveWeights = (aggregate) => {
         </button>
     </div>
 
-    <!-- ============ FORMULA WEIGHTS ============ -->
-    <div v-if="activeTab === 'weights'" class="mt-6">
+    <!-- ============ SCORE TIERS + LABEL TIERS (per aggregate) ============ -->
+    <div v-if="activeTab !== 'weights'" class="mt-6">
         <p class="max-w-2xl text-sm" style="color: var(--ink-muted)">
-            Adjust how much each component contributes to an aggregate. Weights don't need to sum to 1 — they're
-            normalized automatically, so entering 2 and 1 behaves the same as 0.67 and 0.33.
+            <span v-if="tabScoreMetrics(activeTab).length">
+                Score tiers map a raw rate to a 0-100 score; label tiers below map the resulting aggregate score to
+                the status text shown throughout the app. In both, the highest matching minimum wins.
+            </span>
+            <span v-else>
+                Maps an aggregate score (or, for a few metrics, a raw count) to the status text shown throughout the
+                app — the highest matching minimum wins.
+            </span>
         </p>
 
-        <div class="mt-5 grid gap-5 lg:grid-cols-3">
-            <section
-                v-for="aggregate in Object.keys(formulaComponents)"
-                :key="aggregate"
-                class="rounded-xl border p-5 shadow-sm"
-                style="border-color: var(--border); background-color: var(--surface)"
-            >
-                <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ metricTitles[aggregate] }}</h3>
-                <p class="mt-0.5 font-mono text-xs" style="color: var(--ink-faint)">{{ metricHints[aggregate] }}</p>
+    <!-- ============ SCORE TIERS (within the aggregate tab) ============ -->
+    <div v-if="tabScoreMetrics(activeTab).length" class="mt-5 space-y-6">
+        <h2 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+            Score Tiers — rate → 0-100 score
+        </h2>
 
-                <!-- Stacked proportion bar — visualizes the normalized split at a glance -->
-                <div class="mt-4 flex h-2.5 overflow-hidden rounded-full" style="background-color: var(--bg)">
-                    <div
-                        v-for="(component, i) in formulaComponents[aggregate]"
-                        :key="component"
-                        class="h-full transition-all"
-                        :style="`width: ${normalizedPercent(aggregate, component)}%; background-color: ${weightTone(i).ink}`"
-                        :title="`${componentLabels[component]}: ${normalizedPercent(aggregate, component)}%`"
-                    />
+        <section
+            v-for="metric in tabScoreMetrics(activeTab)"
+            :key="metric"
+            class="rounded-xl border p-5 shadow-sm"
+            style="border-color: var(--border); background-color: var(--surface)"
+        >
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="font-display text-sm font-bold" style="color: var(--ink)">{{ metricTitles[metric] }}</h2>
+                    <p class="mt-0.5 font-mono text-xs" style="color: var(--ink-faint)">{{ metricHints[metric] }}</p>
                 </div>
-
-                <div class="mt-4 space-y-2">
-                    <div
-                        v-for="(component, i) in formulaComponents[aggregate]"
-                        :key="component"
-                        class="flex items-center gap-2 rounded-md border px-3 py-2"
-                        style="border-color: var(--border); background-color: var(--bg)"
-                    >
-                        <span class="h-2 w-2 shrink-0 rounded-full" :style="`background-color: ${weightTone(i).ink}`" />
-                        <span class="flex-1 text-sm" style="color: var(--ink)">{{ componentLabels[component] }}</span>
-                        <input
-                            v-model.number="weightForms[aggregate].weights[component]"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            :disabled="!canEdit"
-                            :class="inputStyle"
-                            :style="inputSurface"
-                            class="w-20 disabled:opacity-60"
-                        />
-                        <span class="w-12 shrink-0 text-right text-xs font-semibold tabular-nums" style="color: var(--ink-faint)">
-                            {{ normalizedPercent(aggregate, component) }}%
-                        </span>
-                    </div>
-                </div>
-
-                <p v-if="weightForms[aggregate].errors.weights" class="mt-2 text-xs" style="color: var(--status-parah-ink)">
-                    {{ weightForms[aggregate].errors.weights }}
-                </p>
-
-                <button
-                    v-if="canEdit"
-                    type="button"
-                    class="mt-4 w-full rounded-md py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
-                    style="background-color: var(--accent); color: var(--accent-ink)"
-                    :disabled="weightForms[aggregate].processing"
-                    @click="saveWeights(aggregate)"
+                <span
+                    class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums"
+                    style="background-color: var(--accent-soft); color: var(--accent)"
                 >
-                    {{ weightForms[aggregate].processing ? 'Saving…' : 'Save weights' }}
-                </button>
-            </section>
-        </div>
-    </div>
+                    {{ scoreBucketsByMetric[metric]?.length ?? 0 }} tiers
+                </span>
+            </div>
 
-    <!-- ============ SCORE TIERS ============ -->
-    <div v-if="activeTab === 'scores'" class="mt-6">
-        <p class="max-w-2xl text-sm" style="color: var(--ink-muted)">
-            Each tier fires when a metric's rate is at or above its minimum — the highest matching tier wins. A
-            metric scored by account size (e.g. Instagram's Growth/Reach/View/ER-Reach) shows one threshold set per
-            tier below — a cycle looks up its own platform + size tier first, then falls back to a platform-wide
-            set, then the global set, so a tier left blank just inherits the more general one.
-        </p>
-
-        <div class="mt-5 grid gap-5 lg:grid-cols-2">
-            <section
-                v-for="metric in scoreMetrics"
-                :key="metric"
-                class="rounded-xl border p-5 shadow-sm"
-                style="border-color: var(--border); background-color: var(--surface)"
-            >
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="font-display text-sm font-bold" style="color: var(--ink)">{{ metricTitles[metric] }}</h2>
-                        <p class="mt-0.5 font-mono text-xs" style="color: var(--ink-faint)">{{ metricHints[metric] }}</p>
-                    </div>
-                    <span
-                        class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums"
-                        style="background-color: var(--accent-soft); color: var(--accent)"
-                    >
-                        {{ scoreBucketsByMetric[metric]?.length ?? 0 }} tiers
+            <!-- Global (untiered) group — shown as its own compact strip above the table -->
+            <div v-if="scoreTableByMetric[metric].globalGroup" class="mt-4">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
+                    style="border-color: var(--border); background-color: var(--bg)"
+                    @click="toggleCell(metric, null, null)"
+                >
+                    <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+                        Global (all platforms, all tiers)
                     </span>
-                </div>
-
-                <div class="mt-4 space-y-5">
-                    <div
-                        v-for="group in scoreGroupsByMetric[metric]"
-                        :key="group.key"
-                        class="rounded-lg border p-3"
-                        style="border-color: var(--border); background-color: var(--bg)"
-                    >
-                        <p class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
-                            {{ group.label }}
-                        </p>
-
+                    <span class="flex flex-wrap items-center gap-1">
+                        <span
+                            v-for="bucket in scoreTableByMetric[metric].globalGroup.buckets"
+                            :key="bucket.id"
+                            class="rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums"
+                            :style="`background-color: ${tierTone(scoreForms[bucket.id], 0).bg}; color: ${tierTone(scoreForms[bucket.id], 0).ink}`"
+                        >
+                            ≥{{ formatThreshold(bucket.min_rate) }}→{{ bucket.score }}
+                        </span>
+                    </span>
+                </button>
+                <div
+                    v-if="expandedCell === cellKey(metric, null, null)"
+                    class="mt-2 rounded-lg border p-3"
+                    style="border-color: var(--border); background-color: var(--bg)"
+                >
+                    <template v-for="group in [scoreTableByMetric[metric].globalGroup]" :key="group.key">
                         <!-- Range bar -->
-                        <div class="relative mt-2 h-7 overflow-hidden rounded-md" style="background-color: var(--surface)">
+                        <div class="relative h-7 overflow-hidden rounded-md" style="background-color: var(--surface)">
                             <div
                                 v-for="seg in scoreGroupRangeSegments(group)"
                                 :key="seg.tier.id"
@@ -805,7 +828,7 @@ const saveWeights = (aggregate) => {
                                 style="border-color: var(--border-strong); color: var(--accent)"
                                 @click="ensureNewScoreForm(metric, group); showNewScoreRow[newScoreFormKey(metric, group)] = true"
                             >
-                                + Add tier to {{ group.label }}
+                                + Add tier
                             </button>
 
                             <div
@@ -853,51 +876,497 @@ const saveWeights = (aggregate) => {
                                 </div>
                             </div>
                         </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Platform × Tier table — the main compact view for tiered metrics -->
+            <div v-if="scoreTableByMetric[metric].platforms.length" class="mt-4 overflow-x-auto">
+                <table class="w-full border-separate" style="border-spacing: 0.5rem">
+                    <thead>
+                        <tr>
+                            <th class="w-24" />
+                            <th
+                                v-for="platform in scoreTableByMetric[metric].platforms"
+                                :key="platform"
+                                class="pb-1 text-left text-xs font-semibold uppercase tracking-wide"
+                                style="color: var(--ink-faint)"
+                            >
+                                {{ platformLabels[platform] ?? platform }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="tier in scoreTableByMetric[metric].tiers" :key="tier">
+                            <td class="pr-2 text-xs font-semibold" style="color: var(--ink-muted)">{{ tier }}</td>
+                            <td
+                                v-for="platform in scoreTableByMetric[metric].platforms"
+                                :key="platform"
+                                class="align-top"
+                            >
+                                <template v-if="scoreTableByMetric[metric].findGroup(platform, tier)">
+                                    <button
+                                        type="button"
+                                        class="flex w-full flex-col gap-1 rounded-lg border px-2.5 py-2 text-left transition-colors hover:opacity-90"
+                                        style="border-color: var(--border); background-color: var(--bg)"
+                                        @click="toggleCell(metric, platform, tier)"
+                                    >
+                                        <span class="flex flex-wrap items-center gap-1">
+                                            <span
+                                                v-for="bucket in scoreTableByMetric[metric].findGroup(platform, tier).buckets"
+                                                :key="bucket.id"
+                                                class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+                                                :style="`background-color: ${tierTone(scoreForms[bucket.id], 0).bg}; color: ${tierTone(scoreForms[bucket.id], 0).ink}`"
+                                            >
+                                                ≥{{ formatThreshold(bucket.min_rate) }}→{{ bucket.score }}
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <div
+                                        v-if="expandedCell === cellKey(metric, platform, tier)"
+                                        class="mt-2 rounded-lg border p-3"
+                                        style="border-color: var(--border); background-color: var(--bg)"
+                                    >
+                                        <template v-for="group in [scoreTableByMetric[metric].findGroup(platform, tier)]" :key="group.key">
+                                            <!-- Range bar -->
+                                            <div class="relative h-7 overflow-hidden rounded-md" style="background-color: var(--surface)">
+                                                <div
+                                                    v-for="seg in scoreGroupRangeSegments(group)"
+                                                    :key="seg.tier.id"
+                                                    class="absolute inset-y-0 flex items-center justify-center border-r text-[10px] font-semibold"
+                                                    style="border-color: var(--bg)"
+                                                    :style="`left: ${seg.startPct}%; width: ${seg.widthPct}%; background-color: ${seg.tone.bg}; color: ${seg.tone.ink}`"
+                                                    :title="`≥ ${formatThreshold(seg.tier.min_rate)} → score ${seg.tier.score}`"
+                                                >
+                                                    <span v-if="seg.widthPct > 8">{{ seg.tier.score }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="mt-1 flex justify-between text-[10px] tabular-nums" style="color: var(--ink-faint)">
+                                                <span>0</span>
+                                                <span>higher →</span>
+                                            </div>
+
+                                            <!-- Live worked example — recalculates as tiers below are edited -->
+                                            <p v-if="scoreExampleText(metric, group.buckets)" class="mt-2 text-xs italic" style="color: var(--ink-muted)">
+                                                {{ scoreExampleText(metric, group.buckets) }}
+                                            </p>
+
+                                            <div class="mt-3 space-y-2">
+                                                <div
+                                                    v-for="(bucket, i) in group.buckets"
+                                                    :key="bucket.id"
+                                                    class="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
+                                                    style="border-color: var(--border); background-color: var(--surface)"
+                                                >
+                                                    <span
+                                                        class="h-2 w-2 shrink-0 rounded-full"
+                                                        :style="`background-color: ${tierTone(scoreForms[bucket.id], group.buckets.length - 1 - i).ink}`"
+                                                    />
+                                                    <span class="text-xs" style="color: var(--ink-faint)">≥</span>
+                                                    <input
+                                                        v-model.number="scoreForms[bucket.id].min_rate"
+                                                        type="number"
+                                                        step="0.01"
+                                                        placeholder="floor"
+                                                        :disabled="!canEdit"
+                                                        :class="inputStyle"
+                                                        :style="inputSurface"
+                                                        class="w-20 disabled:opacity-60"
+                                                        @input="markDirty(bucket.id)"
+                                                    />
+                                                    <span class="text-xs" style="color: var(--ink-faint)">→ score</span>
+                                                    <input
+                                                        v-model.number="scoreForms[bucket.id].score"
+                                                        type="number"
+                                                        step="0.01"
+                                                        :disabled="!canEdit"
+                                                        :class="inputStyle"
+                                                        :style="inputSurface"
+                                                        class="w-20 disabled:opacity-60"
+                                                        @input="markDirty(bucket.id)"
+                                                    />
+
+                                                    <!-- Color swatch picker -->
+                                                    <div v-if="canEdit" class="flex items-center gap-1">
+                                                        <button
+                                                            v-for="token in swatchOptions"
+                                                            :key="token"
+                                                            type="button"
+                                                            class="h-5 w-5 shrink-0 rounded-full transition-transform"
+                                                            :style="`background-color: var(--status-${token}-ink); ${scoreForms[bucket.id].color === token ? 'outline: 2px solid var(--ink); outline-offset: 1px;' : ''}`"
+                                                            :aria-label="`Set color ${colorLabels[token]}`"
+                                                            :title="colorLabels[token]"
+                                                            @click="setBucketColor(scoreForms[bucket.id], bucket.id, token)"
+                                                        />
+                                                    </div>
+
+                                                    <div v-if="canEdit" class="ml-auto flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-md px-2 py-1 text-xs font-semibold transition-colors"
+                                                            :style="
+                                                                dirtyTiers[bucket.id]
+                                                                    ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                                                    : 'color: var(--ink-faint)'
+                                                            "
+                                                            :disabled="scoreForms[bucket.id].processing"
+                                                            @click="saveScoreBucket(bucket)"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="flex h-6 w-6 items-center justify-center rounded-md text-xs transition-colors hover:opacity-70"
+                                                            style="color: var(--status-parah-ink)"
+                                                            aria-label="Delete tier"
+                                                            @click="deleteScoreBucket(bucket)"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    v-if="canEdit && !showNewScoreRow[newScoreFormKey(metric, group)]"
+                                                    type="button"
+                                                    class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs font-semibold transition-colors hover:opacity-70"
+                                                    style="border-color: var(--border-strong); color: var(--accent)"
+                                                    @click="ensureNewScoreForm(metric, group); showNewScoreRow[newScoreFormKey(metric, group)] = true"
+                                                >
+                                                    + Add tier
+                                                </button>
+
+                                                <div
+                                                    v-if="canEdit && showNewScoreRow[newScoreFormKey(metric, group)]"
+                                                    class="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
+                                                    style="border-color: var(--accent)"
+                                                >
+                                                    <span class="text-xs" style="color: var(--ink-faint)">≥</span>
+                                                    <input
+                                                        v-model.number="newScoreForms[newScoreFormKey(metric, group)].min_rate"
+                                                        type="number"
+                                                        step="0.01"
+                                                        placeholder="floor"
+                                                        :class="inputStyle"
+                                                        :style="inputSurface"
+                                                        class="w-20"
+                                                    />
+                                                    <span class="text-xs" style="color: var(--ink-faint)">→ score</span>
+                                                    <input
+                                                        v-model.number="newScoreForms[newScoreFormKey(metric, group)].score"
+                                                        type="number"
+                                                        step="0.01"
+                                                        :class="inputStyle"
+                                                        :style="inputSurface"
+                                                        class="w-20"
+                                                    />
+                                                    <div class="ml-auto flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            class="text-xs font-semibold transition-colors hover:opacity-70"
+                                                            style="color: var(--accent)"
+                                                            :disabled="newScoreForms[newScoreFormKey(metric, group)].processing"
+                                                            @click="addScoreBucket(metric, group)"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="text-xs font-medium transition-colors hover:opacity-70"
+                                                            style="color: var(--ink-faint)"
+                                                            @click="showNewScoreRow[newScoreFormKey(metric, group)] = false"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <span v-else class="block rounded-lg border border-dashed px-2.5 py-2 text-center text-[10px]" style="border-color: var(--border); color: var(--ink-faint)">
+                                    — no tiers —
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 space-y-2">
+                <!-- Add a brand-new (platform, tier) group — e.g. the first TikTok set -->
+                <button
+                    v-if="canEdit && !showNewScoreGroup[metric]"
+                    type="button"
+                    class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs font-semibold transition-colors hover:opacity-70"
+                    style="border-color: var(--border-strong); color: var(--ink-muted)"
+                    @click="showNewScoreGroup[metric] = true"
+                >
+                    + Add platform / tier group
+                </button>
+                <div
+                    v-if="canEdit && showNewScoreGroup[metric]"
+                    class="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2"
+                    style="border-color: var(--ink-faint)"
+                >
+                    <select v-model="newGroupDraft[metric].platform" :class="inputStyle" :style="inputSurface" class="w-32">
+                        <option :value="null">All platforms</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                    </select>
+                    <select
+                        v-model="newGroupDraft[metric].tier"
+                        :class="inputStyle"
+                        :style="inputSurface"
+                        class="w-40"
+                    >
+                        <option :value="null">No tier (platform-wide)</option>
+                        <option v-for="tier in accountTiers" :key="tier" :value="tier">{{ tier }}</option>
+                    </select>
+                    <div class="ml-auto flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="text-xs font-semibold transition-colors hover:opacity-70"
+                            style="color: var(--accent)"
+                            @click="createScoreGroup(metric)"
+                        >
+                            Create group
+                        </button>
+                        <button
+                            type="button"
+                            class="text-xs font-medium transition-colors hover:opacity-70"
+                            style="color: var(--ink-faint)"
+                            @click="showNewScoreGroup[metric] = false"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ============ LABEL TIERS (within the aggregate tab) ============ -->
+    <div v-if="tabLabelMetrics(activeTab).length" class="mt-5">
+        <h2 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">
+            Label Tiers — score → status text
+        </h2>
+        <div
+            class="mt-3 grid gap-6"
+            :class="{
+                'lg:grid-cols-1': tabLabelMetrics(activeTab).length === 1,
+                'lg:grid-cols-2': tabLabelMetrics(activeTab).length === 2,
+                'lg:grid-cols-3': tabLabelMetrics(activeTab).length >= 3,
+            }"
+        >
+            <section
+                v-for="metric in tabLabelMetrics(activeTab)"
+                :key="metric"
+                class="w-full max-w-3xl rounded-xl border shadow-sm"
+                style="border-color: var(--border); background-color: var(--surface)"
+            >
+                <div class="flex items-start justify-between gap-3 border-b p-5" style="border-color: var(--border)">
+                    <div>
+                        <h2 class="font-display text-base font-bold" style="color: var(--ink)">{{ metricTitles[metric] }}</h2>
+                        <p class="mt-0.5 font-mono text-xs leading-snug" style="color: var(--ink-faint)">{{ metricHints[metric] }}</p>
+                    </div>
+                    <span
+                        class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums"
+                        style="background-color: var(--accent-soft); color: var(--accent)"
+                    >
+                        {{ labelBucketsByMetric[metric]?.length ?? 0 }} tiers
+                    </span>
+                </div>
+
+                <div class="p-5">
+                    <!-- Range bar -->
+                    <div class="relative h-9 overflow-hidden rounded-md" style="background-color: var(--bg)">
+                        <div
+                            v-for="seg in labelRangeSegments(metric)"
+                            :key="seg.tier.id"
+                            class="absolute inset-y-0 flex items-center justify-center overflow-hidden border-r px-1 text-xs font-semibold whitespace-nowrap"
+                            style="border-color: var(--surface)"
+                            :style="`left: ${seg.startPct}%; width: ${seg.widthPct}%; background-color: ${seg.tone.bg}; color: ${seg.tone.ink}`"
+                            :title="`≥ ${formatThreshold(seg.tier.min_score)} → ${seg.tier.label}`"
+                        >
+                            <span v-if="seg.widthPct > 10">{{ seg.tier.label }}</span>
+                        </div>
                     </div>
 
-                    <!-- Add a brand-new (platform, tier) group — e.g. the first TikTok set -->
+                    <!-- Live worked example — recalculates as tiers below are edited -->
+                    <p v-if="labelExampleText(metric)" class="mt-3 text-sm italic" style="color: var(--ink-muted)">
+                        {{ labelExampleText(metric) }}
+                    </p>
+                </div>
+
+                <!-- Tier table -->
+                <table class="w-full border-collapse" style="table-layout: fixed">
+                    <colgroup>
+                        <col class="w-10" />
+                        <col style="width: 42%" />
+                        <col style="width: 33%" />
+                        <col v-if="canEdit" style="width: 25%" />
+                    </colgroup>
+                    <thead>
+                        <tr class="border-y text-left" style="border-color: var(--border)">
+                            <th class="py-2 pl-5" />
+                            <th class="py-2 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Minimum score</th>
+                            <th class="py-2 text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Label</th>
+                            <th v-if="canEdit" class="py-2 pr-5" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="(bucket, i) in labelBucketsByMetric[metric]"
+                            :key="bucket.id"
+                            class="border-b last:border-0"
+                            style="border-color: var(--border)"
+                        >
+                            <td class="py-2.5 pl-5">
+                                <button
+                                    type="button"
+                                    class="h-4 w-4 shrink-0 rounded-full transition-transform"
+                                    :class="canEdit ? 'hover:scale-125' : 'cursor-default'"
+                                    :style="`background-color: ${tierTone(labelForms[bucket.id], labelBucketsByMetric[metric].length - 1 - i).ink}`"
+                                    :aria-label="canEdit ? 'Change tier color' : undefined"
+                                    :disabled="!canEdit"
+                                    @click="colorPickerOpen = colorPickerOpen === bucket.id ? null : bucket.id"
+                                />
+                            </td>
+                            <td class="py-2.5 pr-3">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="shrink-0 text-sm" style="color: var(--ink-faint)">≥</span>
+                                    <input
+                                        v-model.number="labelForms[bucket.id].min_score"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="floor"
+                                        :disabled="!canEdit"
+                                        :class="inputStyle"
+                                        :style="inputSurface"
+                                        class="w-full min-w-0 text-sm tabular-nums disabled:opacity-60"
+                                        @input="markDirty(bucket.id)"
+                                    />
+                                </span>
+                            </td>
+                            <td class="py-2.5 pr-3">
+                                <input
+                                    v-model="labelForms[bucket.id].label"
+                                    type="text"
+                                    :disabled="!canEdit"
+                                    :class="inputStyle"
+                                    :style="inputSurface"
+                                    class="w-full min-w-0 text-sm font-semibold disabled:opacity-60"
+                                    @input="markDirty(bucket.id)"
+                                />
+                            </td>
+                            <td v-if="canEdit" class="py-2.5 pr-5 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <button
+                                        type="button"
+                                        class="rounded-md px-2 py-1 text-xs font-semibold whitespace-nowrap transition-colors disabled:opacity-40"
+                                        :style="
+                                            dirtyTiers[bucket.id]
+                                                ? 'background-color: var(--accent); color: var(--accent-ink)'
+                                                : 'color: var(--ink-faint)'
+                                        "
+                                        :disabled="labelForms[bucket.id].processing || !dirtyTiers[bucket.id]"
+                                        @click="saveLabelBucket(bucket)"
+                                    >
+                                        {{ labelForms[bucket.id].processing ? '…' : 'Save' }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex h-6 w-6 items-center justify-center rounded-md text-xs opacity-60 transition-opacity hover:opacity-100"
+                                        style="color: var(--status-parah-ink)"
+                                        aria-label="Delete tier"
+                                        @click="deleteLabelBucket(bucket)"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Inline color picker — only one open at a time, replaces no row space otherwise -->
+                        <tr v-if="canEdit && colorPickerOpen && labelBucketsByMetric[metric].some((b) => b.id === colorPickerOpen)">
+                            <td :colspan="4" class="px-5 pb-3">
+                                <div class="flex items-center gap-2 rounded-md border px-3 py-2" style="border-color: var(--border); background-color: var(--bg)">
+                                    <span class="text-xs font-medium" style="color: var(--ink-faint)">Color:</span>
+                                    <button
+                                        v-for="token in swatchOptions"
+                                        :key="token"
+                                        type="button"
+                                        class="h-5 w-5 shrink-0 rounded-full transition-transform hover:scale-110"
+                                        :style="`background-color: var(--status-${token}-ink); ${labelForms[colorPickerOpen].color === token ? 'outline: 2px solid var(--ink); outline-offset: 2px;' : ''}`"
+                                        :aria-label="`Set color ${colorLabels[token]}`"
+                                        :title="colorLabels[token]"
+                                        @click="setBucketColor(labelForms[colorPickerOpen], colorPickerOpen, token)"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="ml-auto text-xs font-medium transition-opacity hover:opacity-70"
+                                        style="color: var(--ink-faint)"
+                                        @click="colorPickerOpen = null"
+                                    >
+                                        Done
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="p-5 pt-3">
                     <button
-                        v-if="canEdit && !showNewScoreGroup[metric]"
+                        v-if="canEdit && !showNewLabelRow[metric]"
                         type="button"
-                        class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs font-semibold transition-colors hover:opacity-70"
-                        style="border-color: var(--border-strong); color: var(--ink-muted)"
-                        @click="showNewScoreGroup[metric] = true"
+                        class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-2.5 text-sm font-semibold transition-colors hover:opacity-70"
+                        style="border-color: var(--border-strong); color: var(--accent)"
+                        @click="showNewLabelRow[metric] = true"
                     >
-                        + Add platform / tier group
+                        + Add tier
                     </button>
+
                     <div
-                        v-if="canEdit && showNewScoreGroup[metric]"
-                        class="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2"
-                        style="border-color: var(--ink-faint)"
+                        v-if="canEdit && showNewLabelRow[metric]"
+                        class="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3"
+                        style="border-color: var(--accent)"
                     >
-                        <select v-model="newGroupDraft[metric].platform" :class="inputStyle" :style="inputSurface" class="w-32">
-                            <option :value="null">All platforms</option>
-                            <option value="instagram">Instagram</option>
-                            <option value="tiktok">TikTok</option>
-                        </select>
-                        <select
-                            v-model="newGroupDraft[metric].tier"
+                        <span class="text-sm" style="color: var(--ink-faint)">≥</span>
+                        <input
+                            v-model.number="newLabelForms[metric].min_score"
+                            type="number"
+                            step="0.01"
+                            placeholder="floor"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-40"
-                        >
-                            <option :value="null">No tier (platform-wide)</option>
-                            <option v-for="tier in accountTiers" :key="tier" :value="tier">{{ tier }}</option>
-                        </select>
+                            class="w-24 text-sm"
+                        />
+                        <input
+                            v-model="newLabelForms[metric].label"
+                            type="text"
+                            placeholder="Label"
+                            :class="inputStyle"
+                            :style="inputSurface"
+                            class="w-32 text-sm font-semibold"
+                        />
                         <div class="ml-auto flex items-center gap-2">
                             <button
                                 type="button"
-                                class="text-xs font-semibold transition-colors hover:opacity-70"
+                                class="rounded-md px-3 py-1.5 text-sm font-semibold transition-colors hover:opacity-70"
                                 style="color: var(--accent)"
-                                @click="createScoreGroup(metric)"
+                                :disabled="newLabelForms[metric].processing"
+                                @click="addLabelBucket(metric)"
                             >
-                                Create group
+                                Add
                             </button>
                             <button
                                 type="button"
-                                class="text-xs font-medium transition-colors hover:opacity-70"
+                                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:opacity-70"
                                 style="color: var(--ink-faint)"
-                                @click="showNewScoreGroup[metric] = false"
+                                @click="showNewLabelRow[metric] = false"
                             >
                                 Cancel
                             </button>
@@ -907,180 +1376,75 @@ const saveWeights = (aggregate) => {
             </section>
         </div>
     </div>
+    </div>
 
-    <!-- ============ LABEL TIERS ============ -->
-    <div v-if="activeTab === 'labels'" class="mt-6">
+    <!-- ============ FORMULA WEIGHTS ============ -->
+    <div v-if="activeTab === 'weights'" class="mt-6">
         <p class="max-w-2xl text-sm" style="color: var(--ink-muted)">
-            Maps an aggregate score (or, for a few metrics, a raw count) to the status text shown throughout the
-            app — the same "highest minimum wins" rule as Score Tiers.
+            Adjust how much each component contributes to an aggregate. Weights don't need to sum to 1 — they're
+            normalized automatically, so entering 2 and 1 behaves the same as 0.67 and 0.33.
         </p>
 
         <div class="mt-5 grid gap-5 lg:grid-cols-3">
             <section
-                v-for="metric in labelMetrics"
-                :key="metric"
+                v-for="aggregate in Object.keys(formulaComponents)"
+                :key="aggregate"
                 class="rounded-xl border p-5 shadow-sm"
                 style="border-color: var(--border); background-color: var(--surface)"
             >
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="font-display text-sm font-bold" style="color: var(--ink)">{{ metricTitles[metric] }}</h2>
-                        <p class="mt-0.5 font-mono text-xs leading-snug" style="color: var(--ink-faint)">{{ metricHints[metric] }}</p>
-                    </div>
-                    <span
-                        class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums"
-                        style="background-color: var(--accent-soft); color: var(--accent)"
-                    >
-                        {{ labelBucketsByMetric[metric]?.length ?? 0 }} tiers
-                    </span>
-                </div>
+                <h3 class="font-display text-sm font-bold" style="color: var(--ink)">{{ metricTitles[aggregate] }}</h3>
+                <p class="mt-0.5 font-mono text-xs" style="color: var(--ink-faint)">{{ metricHints[aggregate] }}</p>
 
-                <!-- Range bar -->
-                <div class="relative mt-4 h-7 overflow-hidden rounded-md" style="background-color: var(--bg)">
+                <!-- Stacked proportion bar — visualizes the normalized split at a glance -->
+                <div class="mt-4 flex h-2.5 overflow-hidden rounded-full" style="background-color: var(--bg)">
                     <div
-                        v-for="seg in labelRangeSegments(metric)"
-                        :key="seg.tier.id"
-                        class="absolute inset-y-0 flex items-center justify-center overflow-hidden border-r px-1 text-[10px] font-semibold whitespace-nowrap"
-                        style="border-color: var(--surface)"
-                        :style="`left: ${seg.startPct}%; width: ${seg.widthPct}%; background-color: ${seg.tone.bg}; color: ${seg.tone.ink}`"
-                        :title="`≥ ${formatThreshold(seg.tier.min_score)} → ${seg.tier.label}`"
-                    >
-                        <span v-if="seg.widthPct > 10">{{ seg.tier.label }}</span>
-                    </div>
+                        v-for="(component, i) in formulaComponents[aggregate]"
+                        :key="component"
+                        class="h-full transition-all"
+                        :style="`width: ${normalizedPercent(aggregate, component)}%; background-color: ${weightTone(i).ink}`"
+                        :title="`${componentLabels[component]}: ${normalizedPercent(aggregate, component)}%`"
+                    />
                 </div>
-
-                <!-- Live worked example — recalculates as tiers below are edited -->
-                <p v-if="labelExampleText(metric)" class="mt-2 text-xs italic" style="color: var(--ink-muted)">
-                    {{ labelExampleText(metric) }}
-                </p>
 
                 <div class="mt-4 space-y-2">
                     <div
-                        v-for="(bucket, i) in labelBucketsByMetric[metric]"
-                        :key="bucket.id"
-                        class="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
+                        v-for="(component, i) in formulaComponents[aggregate]"
+                        :key="component"
+                        class="flex items-center gap-2 rounded-md border px-3 py-2"
                         style="border-color: var(--border); background-color: var(--bg)"
                     >
-                        <span
-                            class="h-2 w-2 shrink-0 rounded-full"
-                            :style="`background-color: ${tierTone(labelForms[bucket.id], labelBucketsByMetric[metric].length - 1 - i).ink}`"
-                        />
-                        <span class="text-xs" style="color: var(--ink-faint)">≥</span>
+                        <span class="h-2 w-2 shrink-0 rounded-full" :style="`background-color: ${weightTone(i).ink}`" />
+                        <span class="flex-1 text-sm" style="color: var(--ink)">{{ componentLabels[component] }}</span>
                         <input
-                            v-model.number="labelForms[bucket.id].min_score"
+                            v-model.number="weightForms[aggregate].weights[component]"
                             type="number"
                             step="0.01"
-                            placeholder="floor"
+                            min="0"
                             :disabled="!canEdit"
                             :class="inputStyle"
                             :style="inputSurface"
-                            class="w-16 disabled:opacity-60"
-                            @input="markDirty(bucket.id)"
+                            class="w-20 disabled:opacity-60"
                         />
-                        <input
-                            v-model="labelForms[bucket.id].label"
-                            type="text"
-                            :disabled="!canEdit"
-                            :class="inputStyle"
-                            :style="inputSurface"
-                            class="w-24 disabled:opacity-60"
-                            @input="markDirty(bucket.id)"
-                        />
-
-                        <!-- Color swatch picker -->
-                        <div v-if="canEdit" class="flex items-center gap-1">
-                            <button
-                                v-for="token in swatchOptions"
-                                :key="token"
-                                type="button"
-                                class="h-5 w-5 shrink-0 rounded-full transition-transform"
-                                :style="`background-color: var(--status-${token}-ink); ${labelForms[bucket.id].color === token ? 'outline: 2px solid var(--ink); outline-offset: 1px;' : ''}`"
-                                :aria-label="`Set color ${colorLabels[token]}`"
-                                :title="colorLabels[token]"
-                                @click="setBucketColor(labelForms[bucket.id], bucket.id, token)"
-                            />
-                        </div>
-
-                        <div v-if="canEdit" class="ml-auto flex items-center gap-1">
-                            <button
-                                type="button"
-                                class="rounded-md px-2 py-1 text-xs font-semibold transition-colors"
-                                :style="
-                                    dirtyTiers[bucket.id]
-                                        ? 'background-color: var(--accent); color: var(--accent-ink)'
-                                        : 'color: var(--ink-faint)'
-                                "
-                                :disabled="labelForms[bucket.id].processing"
-                                @click="saveLabelBucket(bucket)"
-                            >
-                                Save
-                            </button>
-                            <button
-                                type="button"
-                                class="flex h-6 w-6 items-center justify-center rounded-md text-xs transition-colors hover:opacity-70"
-                                style="color: var(--status-parah-ink)"
-                                aria-label="Delete tier"
-                                @click="deleteLabelBucket(bucket)"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    </div>
-
-                    <button
-                        v-if="canEdit && !showNewLabelRow[metric]"
-                        type="button"
-                        class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs font-semibold transition-colors hover:opacity-70"
-                        style="border-color: var(--border-strong); color: var(--accent)"
-                        @click="showNewLabelRow[metric] = true"
-                    >
-                        + Add tier
-                    </button>
-
-                    <div
-                        v-if="canEdit && showNewLabelRow[metric]"
-                        class="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
-                        style="border-color: var(--accent)"
-                    >
-                        <span class="text-xs" style="color: var(--ink-faint)">≥</span>
-                        <input
-                            v-model.number="newLabelForms[metric].min_score"
-                            type="number"
-                            step="0.01"
-                            placeholder="floor"
-                            :class="inputStyle"
-                            :style="inputSurface"
-                            class="w-16"
-                        />
-                        <input
-                            v-model="newLabelForms[metric].label"
-                            type="text"
-                            placeholder="Label"
-                            :class="inputStyle"
-                            :style="inputSurface"
-                            class="w-24"
-                        />
-                        <div class="ml-auto flex items-center gap-2">
-                            <button
-                                type="button"
-                                class="text-xs font-semibold transition-colors hover:opacity-70"
-                                style="color: var(--accent)"
-                                :disabled="newLabelForms[metric].processing"
-                                @click="addLabelBucket(metric)"
-                            >
-                                Add
-                            </button>
-                            <button
-                                type="button"
-                                class="text-xs font-medium transition-colors hover:opacity-70"
-                                style="color: var(--ink-faint)"
-                                @click="showNewLabelRow[metric] = false"
-                            >
-                                Cancel
-                            </button>
-                        </div>
+                        <span class="w-12 shrink-0 text-right text-xs font-semibold tabular-nums" style="color: var(--ink-faint)">
+                            {{ normalizedPercent(aggregate, component) }}%
+                        </span>
                     </div>
                 </div>
+
+                <p v-if="weightForms[aggregate].errors.weights" class="mt-2 text-xs" style="color: var(--status-parah-ink)">
+                    {{ weightForms[aggregate].errors.weights }}
+                </p>
+
+                <button
+                    v-if="canEdit"
+                    type="button"
+                    class="mt-4 w-full rounded-md py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style="background-color: var(--accent); color: var(--accent-ink)"
+                    :disabled="weightForms[aggregate].processing"
+                    @click="saveWeights(aggregate)"
+                >
+                    {{ weightForms[aggregate].processing ? 'Saving…' : 'Save weights' }}
+                </button>
             </section>
         </div>
     </div>

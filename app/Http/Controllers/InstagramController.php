@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Services\InstagramInsightsService;
 use App\Services\InstagramOAuthService;
+use App\Services\MetaExportImporter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,6 +87,41 @@ class InstagramController extends Controller
         ])->save();
 
         return back();
+    }
+
+    /**
+     * Bulk-imports Meta Business Suite's daily export CSVs (Follows, Visits,
+     * Link clicks, Interactions, Viewers, Views — each file optional, any
+     * subset can be uploaded together) into instagram_daily_snapshots, as a
+     * manual alternative to the live Graph API sync for accounts that aren't
+     * (or can't be) connected.
+     */
+    public function import(Request $request, Account $account, MetaExportImporter $importer): JsonResponse
+    {
+        $data = $request->validate([
+            'follows' => ['nullable', 'file', 'mimes:csv,txt'],
+            'visits' => ['nullable', 'file', 'mimes:csv,txt'],
+            'link_clicks' => ['nullable', 'file', 'mimes:csv,txt'],
+            'interactions' => ['nullable', 'file', 'mimes:csv,txt'],
+            'viewers' => ['nullable', 'file', 'mimes:csv,txt'],
+            'views' => ['nullable', 'file', 'mimes:csv,txt'],
+            'starting_followers' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        if (! array_filter([$data['follows'] ?? null, $data['visits'] ?? null, $data['link_clicks'] ?? null, $data['interactions'] ?? null, $data['viewers'] ?? null, $data['views'] ?? null])) {
+            return response()->json(['message' => 'Upload at least one Meta export file.'], 422);
+        }
+
+        $result = $importer->import($account, [
+            'follows' => $data['follows'] ?? null,
+            'visits' => $data['visits'] ?? null,
+            'link_clicks' => $data['link_clicks'] ?? null,
+            'interactions' => $data['interactions'] ?? null,
+            'viewers' => $data['viewers'] ?? null,
+            'views' => $data['views'] ?? null,
+        ], $data['starting_followers'] ?? null);
+
+        return response()->json($result);
     }
 
     public function show(Account $account, InstagramInsightsService $insights): JsonResponse

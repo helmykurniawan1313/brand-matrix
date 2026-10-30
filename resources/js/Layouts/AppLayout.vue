@@ -47,6 +47,7 @@ const baseNavItems = [
         group: true,
         children: [
             { label: 'Cycles', href: '/cycles', icon: icons.cycles },
+            { label: 'Weekly Reports', href: '/weekly-reports', icon: icons.cycles },
             { label: 'Account', href: '/account-performance', icon: icons.performance },
             { label: 'Growth', href: '/account-growth', icon: icons.accountGrowth },
         ],

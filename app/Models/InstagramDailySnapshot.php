@@ -14,6 +14,8 @@ class InstagramDailySnapshot extends Model
         'media_count',
         'reach',
         'views',
+        'profile_visits',
+        'link_clicks',
         'accounts_engaged',
         'total_interactions',
         'captured_at',

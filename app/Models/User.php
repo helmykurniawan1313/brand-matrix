@@ -29,6 +29,7 @@ class User extends Authenticatable
      */
     public const PAGES = [
         'cycles' => 'Cycles',
+        'weekly-reports' => 'Weekly Reports',
         'performances' => 'Performance',
         'accounts' => 'Accounts',
         'account-health' => 'Account Health',

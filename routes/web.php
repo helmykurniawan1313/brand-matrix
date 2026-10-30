@@ -20,6 +20,7 @@ use App\Http\Controllers\SiteSettingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ViewsTrackerController;
 use App\Http\Controllers\ViewsTrendController;
+use App\Http\Controllers\WeeklyReportController;
 use App\Models\LegalPage;
 use Illuminate\Support\Facades\Route;
 
@@ -86,6 +87,11 @@ Route::middleware('auth')->group(function () {
         Route::get('cycles-ads-ranking-excel', [CycleController::class, 'adsRankingExcel'])->name('cycles.ads-ranking.excel');
     });
 
+    Route::middleware('can-access:weekly-reports')->group(function () {
+        Route::resource('weekly-reports', WeeklyReportController::class)->only(['index']);
+        Route::get('accounts/{account}/neighboring-weekly-report', [WeeklyReportController::class, 'neighboring'])->name('weekly-reports.neighboring');
+    });
+
     Route::middleware('can-access:score-buckets')->group(function () {
         Route::resource('score-buckets', ScoreBucketController::class)->only(['index']);
     });
@@ -127,10 +133,15 @@ Route::middleware('auth')->group(function () {
             Route::post('accounts/{account}/instagram/connect', [InstagramController::class, 'connect'])->name('accounts.instagram.connect');
             Route::delete('accounts/{account}/instagram/disconnect', [InstagramController::class, 'disconnect'])->name('accounts.instagram.disconnect');
             Route::get('accounts/{account}/instagram/oauth/redirect', [InstagramController::class, 'redirect'])->name('accounts.instagram.oauth.redirect');
+            Route::post('accounts/{account}/instagram/import', [InstagramController::class, 'import'])->name('accounts.instagram.import');
         });
 
         Route::middleware('can-access:cycles')->group(function () {
             Route::resource('cycles', CycleController::class)->only(['store', 'update', 'destroy']);
+        });
+
+        Route::middleware('can-access:weekly-reports')->group(function () {
+            Route::resource('weekly-reports', WeeklyReportController::class)->only(['store', 'update', 'destroy']);
         });
 
         Route::middleware('can-access:score-buckets')->group(function () {
