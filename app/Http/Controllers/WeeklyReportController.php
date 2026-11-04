@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -82,7 +83,7 @@ class WeeklyReportController extends Controller
 
     public function update(Request $request, WeeklyReport $weeklyReport): RedirectResponse
     {
-        $weeklyReport->update($this->validated($request));
+        $weeklyReport->update($this->validated($request, $weeklyReport));
 
         return back();
     }
@@ -94,18 +95,27 @@ class WeeklyReportController extends Controller
         return back();
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, ?WeeklyReport $weeklyReport = null): array
     {
         $data = $request->validate([
             'account_id' => ['required', 'exists:accounts,id'],
             'platform' => ['required', 'string', 'in:instagram,tiktok'],
-            'week_start_date' => ['required', 'date'],
+            'week_start_date' => [
+                'required',
+                'date',
+                Rule::unique('weekly_reports')
+                    ->where('account_id', $request->input('account_id'))
+                    ->where('platform', $request->input('platform'))
+                    ->ignore($weeklyReport?->id),
+            ],
             'follower_count' => ['nullable', 'integer', 'min:0'],
             'reach' => ['nullable', 'integer', 'min:0'],
             'views' => ['nullable', 'integer', 'min:0'],
             'profile_visits' => ['nullable', 'integer', 'min:0'],
             'link_clicks' => ['nullable', 'integer', 'min:0'],
             'engagement' => ['nullable', 'integer'],
+        ], [
+            'week_start_date.unique' => 'A weekly report for this account, platform, and week already exists.',
         ]);
 
         // week_end_date is always derived (Monday + 6 days) rather than taken

@@ -194,6 +194,8 @@ const prefillFromSnapshots = async () => {
 };
 
 const onWeekStartChange = () => {
+    form.clearErrors('week_start_date');
+
     if (!form.week_start_date) {
         weekEndDate.value = '';
         return;
@@ -212,8 +214,13 @@ const submit = () => {
             closeModal();
             toast.success(isEditing ? 'Weekly report updated.' : 'Weekly report added.');
         },
-        onError: () => {
-            toast.error(isEditing ? 'Failed to update weekly report.' : 'Failed to add weekly report.');
+        onError: (errors) => {
+            // Surface the specific validation message (e.g. "already exists" for a
+            // duplicate account+platform+week) instead of a generic failure toast,
+            // so the user sees exactly why the save was rejected without having to
+            // scroll the modal to spot the inline field error.
+            const specific = errors.week_start_date || Object.values(errors)[0];
+            toast.error(specific || (isEditing ? 'Failed to update weekly report.' : 'Failed to add weekly report.'));
         },
     };
 
@@ -441,14 +448,21 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
                         v-model="form.week_start_date"
                         type="date"
                         class="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                        style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
+                        :style="
+                            form.errors.week_start_date
+                                ? 'border-color: var(--status-parah-ink); background-color: var(--bg); color: var(--ink)'
+                                : 'border-color: var(--border); background-color: var(--bg); color: var(--ink)'
+                        "
                         @change="onWeekStartChange"
                     />
                     <p class="mt-1 text-xs" style="color: var(--ink-faint)">
                         Any date picked snaps to that week's Monday. Week ends Sunday:
                         <span class="font-medium tabular-nums" style="color: var(--ink-muted)">{{ weekEndDate || '—' }}</span>
                     </p>
-                    <p v-if="form.errors.week_start_date" class="mt-1 text-sm" style="color: var(--status-parah-ink)">{{ form.errors.week_start_date }}</p>
+                    <p v-if="form.errors.week_start_date" class="mt-1 flex items-center gap-1 text-sm font-medium" style="color: var(--status-parah-ink)">
+                        <span>⚠</span>
+                        {{ form.errors.week_start_date }}
+                    </p>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">

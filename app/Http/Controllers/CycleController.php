@@ -22,6 +22,7 @@ use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -344,6 +345,48 @@ class CycleController extends Controller
     }
 
     /**
+     * Checks a candidate (account, platform, date range) against this account's
+     * existing cycles for the same platform — used by the Add/Edit Cycle form to
+     * warn the user before they save, not to block the save outright (overlapping
+     * cycles are sometimes intentional, e.g. a correction cycle). An exact date
+     * match on both ends is reported separately as a stronger warning than a
+     * partial overlap, since that's almost always an accidental duplicate.
+     */
+    public function overlapCheck(Request $request, Account $account): JsonResponse
+    {
+        $data = $request->validate([
+            'cycle_start_date' => ['required', 'date'],
+            'cycle_end_date' => ['required', 'date', 'after_or_equal:cycle_start_date'],
+            'platform' => ['required', 'string', 'in:instagram,tiktok'],
+            'exclude_cycle_id' => ['nullable', 'integer'],
+        ]);
+
+        $overlapping = $account->cycles()
+            ->where('platform', $data['platform'])
+            ->when($data['exclude_cycle_id'] ?? null, fn ($query, $id) => $query->where('id', '!=', $id))
+            ->where('cycle_start_date', '<=', $data['cycle_end_date'])
+            ->where('cycle_end_date', '>=', $data['cycle_start_date'])
+            ->get(['id', 'cycle_start_date', 'cycle_end_date']);
+
+        $exactDuplicate = $overlapping->first(
+            fn ($cycle) => $cycle->cycle_start_date->toDateString() === $data['cycle_start_date']
+                && $cycle->cycle_end_date->toDateString() === $data['cycle_end_date']
+        );
+
+        return response()->json([
+            'exact_duplicate' => $exactDuplicate
+                ? ['id' => $exactDuplicate->id]
+                : null,
+            'overlapping' => $overlapping->reject(fn ($cycle) => $exactDuplicate && $cycle->id === $exactDuplicate->id)
+                ->map(fn ($cycle) => [
+                    'id' => $cycle->id,
+                    'cycle_start_date' => $cycle->cycle_start_date->toDateString(),
+                    'cycle_end_date' => $cycle->cycle_end_date->toDateString(),
+                ])->values(),
+        ]);
+    }
+
+    /**
      * Uses the closest captured daily snapshot on or before the given date as a
      * point-in-time follower count — falls back to null so the caller can use
      * the manual-entry neighboring-cycle logic instead.
@@ -434,7 +477,7 @@ class CycleController extends Controller
 
     public function update(Request $request, Cycle $cycle, PerformanceCycleAssigner $cycleAssigner): RedirectResponse
     {
-        $data = $this->validated($request);
+        $data = $this->validated($request, $cycle);
 
         $cycle->update($data);
 
@@ -802,13 +845,21 @@ class CycleController extends Controller
         ];
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, ?Cycle $cycle = null): array
     {
         return $request->validate([
             'account_id' => ['required', 'exists:accounts,id'],
             'platform' => ['required', 'string', 'in:instagram,tiktok'],
             'project_manager_id' => ['nullable', 'exists:employees,id'],
-            'cycle_start_date' => ['required', 'date'],
+            'cycle_start_date' => [
+                'required',
+                'date',
+                Rule::unique('cycles')
+                    ->where('account_id', $request->input('account_id'))
+                    ->where('platform', $request->input('platform'))
+                    ->where('cycle_end_date', $request->input('cycle_end_date'))
+                    ->ignore($cycle?->id),
+            ],
             'cycle_end_date' => ['required', 'date', 'after_or_equal:cycle_start_date'],
             'start_follower' => ['required', 'integer', 'min:0'],
             'end_follower' => ['required', 'integer', 'min:0'],
@@ -821,6 +872,8 @@ class CycleController extends Controller
             'reach_views_ads_spend' => ['nullable', 'numeric', 'min:0'],
             'engagement_ads_used' => ['boolean'],
             'engagement_ads_spend' => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'cycle_start_date.unique' => 'A cycle with this exact date range already exists for this account and platform.',
         ]);
     }
 }

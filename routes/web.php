@@ -77,6 +77,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can-access:cycles')->group(function () {
         Route::resource('cycles', CycleController::class)->only(['index']);
         Route::get('accounts/{account}/neighboring-cycle', [CycleController::class, 'neighboring'])->name('cycles.neighboring');
+        Route::get('accounts/{account}/cycle-overlap', [CycleController::class, 'overlapCheck'])->name('cycles.overlap-check');
         Route::get('cycles-pdf', [CycleController::class, 'pdf'])->name('cycles.pdf');
         Route::get('cycles-excel', [CycleController::class, 'exportExcel'])->name('cycles.excel');
         Route::get('cycles/{cycle}/pdf', [CycleController::class, 'pdfSingle'])->name('cycles.pdf-single');

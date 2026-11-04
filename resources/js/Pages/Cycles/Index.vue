@@ -532,6 +532,8 @@ const openCreate = () => {
     editingCycle.value = null;
     form.reset();
     form.clearErrors();
+    overlapWarning.value = null;
+    exactDuplicateWarning.value = null;
     showModal.value = true;
 };
 
@@ -581,6 +583,48 @@ const prefillFollowersForPlatform = async () => {
     }
 };
 
+// Overlap warning — checked against the account's other cycles on the same
+// platform whenever both dates are present, regardless of create vs edit mode
+// (unlike the follower auto-fill above, which only runs for new cycles).
+// Only a *warning*: the backend still allows saving an overlapping range, it
+// only hard-blocks an exact date-range duplicate (see validated() in
+// CycleController). exactDuplicateWarning is a stronger/distinct message from
+// a plain overlap, since an exact match is almost always an accidental resubmit.
+const overlapWarning = ref(null);
+const exactDuplicateWarning = ref(null);
+
+const checkOverlap = async () => {
+    overlapWarning.value = null;
+    exactDuplicateWarning.value = null;
+
+    if (!form.account_id || !form.cycle_start_date || !form.cycle_end_date) return;
+
+    try {
+        const params = new URLSearchParams({
+            cycle_start_date: form.cycle_start_date,
+            cycle_end_date: form.cycle_end_date,
+            platform: form.platform || 'instagram',
+        });
+        if (editingCycle.value) params.set('exclude_cycle_id', editingCycle.value.id);
+
+        const response = await fetch(`/accounts/${form.account_id}/cycle-overlap?${params}`, {
+            headers: { Accept: 'application/json' },
+        });
+        const data = await response.json();
+
+        if (data.exact_duplicate) {
+            exactDuplicateWarning.value = 'This exact date range already exists as a cycle for this account and platform — saving will be rejected unless you change the dates.';
+        } else if (data.overlapping?.length) {
+            const ranges = data.overlapping
+                .map((c) => `${c.cycle_start_date} – ${c.cycle_end_date}`)
+                .join(', ');
+            overlapWarning.value = `This date range overlaps an existing cycle for this account and platform (${ranges}). You can still save if this is intentional.`;
+        }
+    } catch {
+        // Silently ignore — overlap checking is advisory, not a hard requirement.
+    }
+};
+
 const applyPrefill = (data) => {
     if (data.start_follower !== null && data.start_follower !== undefined) {
         form.start_follower = data.start_follower;
@@ -618,6 +662,8 @@ const openEdit = (cycle) => {
     form.engagement_ads_used = cycle.engagement_ads_used ?? false;
     form.engagement_ads_spend = cycle.engagement_ads_spend ?? 0;
     form.clearErrors();
+    overlapWarning.value = null;
+    exactDuplicateWarning.value = null;
     showModal.value = true;
 };
 
@@ -626,6 +672,8 @@ const closeModal = () => {
     editingCycle.value = null;
     form.reset();
     form.clearErrors();
+    overlapWarning.value = null;
+    exactDuplicateWarning.value = null;
 };
 
 const submit = () => {
@@ -639,8 +687,9 @@ const submit = () => {
             form.clearErrors();
             toast.success(isEditing ? 'Cycle updated.' : 'Cycle added.');
         },
-        onError: () => {
-            toast.error(isEditing ? 'Failed to update cycle.' : 'Failed to add cycle.');
+        onError: (errors) => {
+            const specific = errors.cycle_start_date || Object.values(errors)[0];
+            toast.error(specific || (isEditing ? 'Failed to update cycle.' : 'Failed to add cycle.'));
         },
     };
 
@@ -1117,7 +1166,7 @@ const showScoringInfo = ref(false);
                                 :options="platformOptions"
                                 placeholder="Select platform"
                                 class="mt-1"
-                                @update:model-value="prefillFollowersForPlatform"
+                                @update:model-value="() => { prefillFollowersForPlatform(); checkOverlap(); }"
                             />
                             <p v-if="form.errors.platform" class="mt-1 text-sm" style="color: var(--status-parah-ink)">
                                 {{ form.errors.platform }}
@@ -1145,8 +1194,12 @@ const showScoringInfo = ref(false);
                                 v-model="form.cycle_start_date"
                                 type="date"
                                 :class="inputStyle"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                                @change="prefillStartFollower"
+                                :style="
+                                    form.errors.cycle_start_date
+                                        ? 'border-color: var(--status-parah-ink); background-color: var(--surface); color: var(--ink)'
+                                        : 'border-color: var(--border); background-color: var(--surface); color: var(--ink)'
+                                "
+                                @change="() => { prefillStartFollower(); checkOverlap(); }"
                             />
                             <p v-if="!editingCycle && form.account_id && form.cycle_start_date" class="mt-1 text-xs" style="color: var(--ink-faint)">
                                 Followers, reach, views &amp; engagement auto-fill from connected Instagram data, or a neighboring cycle, if available.
@@ -1162,7 +1215,7 @@ const showScoringInfo = ref(false);
                                 type="date"
                                 :class="inputStyle"
                                 style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                                @change="prefillEndFollower"
+                                @change="() => { prefillEndFollower(); checkOverlap(); }"
                             />
                             <p v-if="!editingCycle && form.account_id && form.cycle_end_date" class="mt-1 text-xs" style="color: var(--ink-faint)">
                                 Followers, reach, views &amp; engagement auto-fill from connected Instagram data, or a neighboring cycle, if available.
@@ -1171,6 +1224,23 @@ const showScoringInfo = ref(false);
                                 {{ form.errors.cycle_end_date }}
                             </p>
                         </div>
+                    </div>
+
+                    <div
+                        v-if="exactDuplicateWarning"
+                        class="flex items-start gap-2 rounded-md border px-3 py-2 text-sm font-medium"
+                        style="border-color: var(--status-parah-ink); background-color: var(--status-parah-bg); color: var(--status-parah-ink)"
+                    >
+                        <span>⚠</span>
+                        <span>{{ exactDuplicateWarning }}</span>
+                    </div>
+                    <div
+                        v-else-if="overlapWarning"
+                        class="flex items-start gap-2 rounded-md border px-3 py-2 text-sm font-medium"
+                        style="border-color: var(--status-kurang-ink); background-color: var(--status-kurang-bg); color: var(--status-kurang-ink)"
+                    >
+                        <span>⚠</span>
+                        <span>{{ overlapWarning }}</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">

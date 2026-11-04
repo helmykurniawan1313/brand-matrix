@@ -930,7 +930,7 @@ const showScoringInfo = ref(false);
 
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Brand (Account)</label>
-                        <SearchableSelect v-model="draftAccountFilter" :options="accounts" placeholder="All brands" class="mt-1" />
+                        <SearchableSelect v-model="draftAccountFilter" :options="accounts" placeholder="All brands" clearable clear-label="All brands" class="mt-1" />
                     </div>
 
                     <div>
@@ -944,12 +944,12 @@ const showScoringInfo = ref(false);
 
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Project Manager</label>
-                        <SearchableSelect v-model="draftPmFilter" :options="accountDepartmentEmployees" placeholder="All project managers" class="mt-1" />
+                        <SearchableSelect v-model="draftPmFilter" :options="accountDepartmentEmployees" placeholder="All project managers" clearable clear-label="All project managers" class="mt-1" />
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Conceptor</label>
-                        <SearchableSelect v-model="draftConceptorFilter" :options="employees" placeholder="All conceptors" class="mt-1" />
+                        <SearchableSelect v-model="draftConceptorFilter" :options="employees" placeholder="All conceptors" clearable clear-label="All conceptors" class="mt-1" />
                     </div>
 
                     <div>
