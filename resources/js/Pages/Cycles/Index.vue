@@ -1436,6 +1436,7 @@ const showScoringInfo = ref(false);
         <div
             v-if="showFilterModal"
             class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+            @click.self="closeFilterModal"
         >
             <div
                 class="flex max-h-full w-full max-w-sm flex-col rounded-lg border shadow-2xl"

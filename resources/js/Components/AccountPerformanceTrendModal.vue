@@ -146,7 +146,7 @@ const round = (v) => (v === null || v === undefined ? '—' : Math.round(v * 10)
 </script>
 
 <template>
-    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm" @click.self="emit('close')">
         <div
             class="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"

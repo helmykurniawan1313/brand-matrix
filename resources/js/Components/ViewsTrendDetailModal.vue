@@ -196,7 +196,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm" @click.self="emit('close')">
         <div
             class="max-h-[90vh] w-[95vw] max-w-5xl overflow-y-auto rounded-lg border p-6 shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"
@@ -313,6 +313,7 @@ onBeforeUnmount(() => {
         <div
             v-if="selectedCycle"
             class="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm"
+            @click.self="closeCycle"
         >
             <div
                 class="flex h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-2xl"

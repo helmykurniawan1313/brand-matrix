@@ -51,6 +51,7 @@ const canConfirm = () => !props.checkboxLabel || checked.value;
     <div
         v-if="open"
         class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+        @click.self="emit('cancel')"
     >
         <div
             class="w-full max-w-sm rounded-lg border p-6 shadow-2xl"

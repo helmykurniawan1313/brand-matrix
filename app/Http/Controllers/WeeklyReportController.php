@@ -16,12 +16,17 @@ class WeeklyReportController extends Controller
 {
     public function index(Request $request): Response
     {
+        $weekFrom = $request->string('week_from')->trim()->toString() ?: null;
+        $weekTo = $request->string('week_to')->trim()->toString() ?: null;
+
         $reports = WeeklyReport::with('account')
             ->when($request->integer('account_id'), fn ($query, $accountId) => $query->where('account_id', $accountId))
             ->when($request->string('platform')->trim()->toString(), fn ($query, $platform) => $query->where('platform', $platform))
             ->when($request->string('search')->trim()->toString(), function ($query, $search) {
                 $query->whereHas('account', fn ($accountQuery) => $accountQuery->where('name', 'like', "%{$search}%"));
             })
+            ->when($weekFrom, fn ($query, $weekFrom) => $query->where('week_start_date', '>=', $weekFrom))
+            ->when($weekTo, fn ($query, $weekTo) => $query->where('week_start_date', '<=', $weekTo))
             ->orderByDesc('week_start_date')
             ->paginate(15)
             ->withQueryString();
@@ -33,6 +38,8 @@ class WeeklyReportController extends Controller
                 'search' => $request->string('search')->trim()->toString() ?: null,
                 'account_id' => $request->integer('account_id') ?: null,
                 'platform' => $request->string('platform')->trim()->toString() ?: null,
+                'week_from' => $weekFrom,
+                'week_to' => $weekTo,
             ],
         ]);
     }

@@ -203,7 +203,7 @@ const headlineStats = computed(() => {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
+    <div class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm" @click.self="emit('close')">
         <div
             class="flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border shadow-2xl"
             style="background-color: var(--surface-raised); border-color: var(--border)"

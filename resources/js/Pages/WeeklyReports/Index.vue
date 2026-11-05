@@ -1,11 +1,13 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '../../Layouts/AppLayout.vue';
 
 import SearchableSelect from '../../Components/SearchableSelect.vue';
+import DateRangePicker from '../../Components/DateRangePicker.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
+import WeeklyReportDetailModal from '../../Components/WeeklyReportDetailModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
 
@@ -36,28 +38,95 @@ const platformOptions = [
 
 const accountOptions = props.accounts.map((account) => ({ id: account.id, name: account.name }));
 
-// Filters
+// Filters (search + Filter modal: account, platform, week range)
 
 const search = ref(props.filters.search ?? '');
 const filterAccountId = ref(props.filters.account_id ?? '');
 const filterPlatform = ref(props.filters.platform ?? '');
+const filterWeekFrom = ref(props.filters.week_from ?? '');
+const filterWeekTo = ref(props.filters.week_to ?? '');
+let searchTimeout = null;
+
+const filterQuery = computed(() => ({
+    search: search.value || undefined,
+    account_id: filterAccountId.value || undefined,
+    platform: filterPlatform.value || undefined,
+    week_from: filterWeekFrom.value || undefined,
+    week_to: filterWeekTo.value || undefined,
+}));
 
 const applyFilters = () => {
-    router.get(
-        '/weekly-reports',
-        {
-            search: search.value || undefined,
-            account_id: filterAccountId.value || undefined,
-            platform: filterPlatform.value || undefined,
-        },
-        { preserveState: true, preserveScroll: true, replace: true },
-    );
+    router.get('/weekly-reports', filterQuery.value, { preserveState: true, preserveScroll: true, replace: true });
 };
 
-const clearFilters = () => {
+const onSearchInput = () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(applyFilters, 300);
+};
+
+const clearSearch = () => {
+    search.value = '';
+    applyFilters();
+};
+
+const activeFilterCount = computed(() => {
+    let count = 0;
+    if (filterAccountId.value) count += 1;
+    if (filterPlatform.value) count += 1;
+    if (filterWeekFrom.value) count += 1;
+    return count;
+});
+
+const hasActiveFilters = computed(() => !!search.value || activeFilterCount.value > 0);
+
+const clearAllFilters = () => {
     search.value = '';
     filterAccountId.value = '';
     filterPlatform.value = '';
+    filterWeekFrom.value = '';
+    filterWeekTo.value = '';
+    applyFilters();
+};
+
+// Filter modal
+
+const showFilterModal = ref(false);
+const draftAccountId = ref('');
+const draftPlatform = ref('');
+const draftWeekFrom = ref('');
+const draftWeekTo = ref('');
+
+const openFilterModal = () => {
+    draftAccountId.value = filterAccountId.value;
+    draftPlatform.value = filterPlatform.value;
+    draftWeekFrom.value = filterWeekFrom.value;
+    draftWeekTo.value = filterWeekTo.value;
+    showFilterModal.value = true;
+};
+
+const closeFilterModal = () => {
+    showFilterModal.value = false;
+};
+
+const applyFilterModal = () => {
+    filterAccountId.value = draftAccountId.value;
+    filterPlatform.value = draftPlatform.value;
+    filterWeekFrom.value = draftWeekFrom.value;
+    filterWeekTo.value = draftWeekTo.value;
+    showFilterModal.value = false;
+    applyFilters();
+};
+
+const clearFilterModal = () => {
+    draftAccountId.value = '';
+    draftPlatform.value = '';
+    draftWeekFrom.value = '';
+    draftWeekTo.value = '';
+    filterAccountId.value = '';
+    filterPlatform.value = '';
+    filterWeekFrom.value = '';
+    filterWeekTo.value = '';
+    showFilterModal.value = false;
     applyFilters();
 };
 
@@ -261,13 +330,31 @@ const destroy = () => {
     });
 };
 
+// Detail modal
+
+const viewingReport = ref(null);
+
+const openDetail = (report) => {
+    viewingReport.value = report;
+};
+
+const closeDetail = () => {
+    viewingReport.value = null;
+};
+
+const editFromDetail = (report) => {
+    closeDetail();
+    openEdit(report);
+};
+
 const reportActions = (report) =>
     canEdit.value
         ? [
+              { label: 'View', onClick: () => openDetail(report) },
               { label: 'Edit', onClick: () => openEdit(report) },
               { label: 'Delete', danger: true, onClick: () => confirmDestroy(report) },
           ]
-        : [];
+        : [{ label: 'View', onClick: () => openDetail(report) }];
 
 const formatNumber = (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString());
 </script>
@@ -292,35 +379,55 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
     </div>
 
     <div class="mt-6 flex flex-wrap items-center gap-3">
-        <input
-            v-model="search"
-            type="text"
-            placeholder="Search account…"
-            class="w-56 rounded-md border px-3 py-2 text-sm"
-            style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
-            @keyup.enter="applyFilters"
-        />
-        <div class="w-48">
-            <SearchableSelect
-                v-model="filterAccountId"
-                :options="accountOptions"
-                placeholder="All accounts"
-                clearable
-                clear-label="All accounts"
-                @update:model-value="applyFilters"
+        <div class="relative">
+            <input
+                v-model="search"
+                type="text"
+                placeholder="Search account…"
+                class="w-56 rounded-md border px-3 py-2 text-sm"
+                style="border-color: var(--border); background-color: var(--bg); color: var(--ink)"
+                @input="onSearchInput"
             />
+            <button
+                v-if="search"
+                type="button"
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors hover:opacity-70"
+                style="color: var(--ink-faint)"
+                aria-label="Clear search"
+                @click="clearSearch"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+            </button>
         </div>
-        <div class="w-40">
-            <SearchableSelect
-                v-model="filterPlatform"
-                :options="platformOptions"
-                placeholder="All platforms"
-                clearable
-                clear-label="All platforms"
-                @update:model-value="applyFilters"
-            />
-        </div>
-        <button type="button" class="text-sm font-medium" style="color: var(--ink-muted)" @click="clearFilters">
+
+        <button
+            type="button"
+            class="relative inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:opacity-70"
+            style="border-color: var(--border); color: var(--ink)"
+            @click="openFilterModal"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path d="M4 4h16l-6.5 8v6l-3 2v-8L4 4z" />
+            </svg>
+            Filter
+            <span
+                v-if="activeFilterCount > 0"
+                class="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold"
+                style="background-color: var(--accent); color: var(--accent-ink)"
+            >
+                {{ activeFilterCount }}
+            </span>
+        </button>
+
+        <button
+            v-if="hasActiveFilters"
+            type="button"
+            class="text-sm font-medium transition-colors hover:opacity-70"
+            style="color: var(--ink-muted)"
+            @click="clearAllFilters"
+        >
             Clear filters
         </button>
     </div>
@@ -339,7 +446,7 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
                         <th class="px-4 py-3 text-right font-semibold" style="color: var(--ink-muted)">Visits</th>
                         <th class="px-4 py-3 text-right font-semibold" style="color: var(--ink-muted)">Link clicks</th>
                         <th class="px-4 py-3 text-right font-semibold" style="color: var(--ink-muted)">Engagement</th>
-                        <th v-if="canEdit" class="px-4 py-3" />
+                        <th class="px-4 py-3" />
                     </tr>
                 </thead>
                 <tbody>
@@ -351,8 +458,9 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
                     <tr
                         v-for="report in reports.data"
                         :key="report.id"
-                        class="border-b last:border-0"
+                        class="cursor-pointer border-b transition-colors last:border-0 hover:opacity-80"
                         style="border-color: var(--border)"
+                        @click="openDetail(report)"
                     >
                         <td class="px-4 py-3 font-medium" style="color: var(--ink)">{{ report.account?.name ?? '—' }}</td>
                         <td class="px-4 py-3 capitalize" style="color: var(--ink-muted)">{{ report.platform }}</td>
@@ -365,7 +473,7 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
                         <td class="px-4 py-3 text-right tabular-nums" style="color: var(--ink)">{{ formatNumber(report.profile_visits) }}</td>
                         <td class="px-4 py-3 text-right tabular-nums" style="color: var(--ink)">{{ formatNumber(report.link_clicks) }}</td>
                         <td class="px-4 py-3 text-right tabular-nums" style="color: var(--ink)">{{ formatNumber(report.engagement) }}</td>
-                        <td v-if="canEdit" class="px-4 py-3 text-right">
+                        <td class="px-4 py-3 text-right" @click.stop>
                             <ActionsMenu :items="reportActions(report)" />
                         </td>
                     </tr>
@@ -558,4 +666,106 @@ const formatNumber = (value) => (value === null || value === undefined ? '—' :
         @confirm="destroy"
         @cancel="cancelDestroy"
     />
+
+    <WeeklyReportDetailModal
+        v-if="viewingReport"
+        :report="viewingReport"
+        @close="closeDetail"
+        @edit="editFromDetail"
+    />
+
+    <!-- Filter modal -->
+    <div
+        v-if="showFilterModal"
+        class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+        @click.self="closeFilterModal"
+    >
+        <div
+            class="flex max-h-full w-full max-w-lg flex-col rounded-lg border shadow-2xl"
+            style="background-color: var(--surface-raised); border-color: var(--border)"
+        >
+            <div class="flex shrink-0 items-start justify-between gap-4 p-6 pb-0">
+                <h2 class="font-display text-lg font-bold" style="color: var(--ink)">Filter</h2>
+                <button
+                    type="button"
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:opacity-70"
+                    style="color: var(--ink-muted)"
+                    aria-label="Close"
+                    @click="closeFilterModal"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Account</label>
+                        <SearchableSelect
+                            v-model="draftAccountId"
+                            :options="accountOptions"
+                            clearable
+                            clear-label="All accounts"
+                            class="mt-1"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium" style="color: var(--ink-muted)">Platform</label>
+                        <SearchableSelect
+                            v-model="draftPlatform"
+                            :options="platformOptions"
+                            clearable
+                            clear-label="All platforms"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium" style="color: var(--ink-muted)">Week range</label>
+                    <DateRangePicker
+                        v-model:model-from="draftWeekFrom"
+                        v-model:model-to="draftWeekTo"
+                        placeholder="All weeks"
+                        class="mt-1"
+                    />
+                    <p class="mt-1.5 text-xs" style="color: var(--ink-faint)">
+                        Filters by the week's Monday start date.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex shrink-0 items-center justify-between border-t p-6 pt-4" style="border-color: var(--border)">
+                <button
+                    type="button"
+                    class="text-sm font-medium transition-colors hover:opacity-70"
+                    style="color: var(--ink-muted)"
+                    @click="clearFilterModal"
+                >
+                    Reset
+                </button>
+                <div class="flex gap-3">
+                    <button
+                        type="button"
+                        class="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:opacity-70"
+                        style="border-color: var(--border); color: var(--ink-muted)"
+                        @click="closeFilterModal"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                        style="background-color: var(--accent); color: var(--accent-ink)"
+                        @click="applyFilterModal"
+                    >
+                        Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </template>

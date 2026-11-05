@@ -10,6 +10,7 @@ import FilterSummaryModal from '../../Components/FilterSummaryModal.vue';
 import StatCard from '../../Components/StatCard.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
+import DateRangePicker from '../../Components/DateRangePicker.vue';
 import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
@@ -889,6 +890,7 @@ const showScoringInfo = ref(false);
         <div
             v-if="showFilterModal"
             class="fixed inset-0 z-10 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+            @click.self="closeFilterModal"
         >
             <div
                 class="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-2xl"
@@ -912,20 +914,12 @@ const showScoringInfo = ref(false);
                 <div class="mt-5 space-y-4">
                     <div>
                         <label class="block text-sm font-medium" style="color: var(--ink-muted)">Post Date</label>
-                        <div class="mt-1 grid grid-cols-2 gap-3">
-                            <input
-                                v-model="draftPostDateFromFilter"
-                                type="date"
-                                class="rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            />
-                            <input
-                                v-model="draftPostDateToFilter"
-                                type="date"
-                                class="rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none"
-                                style="border-color: var(--border); background-color: var(--surface); color: var(--ink)"
-                            />
-                        </div>
+                        <DateRangePicker
+                            v-model:model-from="draftPostDateFromFilter"
+                            v-model:model-to="draftPostDateToFilter"
+                            placeholder="All dates"
+                            class="mt-1"
+                        />
                     </div>
 
                     <div>
