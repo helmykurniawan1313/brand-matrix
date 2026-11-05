@@ -4,6 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import SearchableSelect from './SearchableSelect.vue';
 import MultiSelectDropdown from './MultiSelectDropdown.vue';
 import { useToast } from '../composables/useToast';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const toast = useToast();
 
@@ -110,6 +111,12 @@ const openMediaPicker = () => {
 const closeMediaPicker = () => {
     showMediaPicker.value = false;
 };
+
+// The media picker is a sub-modal on top of this form — Esc should close
+// whichever is topmost, not both at once, so the form's own Esc handler only
+// fires while the picker isn't open.
+useEscapeKey(() => !showMediaPicker.value, () => emit('close'));
+useEscapeKey(() => showMediaPicker.value, closeMediaPicker);
 
 const linkMedia = async (item) => {
     // New (unsaved) records: just stash the selection on the form — store() links

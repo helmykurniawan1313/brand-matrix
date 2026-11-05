@@ -10,6 +10,7 @@ import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import WeeklyReportDetailModal from '../../Components/WeeklyReportDetailModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -107,6 +108,8 @@ const openFilterModal = () => {
 const closeFilterModal = () => {
     showFilterModal.value = false;
 };
+
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
 
 const applyFilterModal = () => {
     filterAccountId.value = draftAccountId.value;
@@ -234,6 +237,8 @@ const closeModal = () => {
     form.reset();
     form.clearErrors();
 };
+
+useEscapeKey(() => showModal.value, closeModal);
 
 const applyPrefill = (data) => {
     ['follower_count', 'reach', 'views', 'profile_visits', 'link_clicks', 'engagement'].forEach((key) => {

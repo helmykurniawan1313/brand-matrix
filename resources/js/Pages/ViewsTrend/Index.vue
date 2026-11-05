@@ -5,6 +5,7 @@ import AppLayout from '../../Layouts/AppLayout.vue';
 import ViewsTrendDetailModal from '../../Components/ViewsTrendDetailModal.vue';
 import PmConceptorRankingModal from '../../Components/PmConceptorRankingModal.vue';
 import SingleMonthPicker from '../../Components/SingleMonthPicker.vue';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -152,6 +153,8 @@ const closeFilterModal = () => {
     monthBPickerOpen.value = false;
 };
 
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
+
 const applyFilterModal = () => {
     platform.value = draftPlatform.value;
     trendFilter.value = draftTrend.value;
@@ -211,6 +214,8 @@ const deltaColor = (value) => {
 const showChartModal = ref(false);
 const chartSort = ref('best'); // 'best' = descending (growth first), 'worst' = ascending (setback first)
 const chartTrendFilter = ref('all');
+
+useEscapeKey(() => showChartModal.value, () => { showChartModal.value = false; });
 
 const chartRowsWithDelta = computed(() => props.chartRows.filter((row) => row.delta_pct !== null));
 

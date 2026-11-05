@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     filterQuery: {
@@ -29,6 +30,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'generated']);
+useEscapeKey(true, () => emit('close'));
 
 const providers = [
     { value: 'groq', label: 'Groq' },

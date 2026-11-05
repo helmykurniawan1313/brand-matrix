@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     user: {
@@ -61,6 +62,8 @@ const openEdit = () => {
 const closeEdit = () => {
     showEditModal.value = false;
 };
+
+useEscapeKey(() => showEditModal.value, closeEdit);
 
 const profileForm = useForm({
     name: props.user.name,

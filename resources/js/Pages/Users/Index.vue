@@ -7,6 +7,7 @@ import ActionsMenu from '../../Components/ActionsMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useToast } from '../../composables/useToast';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -79,6 +80,8 @@ const openPageAccess = (user) => {
 const closePageAccess = () => {
     pageAccessTarget.value = null;
 };
+
+useEscapeKey(() => !!pageAccessTarget.value, closePageAccess);
 
 const togglePageDraft = (key) => {
     const index = pageAccessDraft.value.indexOf(key);

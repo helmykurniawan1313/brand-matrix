@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from '../chartSetup';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     accountId: { type: Number, required: true },
@@ -89,6 +90,11 @@ const openCycle = async (point) => {
 const closeCycle = () => {
     selectedCycle.value = null;
 };
+
+// The per-cycle drill-down sits on top of this modal — Esc should close
+// whichever is topmost, not both at once.
+useEscapeKey(() => !selectedCycle.value, () => emit('close'));
+useEscapeKey(() => !!selectedCycle.value, closeCycle);
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 

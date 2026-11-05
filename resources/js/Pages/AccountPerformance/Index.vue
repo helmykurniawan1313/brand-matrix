@@ -8,6 +8,7 @@ import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import SingleMonthPicker from '../../Components/SingleMonthPicker.vue';
 import ScoringInfoModal from '../../Components/ScoringInfoModal.vue';
 import AccountPerformanceTrendModal from '../../Components/AccountPerformanceTrendModal.vue';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -135,6 +136,8 @@ const closeFilterModal = () => {
     showFilterModal.value = false;
     monthPickerOpen.value = false;
 };
+
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
 
 const applyFilterModal = () => {
     pmFilter.value = draftPm.value;

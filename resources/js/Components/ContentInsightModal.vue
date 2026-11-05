@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import SearchableSelect from './SearchableSelect.vue';
 import { useToast } from '../composables/useToast';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     // Pass an existing row to edit; omit (null) to create a new one.
@@ -11,6 +12,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
+useEscapeKey(true, () => emit('close'));
 
 const toast = useToast();
 const isEdit = computed(() => !!props.insight);

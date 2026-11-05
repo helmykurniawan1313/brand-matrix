@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { usePage, Link } from '@inertiajs/vue3';
 import { resolveBucketColor } from '../utils/bucketColor';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     // Which LabelBucket metrics this table's badges can show, in display
@@ -15,6 +16,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const page = usePage();
 

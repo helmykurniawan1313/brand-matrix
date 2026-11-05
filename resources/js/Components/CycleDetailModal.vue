@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import StatusBadge from './StatusBadge.vue';
 import { useAuth } from '../composables/useAuth';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     cycle: {
@@ -20,6 +21,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'edit']);
+useEscapeKey(true, () => emit('close'));
 
 const { canEdit } = useAuth();
 

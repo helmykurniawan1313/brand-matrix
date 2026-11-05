@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from '../chartSetup';
 import StatusBadge from './StatusBadge.vue';
 import MonthRangePicker from './MonthRangePicker.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     account: {
@@ -20,6 +21,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const loading = ref(true);
 const error = ref(null);

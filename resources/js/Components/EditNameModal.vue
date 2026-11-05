@@ -1,5 +1,6 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     item: {
@@ -21,6 +22,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
+useEscapeKey(true, () => emit('close'));
 
 const form = useForm({ name: props.item.name });
 

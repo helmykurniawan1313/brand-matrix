@@ -12,6 +12,7 @@ import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import StatCard from '../../Components/StatCard.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -163,6 +164,8 @@ const closeFilterModal = () => {
     showFilterModal.value = false;
 };
 
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
+
 const applyFilterModal = () => {
     healthFilter.value = [...draftHealthFilter.value];
     growthFilter.value = [...draftGrowthFilter.value];
@@ -269,6 +272,8 @@ const closeFormModal = () => {
     accountForm.reset();
     accountForm.clearErrors();
 };
+
+useEscapeKey(() => showFormModal.value, closeFormModal);
 
 const submitAccountForm = () => {
     if (editingAccount.value) {

@@ -11,6 +11,7 @@ import SearchableSelect from '../../Components/SearchableSelect.vue';
 import SingleMonthPicker from '../../Components/SingleMonthPicker.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -315,6 +316,8 @@ const closeFilterModal = () => {
     fromMonthPickerOpen.value = false;
     toMonthPickerOpen.value = false;
 };
+
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
 
 const applyFilterModal = () => {
     pmFilter.value = draftPm.value;

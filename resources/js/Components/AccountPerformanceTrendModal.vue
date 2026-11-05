@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Chart from '../chartSetup';
 import StatusBadge from './StatusBadge.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     accountId: { type: Number, required: true },
@@ -10,6 +11,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const loading = ref(true);
 const error = ref(null);

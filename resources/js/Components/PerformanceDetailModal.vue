@@ -18,6 +18,7 @@ let hasAutoLoadedThisSession = false;
 import { computed, nextTick, onMounted, ref } from 'vue';
 import StatusBadge from './StatusBadge.vue';
 import { useAuth } from '../composables/useAuth';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const { canEdit } = useAuth();
 
@@ -37,6 +38,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'edit']);
+useEscapeKey(true, () => emit('close'));
 
 const pdfUrl = computed(() => `/performances/${props.performance.id}/pdf`);
 

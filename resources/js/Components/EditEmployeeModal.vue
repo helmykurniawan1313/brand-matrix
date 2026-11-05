@@ -1,6 +1,7 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
 import SearchableSelect from './SearchableSelect.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     employee: {
@@ -14,6 +15,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
+useEscapeKey(true, () => emit('close'));
 
 const form = useForm({
     name: props.employee.name,

@@ -7,6 +7,7 @@ import StatusBadge from '../../Components/StatusBadge.vue';
 import SearchableSelect from '../../Components/SearchableSelect.vue';
 import MultiSelectDropdown from '../../Components/MultiSelectDropdown.vue';
 import ScoringInfoModal from '../../Components/ScoringInfoModal.vue';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -130,6 +131,8 @@ const openFilterModal = () => {
 const closeFilterModal = () => {
     showFilterModal.value = false;
 };
+
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
 
 const applyFilterModal = () => {
     pmFilter.value = draftPm.value;

@@ -4,6 +4,7 @@ import { useForm, router } from '@inertiajs/vue3';
 import ConfirmDialog from './ConfirmDialog.vue';
 import { useToast } from '../composables/useToast';
 import { useAuth } from '../composables/useAuth';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const toast = useToast();
 const { canEdit } = useAuth();
@@ -16,6 +17,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const isConnected = computed(() => !!props.account.ig_business_id);
 

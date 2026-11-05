@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     open: {
@@ -34,6 +35,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['confirm', 'cancel']);
+useEscapeKey(() => props.open, () => emit('cancel'));
 
 const checked = ref(false);
 

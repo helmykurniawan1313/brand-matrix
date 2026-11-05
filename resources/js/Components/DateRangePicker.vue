@@ -135,9 +135,11 @@ const selectDay = (day) => {
     }
 
     // One endpoint already picked — set the second, ordering low/high.
+    // Clicking the same day again confirms a single-day range (modelFrom ===
+    // modelTo) rather than clearing the selection, so a one-day pick doesn't
+    // require clicking a second, different day.
     if (key === props.modelFrom) {
-        emit('update:modelFrom', '');
-        emit('update:modelTo', '');
+        emit('update:modelTo', key);
         return;
     }
 
@@ -157,7 +159,11 @@ const formatDate = (value) => {
 
 const displayLabel = computed(() => {
     if (!props.modelFrom && !props.modelTo) return null;
-    if (props.modelFrom && props.modelTo) return `${formatDate(props.modelFrom)} – ${formatDate(props.modelTo)}`;
+    if (props.modelFrom && props.modelTo) {
+        return props.modelFrom === props.modelTo
+            ? formatDate(props.modelFrom)
+            : `${formatDate(props.modelFrom)} – ${formatDate(props.modelTo)}`;
+    }
     if (props.modelFrom) return `From ${formatDate(props.modelFrom)}`;
     return `Until ${formatDate(props.modelTo)}`;
 });

@@ -17,6 +17,7 @@ import AdsRankingModal from '../../Components/AdsRankingModal.vue';
 import ScoringInfoModal from '../../Components/ScoringInfoModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useAuth } from '../../composables/useAuth';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 
 defineOptions({ layout: AppLayout });
 
@@ -284,6 +285,8 @@ const openFilterModal = () => {
 const closeFilterModal = () => {
     showFilterModal.value = false;
 };
+
+useEscapeKey(() => showFilterModal.value, closeFilterModal);
 
 const applyFilterModal = () => {
     accountFilter.value = draftAccountFilter.value;
@@ -675,6 +678,8 @@ const closeModal = () => {
     overlapWarning.value = null;
     exactDuplicateWarning.value = null;
 };
+
+useEscapeKey(() => showModal.value, closeModal);
 
 const submit = () => {
     const isEditing = !!editingCycle.value;

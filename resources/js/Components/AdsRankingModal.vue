@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MonthRangePicker from './MonthRangePicker.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const loading = ref(true);
 const error = ref(null);

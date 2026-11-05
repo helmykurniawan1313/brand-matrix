@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Chart from '../chartSetup';
 import SingleMonthPicker from './SingleMonthPicker.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     insight: {
@@ -30,6 +31,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+useEscapeKey(true, () => emit('close'));
 
 const num = (v) => Number(v || 0).toLocaleString('en-US');
 const fmtPct = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10}%`);

@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Chart from '../chartSetup';
 import MonthRangePicker from './MonthRangePicker.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const props = defineProps({
     platform: { type: String, default: 'all' },
@@ -253,6 +254,11 @@ const closePerson = () => {
     destroyChart();
     selectedPerson.value = null;
 };
+
+// The per-person drill-down sits on top of this modal — Esc should close
+// whichever is topmost, not both at once.
+useEscapeKey(() => !selectedPerson.value, () => emit('close'));
+useEscapeKey(() => !!selectedPerson.value, closePerson);
 
 const loadPersonSeries = async () => {
     if (!selectedPerson.value) return;
