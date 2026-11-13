@@ -73,6 +73,10 @@ PDF export (`cycles-pdf`, dompdf/Blade) respects the same filters and can embed 
 
 `AccountGrowthModal.vue` — Chart.js line charts (installed as an npm dep) in a tabbed layout: Overview (followers, growth rate), Volume (reach/views/engagement — kept as separate charts, not overlaid, because raw counts vs. percentage are wildly different scales), Scores (combined Visibility/Engagement/Health on one 0-100 scale chart), Engagement Rate (ER-of-reach vs ER-of-followers), and an AI Summary tab (reuses the account-level summarize endpoint). "Download PDF" button re-renders all charts offscreen as PNG data URLs (dompdf can't render live canvases) and POSTs them to `AccountController::pdf`.
 
+## Activity logging ("who edited what")
+
+`App\Models\Concerns\LogsActivity` trait — `use` it on any model to get a full before/after audit history for free (one `activity_logs` row per create/update/delete, polymorphic `loggable_type`/`loggable_id`, diffing only the fields that actually changed via cast-aware accessors, so a resave with no real changes logs nothing). Currently only on `Performance` — intended to be added to Cycle/WeeklyReport/Account next, same way each time: `use LogsActivity;` on the model, a `GET /{resource}/{id}/activity` controller endpoint returning `{ logs: [...] }`, fetched lazily when a detail modal's "Activity" section is first expanded (not eager-loaded into the index list — most rows are never opened). `user_id` is nullable: a save from a console command/job (e.g. `BackfillPerformanceCycles`) has no authenticated user and shows as "System" in the UI, which is correct, not a bug. A model can exclude specific columns from the diff via its own `$activityLogExcept` array property.
+
 ## UI/UX patterns established (keep consistent when extending)
 
 - **Design tokens**: CSS custom properties (`--bg`, `--surface`, `--ink`, `--accent`, `--status-{sip,bagus,cukup,kurang,parah}-{bg,ink}`) in `resources/css/app.css`, light/dark via both `prefers-color-scheme` media query AND `[data-theme]` attribute override (theme toggle in `AppLayout.vue` sets `data-theme` + localStorage).

@@ -118,6 +118,28 @@
     --status-parah-ink: #a1282a;
 }
 
+/* Native <input type="date">/<input type="time"> calendar/clock glyphs render
+   using the OS's dark icon by default, which disappears against a dark
+   --surface/--bg background — color-scheme tells the browser which built-in
+   control palette to use so the icon (and native date-picker popup) render
+   light-on-dark instead of invisible dark-on-dark. Declared on both dark
+   triggers (prefers-color-scheme media query and the explicit [data-theme]
+   override) and explicitly set to light for the light theme too, so toggling
+   the manual override always matches, regardless of the OS-level preference. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+    }
+}
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+    color-scheme: light;
+}
+
 body {
     background-color: var(--bg);
     color: var(--ink);

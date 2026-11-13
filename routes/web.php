@@ -117,6 +117,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can-access:performances')->group(function () {
         Route::resource('performances', PerformanceController::class)->only(['index']);
         Route::get('performances/{performance}/pdf', [PerformanceController::class, 'pdf'])->name('performances.pdf');
+        Route::get('performances/{performance}/activity', [PerformanceController::class, 'activity'])->name('performances.activity');
         Route::post('performances/{performance}/summarize', [PerformanceController::class, 'summarize'])->name('performances.summarize');
         Route::get('performances-pdf', [PerformanceController::class, 'pdfFiltered'])->name('performances.pdf-filtered');
         Route::get('performances-excel', [PerformanceController::class, 'exportExcel'])->name('performances.excel');

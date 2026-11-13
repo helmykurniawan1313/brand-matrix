@@ -145,6 +145,27 @@ class PerformanceController extends Controller
         return back();
     }
 
+    /**
+     * Full create/update history for one Performance — fetched lazily when
+     * the detail modal's Activity tab is opened, rather than eager-loaded
+     * into every row of the index list (most rows are never opened).
+     */
+    public function activity(Performance $performance): JsonResponse
+    {
+        $logs = $performance->activityLogs()
+            ->with('user:id,name')
+            ->get()
+            ->map(fn ($log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'changes' => $log->changes,
+                'user_name' => $log->user?->name,
+                'created_at' => $log->created_at->toIso8601String(),
+            ]);
+
+        return response()->json(['logs' => $logs]);
+    }
+
     public function pdf(Performance $performance, ScoreBucketResolver $resolver): HttpResponse
     {
         $performance->load(['account', 'cycle', 'projectManager', 'conceptor', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)]);

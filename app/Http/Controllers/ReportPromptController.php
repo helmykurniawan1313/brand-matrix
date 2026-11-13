@@ -121,6 +121,11 @@ class ReportPromptController extends Controller
                     'engagement_score' => round($scores['engagement_score'], 2),
                     'health_rate' => round($scores['health_rate'], 2),
                     'health_label' => $scores['health_label'],
+                    'health_3c' => $cycle->health_3c !== null ? round((float) $cycle->health_3c, 2) : null,
+                    'health_3c_label' => $cycle->health_3c_label,
+                    'health_3c_needs_check' => (bool) $cycle->health_3c_needs_check,
+                    'account_tier' => $cycle->tier,
+                    'needs_check' => (bool) $cycle->needs_check,
                 ];
             })
             ->values();
@@ -238,6 +243,7 @@ class ReportPromptController extends Controller
         $lines[] = '- Add a short narrative/insight callout per section — not just raw numbers restated.';
         $lines[] = '- Use a clean, professional slide design with illustrations/icons where it helps communicate the data.';
         $lines[] = '- Health labels (SIP/BAGUS/CUKUP/KURANG/PARAH) are best-to-worst status tiers — color-code them consistently (e.g. green=SIP, red=PARAH) across all slides.';
+        $lines[] = '- Each cycle row has two Health readings: health_rate/health_label is that single cycle\'s own score; health_3c/health_3c_label is a smoothed 3-cycle rolling average (less noisy, better for trend slides) — prefer health_3c for trend narratives, but call out a cycle individually when its single-cycle health_label diverges sharply from health_3c_label. If health_3c_needs_check or needs_check is true, flag that row as having insufficient/unreliable data rather than presenting its numbers at face value.';
         $lines[] = '';
         $lines[] = 'DATA';
 
