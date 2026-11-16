@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title inertia>{{ config('app.name', 'Brand Matrix') }}</title>
 
+    @if ($faviconPath = \App\Models\Setting::get(\App\Models\Setting::FAVICON_PATH))
+        <link rel="icon" href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($faviconPath) }}">
+    @endif
+
     <script>
         (function () {
             var stored = localStorage.getItem('theme');

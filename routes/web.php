@@ -188,6 +188,8 @@ Route::middleware('auth')->group(function () {
 
         Route::get('settings/site', [SiteSettingController::class, 'edit'])->name('site-settings.edit');
         Route::put('settings/site', [SiteSettingController::class, 'update'])->name('site-settings.update');
+        Route::post('settings/site/favicon', [SiteSettingController::class, 'updateFavicon'])->name('site-settings.favicon.update');
+        Route::delete('settings/site/favicon', [SiteSettingController::class, 'destroyFavicon'])->name('site-settings.favicon.destroy');
 
         Route::get('report-prompt', [ReportPromptController::class, 'index'])->name('report-prompt.index');
         Route::post('report-prompt/generate', [ReportPromptController::class, 'generate'])->name('report-prompt.generate');

@@ -11,6 +11,8 @@ class Setting extends Model
 
     public const MAINTENANCE_MODE = 'maintenance_mode';
 
+    public const FAVICON_PATH = 'favicon_path';
+
     private const CACHE_KEY = 'settings.all';
 
     /**
