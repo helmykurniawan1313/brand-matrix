@@ -31,7 +31,7 @@ class PerformanceController extends Controller
     public function index(Request $request, ScoreBucketResolver $resolver): Response
     {
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
-        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
+        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_TIER)->get();
 
         $matching = $this->filteredPerformances($request, $resolver, $viewsBuckets, $followerBuckets);
 
@@ -171,7 +171,7 @@ class PerformanceController extends Controller
         $performance->load(['account', 'cycle', 'projectManager', 'conceptor', 'videoLinks', 'igSnapshots' => fn ($query) => $query->limit(1)]);
 
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
-        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
+        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_TIER)->get();
 
         $performance = $this->resolveStatuses($performance, $resolver, $viewsBuckets, $followerBuckets);
 
@@ -194,7 +194,7 @@ class PerformanceController extends Controller
     private function filteredPerformancesForExport(Request $request, ScoreBucketResolver $resolver): Collection
     {
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
-        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
+        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_TIER)->get();
 
         return $this->filteredPerformances($request, $resolver, $viewsBuckets, $followerBuckets)
             ->map(fn (Performance $performance) => [
@@ -238,7 +238,7 @@ class PerformanceController extends Controller
         $performance->load(['account', 'igSnapshots' => fn ($query) => $query->limit(1)]);
 
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
-        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
+        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_TIER)->get();
 
         $performance = $this->resolveStatuses($performance, $resolver, $viewsBuckets, $followerBuckets);
 
@@ -285,7 +285,7 @@ class PerformanceController extends Controller
         ]);
 
         $viewsBuckets = LabelBucket::where('metric', LabelBucket::METRIC_VIEWS)->get();
-        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_FOLLOWERS)->get();
+        $followerBuckets = LabelBucket::where('metric', LabelBucket::METRIC_ACCOUNT_TIER)->get();
 
         $performances = $this->filteredPerformances($request, $resolver, $viewsBuckets, $followerBuckets);
 

@@ -16,6 +16,14 @@ class LabelBucket extends Model
 
     public const METRIC_VIEWS = 'views';
 
+    // Deliberately unused as of the account-tier/follower-category unification
+    // — Performance's follower-category badge now reads METRIC_ACCOUNT_TIER
+    // directly instead of this separate bucket set, so there's one tier
+    // config instead of two that could drift apart (and did: this one had no
+    // floor tier, so accounts under 1,000 followers showed "No data"). Left
+    // defined (not removed) only in case any pre-unification row still
+    // references it in the database; not in METRICS below, so it no longer
+    // shows as an editable section in Settings.
     public const METRIC_FOLLOWERS = 'followers';
 
     // Separate from METRIC_GROWTH (used by Cycles/Dashboard) — this one drives
@@ -34,10 +42,10 @@ class LabelBucket extends Model
 
     // Account-size tier (Rintisan/Kecil/Menengah/Besar) resolved from a cycle's
     // start_follower, used to pick which ScoreBucket threshold set scores that
-    // cycle (see MetricCalculator). Deliberately separate from METRIC_FOLLOWERS
-    // (Nano/Micro/Macro/Mega), which labels individual Reels/Video posts on the
-    // Performance page and is scaled/named differently — the two must not share
-    // buckets, or editing one silently changes the other's behavior.
+    // cycle (see MetricCalculator). Also now the single source of truth for
+    // Performance's follower-category badge (PerformanceController reads this
+    // metric directly) — see the METRIC_FOLLOWERS note above for why the two
+    // were unified.
     public const METRIC_ACCOUNT_TIER = 'account_tier';
 
     public const METRICS = [
@@ -46,7 +54,6 @@ class LabelBucket extends Model
         self::METRIC_ENGAGEMENT,
         self::METRIC_HEALTH,
         self::METRIC_VIEWS,
-        self::METRIC_FOLLOWERS,
         self::METRIC_ACCOUNT_GROWTH,
         self::METRIC_VIEWS_CHANGE,
         self::METRIC_REACH_CHANGE,

@@ -46,7 +46,6 @@ const metricTitles = {
     engagement: 'Engagement',
     health: 'Health',
     views: 'Views (H+7) Status',
-    followers: 'Follower Category',
     account_growth: 'Accounts Table — Growth Rate',
     views_change: 'Growth Analysis — Views Change',
     reach_change: 'Growth Analysis — Reach Change',
@@ -70,7 +69,6 @@ const metricHints = {
     visibility_tiktok: 'TikTok: weighted average of Profile Rate + View Rate — see Formula Weights tab',
     engagement_tiktok: 'TikTok: ER-View score — see Formula Weights tab',
     views: 'raw Views H+7 count, from Performance records',
-    followers: 'raw follower count, from Performance records',
     account_growth: "latest cycle's growth rate — shown on the Accounts table and Growth modal",
     views_change: '% change in Views between the two picked months, Growth Analysis panel',
     reach_change: '% change in Reach between the two picked months, Growth Analysis panel',
@@ -141,7 +139,10 @@ const aggregateGroups = {
     health: { scoreMetrics: [], labelMetrics: ['health'] },
     other: {
         scoreMetrics: [],
-        labelMetrics: ['account_growth', 'views', 'followers', 'views_change', 'reach_change', 'engagement_change', 'account_tier'],
+        // 'followers' (Performance's old, separate "Follower Category" bucket
+        // set) was removed — Performance now reads account_tier directly, so
+        // there's one tier config instead of two that could drift apart.
+        labelMetrics: ['account_growth', 'views', 'views_change', 'reach_change', 'engagement_change', 'account_tier'],
     },
 };
 
@@ -560,7 +561,6 @@ const exampleScoreByMetric = {
     health: 75,
     growth: 65,
     views: 50000,
-    followers: 10000,
     account_growth: 7,
     views_change: 15,
     reach_change: 10,
@@ -574,7 +574,7 @@ const labelExampleText = (metric) => {
     const score = exampleScoreByMetric[metric] ?? 50;
     const label = resolveTier(tiers, labelForms, 'min_score', 'label', score);
     if (label === null || label === undefined) return null;
-    const noun = ['views', 'followers', 'account_tier'].includes(metric) ? (metric === 'account_tier' ? 'start_follower' : 'value') : 'score';
+    const noun = ['views', 'account_tier'].includes(metric) ? (metric === 'account_tier' ? 'start_follower' : 'value') : 'score';
     return `Example: a ${noun} of ${score.toLocaleString()} → labeled ${label}.`;
 };
 
