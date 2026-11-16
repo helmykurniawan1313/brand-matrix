@@ -17,6 +17,7 @@ let hasAutoLoadedThisSession = false;
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import StatusBadge from './StatusBadge.vue';
+import ActivityTimeline from './ActivityTimeline.vue';
 import { useAuth } from '../composables/useAuth';
 import { useEscapeKey } from '../composables/useEscapeKey';
 
@@ -53,16 +54,10 @@ const platformIcons = {
 
 const showProofLightbox = ref(false);
 
-// Activity history — fetched lazily on first expand, not eager-loaded with
-// the rest of the detail data, since most opened records are never checked
-// for who-edited-what and the index list doesn't carry this per row.
-const showActivity = ref(false);
-const activityLoading = ref(false);
-const activityError = ref(null);
-const activityLogs = ref([]);
-const activityLoaded = ref(false);
-
-const fieldLabels = {
+// Activity history field labels — ActivityTimeline.vue handles the fetching/
+// rendering; this component only needs to say what each Performance column
+// should be called when it shows up in a change diff.
+const activityFieldLabels = {
     account_id: 'Account',
     platform: 'Platform',
     cycle_id: 'Cycle',
@@ -79,57 +74,6 @@ const fieldLabels = {
     proof_path: 'Upload proof',
     ig_media_id: 'Instagram media ID',
     ig_media_product_type: 'Instagram media type',
-};
-
-// Date-cast fields come back as full ISO timestamps (e.g.
-// "2026-11-12T00:00:00.000000Z") even though they're really just a date —
-// detect that shape and render dd/mm/yyyy instead of the raw timestamp.
-const isoDatePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
-
-const formatFieldValue = (value) => {
-    if (value === null || value === undefined || value === '') return '—';
-    if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-    if (typeof value === 'string' && isoDatePattern.test(value)) {
-        const [year, month, day] = value.slice(0, 10).split('-');
-        return `${day}/${month}/${year}`;
-    }
-    return String(value);
-};
-
-const formatLogDate = (value) => new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-const actionDotColor = (action) => {
-    if (action === 'created') return 'var(--status-sip-ink)';
-    if (action === 'deleted') return 'var(--status-parah-ink)';
-    return 'var(--accent)';
-};
-
-const actionVerb = (action) => {
-    if (action === 'created') return 'created';
-    if (action === 'deleted') return 'deleted';
-    return 'updated';
-};
-
-const toggleActivity = async () => {
-    showActivity.value = !showActivity.value;
-    if (showActivity.value && !activityLoaded.value) {
-        activityLoading.value = true;
-        activityError.value = null;
-        try {
-            const response = await fetch(`/performances/${props.performance.id}/activity`, {
-                headers: { Accept: 'application/json' },
-            });
-            if (!response.ok) throw new Error('Failed to load activity.');
-            const data = await response.json();
-            activityLogs.value = data.logs;
-            activityLoaded.value = true;
-        } catch (e) {
-            activityError.value = 'Failed to load activity history.';
-        } finally {
-            activityLoading.value = false;
-        }
-    }
 };
 
 const tooltipMetric = ref(null);
@@ -547,71 +491,7 @@ onMounted(processEmbeds);
                     </div>
                 </div>
 
-                <!-- Activity history -->
-                <div class="mt-6 border-t pt-4" style="border-color: var(--border)">
-                    <button
-                        type="button"
-                        class="flex w-full items-center justify-between text-left"
-                        @click="toggleActivity"
-                    >
-                        <h3 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--ink-faint)">Activity</h3>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            class="h-4 w-4 shrink-0 transition-transform"
-                            :class="{ 'rotate-180': showActivity }"
-                            style="color: var(--ink-faint)"
-                        >
-                            <path d="m6 9 6 6 6-6" />
-                        </svg>
-                    </button>
-
-                    <div v-if="showActivity" class="mt-4">
-                        <p v-if="activityLoading" class="text-sm" style="color: var(--ink-faint)">Loading…</p>
-                        <p v-else-if="activityError" class="text-sm" style="color: var(--status-parah-ink)">{{ activityError }}</p>
-                        <p v-else-if="activityLogs.length === 0" class="text-sm" style="color: var(--ink-faint)">No activity recorded.</p>
-
-                        <!-- Plain activity feed: a dot + connecting line down the left edge,
-                             content flows directly beside it with no per-entry box — reads as
-                             one continuous log, not a stack of cards. -->
-                        <ol v-else>
-                            <li
-                                v-for="(log, i) in activityLogs"
-                                :key="log.id"
-                                class="relative pl-5"
-                                :class="i < activityLogs.length - 1 ? 'pb-4' : ''"
-                            >
-                                <span
-                                    class="absolute left-0 top-[5px] h-[7px] w-[7px] rounded-full"
-                                    :style="`background-color: ${actionDotColor(log.action)}`"
-                                />
-                                <span
-                                    v-if="i < activityLogs.length - 1"
-                                    class="absolute left-[3px] top-3 bottom-0 w-px"
-                                    style="background-color: var(--border)"
-                                />
-
-                                <div class="flex flex-wrap items-baseline justify-between gap-x-3">
-                                    <p class="text-sm leading-snug" style="color: var(--ink)">
-                                        <span class="font-semibold">{{ log.user_name ?? 'System' }}</span>
-                                        {{ ' ' }}<span style="color: var(--ink-muted)">{{ actionVerb(log.action) }}</span>
-                                    </p>
-                                    <time class="shrink-0 text-xs tabular-nums" style="color: var(--ink-faint)">{{ formatLogDate(log.created_at) }}</time>
-                                </div>
-
-                                <p
-                                    v-for="(change, field) in log.action === 'updated' ? log.changes : null"
-                                    :key="field"
-                                    class="mt-0.5 text-xs leading-relaxed"
-                                    style="color: var(--ink-faint)"
-                                >
-                                    {{ fieldLabels[field] ?? field }}:
-                                    <span class="line-through">{{ formatFieldValue(change.old) }}</span>
-                                    <span style="color: var(--ink-muted)">{{ formatFieldValue(change.new) }}</span>
-                                </p>
-                            </li>
-                        </ol>
-                    </div>
-                </div>
+                <ActivityTimeline :url="`/performances/${performance.id}/activity`" :field-labels="activityFieldLabels" />
             </div>
         </div>
 

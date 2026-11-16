@@ -1,6 +1,7 @@
 <script setup>
 import { useAuth } from '../composables/useAuth';
 import { useEscapeKey } from '../composables/useEscapeKey';
+import ActivityTimeline from './ActivityTimeline.vue';
 
 const props = defineProps({
     report: {
@@ -31,6 +32,19 @@ const metricRows = [
     { key: 'link_clicks', label: 'Link clicks' },
     { key: 'engagement', label: 'Engagement' },
 ];
+
+const activityFieldLabels = {
+    account_id: 'Account',
+    platform: 'Platform',
+    week_start_date: 'Week start',
+    week_end_date: 'Week end',
+    follower_count: 'Followers',
+    reach: 'Reach',
+    views: 'Views',
+    profile_visits: 'Profile visits',
+    link_clicks: 'Link clicks',
+    engagement: 'Engagement',
+};
 </script>
 
 <template>
@@ -99,6 +113,8 @@ const metricRows = [
                     </p>
                 </div>
             </div>
+
+            <ActivityTimeline :url="`/weekly-reports/${report.id}/activity`" :field-labels="activityFieldLabels" />
         </div>
     </div>
 </template>

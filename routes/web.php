@@ -81,6 +81,7 @@ Route::middleware('auth')->group(function () {
         Route::get('cycles-pdf', [CycleController::class, 'pdf'])->name('cycles.pdf');
         Route::get('cycles-excel', [CycleController::class, 'exportExcel'])->name('cycles.excel');
         Route::get('cycles/{cycle}/pdf', [CycleController::class, 'pdfSingle'])->name('cycles.pdf-single');
+        Route::get('cycles/{cycle}/activity', [CycleController::class, 'activity'])->name('cycles.activity');
         Route::post('cycles/{cycle}/summarize', [CycleController::class, 'summarize'])->name('cycles.summarize');
         Route::post('cycles-summarize', [CycleController::class, 'summarizeFiltered'])->name('cycles.summarize-filtered');
         Route::get('cycles-ads-ranking', [CycleController::class, 'adsRanking'])->name('cycles.ads-ranking');
@@ -91,6 +92,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can-access:weekly-reports')->group(function () {
         Route::resource('weekly-reports', WeeklyReportController::class)->only(['index']);
         Route::get('accounts/{account}/neighboring-weekly-report', [WeeklyReportController::class, 'neighboring'])->name('weekly-reports.neighboring');
+        Route::get('weekly-reports/{weeklyReport}/activity', [WeeklyReportController::class, 'activity'])->name('weekly-reports.activity');
     });
 
     Route::middleware('can-access:score-buckets')->group(function () {

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import StatusBadge from './StatusBadge.vue';
+import ActivityTimeline from './ActivityTimeline.vue';
 import { useAuth } from '../composables/useAuth';
 import { useEscapeKey } from '../composables/useEscapeKey';
 
@@ -24,6 +25,25 @@ const emit = defineEmits(['close', 'edit']);
 useEscapeKey(true, () => emit('close'));
 
 const { canEdit } = useAuth();
+
+const activityFieldLabels = {
+    account_id: 'Account',
+    platform: 'Platform',
+    project_manager_id: 'Project Manager',
+    cycle_start_date: 'Cycle start',
+    cycle_end_date: 'Cycle end',
+    start_follower: 'Start followers',
+    end_follower: 'End followers',
+    reach: 'Reach',
+    views: 'Views',
+    engagement: 'Engagement',
+    story_performance: 'Story performance',
+    ads_currency: 'Ads currency',
+    reach_views_ads_used: 'Reach/Views ads used',
+    reach_views_ads_spend: 'Reach/Views ads spend',
+    engagement_ads_used: 'Engagement ads used',
+    engagement_ads_spend: 'Engagement ads spend',
+};
 
 // Mirrors MetricCalculator::resolveScore()'s fallback order exactly:
 // (platform, tier) -> (platform, no tier) -> (no platform, no tier). Without
@@ -540,6 +560,8 @@ const aggregateRows = computed(() => [
                 <p v-else-if="!summarizeError" class="mt-2 text-sm" style="color: var(--ink-faint)">
                     No summary yet. Click "Summarize by AI" to generate one.
                 </p>
+
+                <ActivityTimeline :url="`/cycles/${cycle.id}/activity`" :field-labels="activityFieldLabels" />
             </div>
         </div>
     </div>

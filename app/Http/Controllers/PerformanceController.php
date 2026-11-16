@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\Cycle;
 use App\Models\Employee;
 use App\Models\FilterSummary;
 use App\Models\LabelBucket;
 use App\Models\Performance;
+use App\Services\ActivityLogPresenter;
 use App\Services\PerformanceCycleAssigner;
 use App\Services\PerformanceIgSnapshotService;
 use App\Services\ScoreBucketResolver;
@@ -152,18 +154,16 @@ class PerformanceController extends Controller
      */
     public function activity(Performance $performance): JsonResponse
     {
-        $logs = $performance->activityLogs()
-            ->with('user:id,name')
-            ->get()
-            ->map(fn ($log) => [
-                'id' => $log->id,
-                'action' => $log->action,
-                'changes' => $log->changes,
-                'user_name' => $log->user?->name,
-                'created_at' => $log->created_at->toIso8601String(),
-            ]);
+        $logs = $performance->activityLogs()->with('user:id,name')->get();
 
-        return response()->json(['logs' => $logs]);
+        return response()->json(['logs' => ActivityLogPresenter::present($logs, [
+            'account_id' => Account::class,
+            'cycle_id' => fn ($ids) => Cycle::whereIn('id', $ids)->get(['id', 'cycle_start_date', 'cycle_end_date'])
+                ->mapWithKeys(fn (Cycle $cycle) => [$cycle->id => $cycle->cycle_start_date->format('M j').' – '.$cycle->cycle_end_date->format('M j, Y')]),
+            'project_manager_id' => Employee::class,
+            'conceptor_id' => Employee::class,
+            'editor_id' => Employee::class,
+        ])]);
     }
 
     public function pdf(Performance $performance, ScoreBucketResolver $resolver): HttpResponse

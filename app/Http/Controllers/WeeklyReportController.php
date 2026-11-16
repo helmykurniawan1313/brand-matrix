@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\WeeklyReport;
+use App\Services\ActivityLogPresenter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -100,6 +101,20 @@ class WeeklyReportController extends Controller
         $weeklyReport->delete();
 
         return back();
+    }
+
+    /**
+     * Full create/update history for one Weekly Report — fetched lazily when
+     * the detail modal's Activity section is first expanded, same pattern as
+     * PerformanceController::activity().
+     */
+    public function activity(WeeklyReport $weeklyReport): JsonResponse
+    {
+        $logs = $weeklyReport->activityLogs()->with('user:id,name')->get();
+
+        return response()->json(['logs' => ActivityLogPresenter::present($logs, [
+            'account_id' => Account::class,
+        ])]);
     }
 
     private function validated(Request $request, ?WeeklyReport $weeklyReport = null): array

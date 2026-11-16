@@ -10,6 +10,7 @@ use App\Models\FormulaWeight;
 use App\Models\LabelBucket;
 use App\Models\Performance;
 use App\Models\ScoreBucket;
+use App\Services\ActivityLogPresenter;
 use App\Services\MetricCalculator;
 use App\Services\PerformanceCycleAssigner;
 use App\Services\SummaryProviderResolver;
@@ -504,6 +505,21 @@ class CycleController extends Controller
         $cycleAssigner->reassignMany(Performance::whereIn('id', $affectedPerformanceIds)->get());
 
         return back();
+    }
+
+    /**
+     * Full create/update history for one Cycle — fetched lazily when the
+     * detail modal's Activity section is first expanded, same pattern as
+     * PerformanceController::activity().
+     */
+    public function activity(Cycle $cycle): JsonResponse
+    {
+        $logs = $cycle->activityLogs()->with('user:id,name')->get();
+
+        return response()->json(['logs' => ActivityLogPresenter::present($logs, [
+            'account_id' => Account::class,
+            'project_manager_id' => Employee::class,
+        ])]);
     }
 
     /**

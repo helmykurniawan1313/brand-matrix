@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsActivity;
 use App\Services\AccountTierResolver;
 use App\Services\Health3cResolver;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cycle extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
+
+    // health_3c/health_3c_label/health_3c_needs_check/tier/needs_check are all
+    // derived/resolved automatically on every save (see booted() below), not
+    // user-entered — logging them as "changes" would bury the actual edit
+    // (e.g. a reach number) under noise that fires on every single save.
+    protected $activityLogExcept = ['health_3c', 'health_3c_label', 'health_3c_needs_check', 'tier', 'needs_check'];
 
     protected static function booted(): void
     {
