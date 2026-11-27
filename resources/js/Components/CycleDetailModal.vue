@@ -257,9 +257,10 @@ const pdfUrl = computed(() => `/cycles/${props.cycle.id}/pdf`);
 
 // cycles.needs_check flags start_follower = 0 or |growth_rate| > 100% — a
 // jump too large to be organic (e.g. BHC May 2026: 6,768 -> 24,575
-// followers). The growth score/label are still computed and stored as
-// normal, but shown as "Data perlu dicek" here rather than a number that
-// reads as a real, trustworthy result.
+// followers). The real computed score/label are always shown (never hidden
+// behind a dash) — this only adds a "Data perlu dicek" warning badge
+// alongside the number, so an unusual-but-real result still reads as a
+// genuine data point to double-check, not a withheld/missing one.
 const growthNeedsCheck = computed(() => !!props.cycle.needs_check);
 
 // health_3c_needs_check is true when ANY cycle in the 3-cycle window (this
@@ -272,8 +273,8 @@ const aggregateRows = computed(() => [
     {
         label: 'Growth Rate',
         formula: 'score based on growth rate',
-        rate: growthNeedsCheck.value ? '—' : round(s.value.growth_score),
-        badge: growthNeedsCheck.value ? null : s.value.growth_label,
+        rate: round(s.value.growth_score),
+        badge: s.value.growth_label,
         flag: growthNeedsCheck.value ? 'Data perlu dicek' : null,
     },
     {
@@ -291,15 +292,15 @@ const aggregateRows = computed(() => [
     {
         label: 'Health',
         formula: 'weighted average of Growth + Visibility + Engagement',
-        rate: growthNeedsCheck.value ? '—' : round(s.value.health_rate),
-        badge: growthNeedsCheck.value ? null : s.value.health_label,
+        rate: round(s.value.health_rate),
+        badge: s.value.health_label,
         flag: growthNeedsCheck.value ? 'Data perlu dicek' : null,
     },
     {
         label: 'Health (3-cycle avg)',
         formula: 'average Health of this cycle + up to 2 previous (same account & platform)',
-        rate: healthNeedsCheck3c.value ? '—' : (props.cycle.health_3c !== null && props.cycle.health_3c !== undefined ? round(props.cycle.health_3c) : '—'),
-        badge: healthNeedsCheck3c.value ? null : props.cycle.health_3c_label,
+        rate: props.cycle.health_3c !== null && props.cycle.health_3c !== undefined ? round(props.cycle.health_3c) : '—',
+        badge: props.cycle.health_3c_label,
         flag: healthNeedsCheck3c.value ? 'Data perlu dicek' : null,
     },
 ]);
